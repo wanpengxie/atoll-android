@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import dev.atoll.app.compose.ComposerActor
+import dev.atoll.app.compose.recentAgentId
 import dev.atoll.app.AtollApp
+import dev.atoll.app.stars.StarredViewModel
+import dev.atoll.app.stars.createStarredViewModel
 import dev.atoll.app.tasks.*
 import dev.atoll.app.ui.screens.ConnectionPhase
 import dev.atoll.app.waiting.busyActors as receiverBusyActors
@@ -19,6 +22,8 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private val mutableActivity = MutableStateFlow(ActivitySnapshot(emptyList(), emptyList(), true))
     val activity = mutableActivity.asStateFlow()
     private var features: SessionFeatures? = null
+    private var sessionStars: StarredViewModel? = null
+    val starred: StarredViewModel? get() = sessionStars
     init {
         viewModelScope.launch {
             graph.services.collectLatest { services ->
@@ -68,13 +73,23 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 features.waiting.value?.setActive(route?.channel == features.waiting.value?.channelId && route?.tab == "conversation")
                 if (route == null) return@collectLatest
                 val roster = state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) }
+                val self = services.selfIds[route.channel].orEmpty()
+                val source = state.timelineSource?.takeIf { it.channelId == route.channel }
+                val recent = if (source == null) "" else {
+                    val key = RecentProjection(source.channelId, source.revision, source.projectionVersion, self, roster)
+                    if (key != recentProjection) {
+                        recentAgent = withContext(Dispatchers.Default) { recentAgentId(source, self, roster) }
+                        recentProjection = key
+                    }
+                    recentAgent
+                }
                 val signature = ComposerChannel(route.channel, services.selfIds[route.channel].orEmpty(), roster,
                     state.navigation.channels.firstOrNull { it.id == route.channel }?.let { composerWritable(it.access, services.selfIds[route.channel].orEmpty()) } == true,
-                    state.conversation?.actorFilters.orEmpty())
+                    state.conversation?.actorFilters.orEmpty(), recent)
                 features.roster(route.channel).updateAccess(signature.writable, signature.self)
                 if (signature != composerChannel) {
                     composerChannel = signature
-                    features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters)
+                    features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters, recentAgentId = signature.recent)
                 }
                 state.timelineSource?.takeIf { it.channelId == route.channel }?.let { source ->
                     val busyKey = BusyProjection(source.channelId, source.revision, source.projectionVersion)
@@ -105,7 +120,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
-    private data class ComposerChannel(val id: String, val self: String, val roster: List<ComposerActor>, val writable: Boolean, val filters: Set<String>)
+    private data class ComposerChannel(val id: String, val self: String, val roster: List<ComposerActor>, val writable: Boolean, val filters: Set<String>, val recent: String)
     private var composerChannel: ComposerChannel? = null
     private var foldedComposer: dev.atoll.app.model.TimelineSnapshot? = null
     private data class TaskBinding(val source: dev.atoll.app.model.TimelineSource, val composer: ComposerChannel, val detached: Boolean)
@@ -113,6 +128,9 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private data class BusyProjection(val channel: String, val revision: Long, val projection: Long)
     private var busyProjection: BusyProjection? = null
     private var receiverBusy = emptySet<String>()
+    private data class RecentProjection(val channel: String, val revision: Long, val projection: Long, val self: String, val roster: List<ComposerActor>)
+    private var recentProjection: RecentProjection? = null
+    private var recentAgent = ""
     private data class ActivityBinding(val inputs: List<ChannelActivityInput>, val runs: List<ActivityAgentRun>, val operations: List<ActivityOperation>, val connected: Boolean,
         val submissions: List<dev.atoll.app.compose.LocalSubmission>,val timers: List<AutomationRecord>,val selfIds: Map<String,String>)
     private var writable = emptyMap<String, Boolean>()
@@ -123,11 +141,15 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun session(services: WorkspaceServices?): SessionFeatures? {
         if (features?.services?.wire !== services?.wire || features?.services?.boot != services?.boot) {
-            features?.clear(); features = null; composerChannel = null; foldedComposer = null; foldedTasks = null; busyProjection = null; receiverBusy = emptySet(); writable = emptyMap(); mutableMessageTargets.value = MessageTargetIndex()
+            sessionStars?.close(); sessionStars = null
+            features?.clear(); features = null; composerChannel = null; foldedComposer = null; foldedTasks = null; busyProjection = null; receiverBusy = emptySet(); recentProjection = null; recentAgent = ""; writable = emptyMap(); mutableMessageTargets.value = MessageTargetIndex()
         }
-        if (features == null && services != null && services.boot.isNotEmpty()) features = SessionFeatures(getApplication(), services)
+        if (features == null && services != null && services.boot.isNotEmpty()) {
+            features = SessionFeatures(getApplication(), services)
+            sessionStars = createStarredViewModel(getApplication(), services)
+        }
         if (services != null) features?.updateServices(services)
         return features
     }
-    override fun onCleared() { features?.clear() }
+    override fun onCleared() { sessionStars?.close(); features?.clear() }
 }
