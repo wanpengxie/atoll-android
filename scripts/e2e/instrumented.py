@@ -27,62 +27,113 @@ def validate_artifacts(root):
         raise Failure('instrumented run did not pass all 17 isolated-node steps')
 
 
-def group_running(group):
-    # ps prints only group IDs and status; never process arguments or credentials.
-    result = subprocess.run(['ps', '-axo', 'pgid=,stat='], capture_output=True, text=True, check=True)
-    return any(parts[0] == str(group) and not parts[1].startswith('Z')
-               for line in result.stdout.splitlines() if len(parts := line.split()) == 2)
+def device_states(environment, lock):
+    lock.check_owner()
+    if environment.get('ANDROID_SERIAL') != 'emulator-5554':
+        raise Failure('ANDROID_SERIAL must explicitly select emulator-5554')
+    result = subprocess.run(['adb', '-s', 'emulator-5554', 'devices'], env=environment,
+                            capture_output=True, text=True, check=True, timeout=15)
+    return dict(line.split()[:2] for line in result.stdout.splitlines()[1:] if len(line.split()) >= 2)
 
 
-def drain_group(process, cancel=False):
-    if cancel:
-        try: os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError: pass
-    deadline = time.monotonic() + 20
-    while group_running(process.pid) and time.monotonic() < deadline:
-        process.poll()
-        time.sleep(0.1)
-    if group_running(process.pid):
-        try: os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError: pass
-        deadline = time.monotonic() + 10
-        while group_running(process.pid) and time.monotonic() < deadline:
-            process.poll()
-            time.sleep(0.1)
-    process.wait(timeout=10)
-    if group_running(process.pid):
-        raise Failure('Gradle processes still running; emulator lock retained for inspection')
+def verify_emulator(environment, lock):
+    if device_states(environment, lock).get('emulator-5554') != 'device':
+        raise Failure('emulator-5554 is not available; no Gradle device task was started')
+    lock.event('emulator-verified', serial='emulator-5554')
+
+
+def ensure_emulator(environment, lock):
+    if 'emulator-5554' not in device_states(environment, lock):
+        emulator = Path.home() / 'Library/Android/sdk/emulator/emulator'
+        with (lock.base / 'emulator.log').open('a') as log:
+            subprocess.Popen([str(emulator), '-avd', 'ash-browser', '-port', '5554', '-no-window',
+                              '-no-snapshot-load', '-no-snapshot-save', '-gpu', 'host',
+                              '-dns-server', '100.100.100.100,223.5.5.5'], env=environment,
+                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        (lock.base / 'emulator.started-by-e2e').write_text('emulator-5554\n')
+        lock.event('emulator-started', serial='emulator-5554')
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        lock.check_owner()
+        boot = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'getprop', 'sys.boot_completed'],
+                              env=environment, capture_output=True, text=True, timeout=15)
+        if boot.returncode == 0 and boot.stdout.strip() == '1':
+            verify_emulator(environment, lock)
+            return
+        time.sleep(2)
+    raise Failure('emulator-5554 did not finish booting; lock retained')
+
+
+def stop_emulator(environment, lock):
+    lock.check_owner()
+    marker = lock.base / 'emulator.started-by-e2e'
+    if not marker.exists():
+        return  # An already running user/Ash emulator belongs to its starter.
+    if 'emulator-5554' in device_states(environment, lock):
+        subprocess.run(['adb', '-s', 'emulator-5554', 'emu', 'kill'], env=environment,
+                       capture_output=True, text=True, check=True, timeout=15)
+        deadline = time.monotonic() + 60
+        while 'emulator-5554' in device_states(environment, lock):
+            if time.monotonic() >= deadline:
+                raise Failure('emulator-5554 is still shutting down; lock retained')
+            time.sleep(2)
+        lock.event('emulator-stopped', serial='emulator-5554')
+    marker.unlink()
+
+
+def release_emulator(owner):
+    import fcntl
+    lock = EmulatorLock(owner, 1)
+    if not lock.lock.is_dir():
+        raise Failure('there is no emulator lock to release')
+    lock.identity = lock.lock.stat().st_ino
+    lock.held = True
+    lock.owner_guard = (lock.base / (owner + '.emulator-runner.guard')).open('a')
+    try:
+        fcntl.flock(lock.owner_guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        environment = dict(os.environ, ANDROID_SERIAL='emulator-5554')
+        states = device_states(environment, lock)
+        if 'emulator-5554' in states:
+            if states['emulator-5554'] != 'device':
+                raise Failure('emulator is offline; cannot verify instrumentation, lock retained')
+            result = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'ps', '-A', '-o', 'ARGS'],
+                                    env=environment, capture_output=True, text=True, check=True, timeout=15)
+            if any('instrument' in line and any(marker in line for marker in
+                   ['com.android.commands.am.Am', 'am instrument', 'cmd activity instrument'])
+                   for line in result.stdout.splitlines()):
+                raise Failure('am instrument is still active; emulator lock retained')
+        lock.on_empty = lambda: stop_emulator(environment, lock)
+        lock.__exit__()
+        print('Emulator lock released for ' + owner)
+    except BlockingIOError:
+        raise Failure('emulator runner is still active; lock retained')
+    finally:
+        lock.owner_guard.close()
 
 
 def run_gradle(command, environment, log, secrets, lock):
     lock.check_owner()
-    # A private session and a single-use daemon keep cancellation from orphaning
-    # Gradle/UTP work or killing another worker's shared Gradle daemon.
     process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE,
-                               stderr=subprocess.STDOUT, text=True, start_new_session=True)
+                               stderr=subprocess.STDOUT, text=True)
     lock.event('gradle-start', process_id=process.pid)
     try:
         for line in process.stdout:
             for secret in secrets: line = line.replace(secret, '[redacted]')
             log.write(line); log.flush(); print(line, end='', flush=True)
         status = process.wait()
-        lock.event('gradle-client-exit', process_id=process.pid, exit_code=status)
+        lock.check_owner()
+        lock.event('gradle-finished', process_id=process.pid, exit_code=status)
+        return status
     except BaseException:
-        try: drain_group(process, cancel=True)
-        except BaseException:
-            lock.retain()
-            raise
-        lock.event('gradle-group-finished', process_id=process.pid, cancelled=True)
+        # A cancelled client cannot prove its daemon/UTP has finished. Never
+        # release automatically; the operator must check and explicitly release.
+        lock.retain()
+        process.terminate()
+        try: process.wait(timeout=10)
+        except subprocess.TimeoutExpired: pass
         raise
     finally:
         process.stdout.close()
-    try: drain_group(process)
-    except BaseException:
-        lock.retain()
-        raise
-    lock.check_owner()
-    lock.event('gradle-group-finished', process_id=process.pid, cancelled=False)
-    return status
 
 
 def main(argv=None):
@@ -94,10 +145,14 @@ def main(argv=None):
     parser.add_argument('--queue-timeout', type=int, default=900)
     parser.add_argument('--output', type=Path, default=Path.home() / 'atoll-build/e2e-artifacts/instrumented')
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--release-lock', action='store_true')
     args = parser.parse_args(argv)
     validate_url(args.url)
-    if not re.fullmatch(r'emulator-\d+', args.serial):
-        raise Failure('only an emulator serial is allowed')
+    if args.serial != 'emulator-5554':
+        raise Failure('only emulator-5554 is allowed')
+    if args.release_lock:
+        release_emulator(args.owner)
+        return 0
     task = 'connected' + args.build_type.capitalize() + 'AndroidTest'
     if args.dry_run:
         print(json.dumps({'task': task, 'build_type': args.build_type, 'url': URL, 'steps': STEPS,
@@ -122,8 +177,7 @@ def main(argv=None):
                   'owner': args.owner, 'runner_pid': os.getpid(), **fields}
         with (destination / 'lock.jsonl').open('a') as output:
             output.write(json.dumps(record) + '\n')
-    # Workspace timeout sends SIGTERM; treat it like Ctrl-C and drain Gradle
-    # before unwinding the lock, rather than letting a daemon keep using adb.
+    # Workspace timeout must retain the lock, like Ctrl-C.
     def interrupted(signum, frame):
         raise KeyboardInterrupt
     signal.signal(signal.SIGTERM, interrupted)
@@ -132,7 +186,9 @@ def main(argv=None):
         # Another variant's or a previous run's screenshots cannot establish this run's success.
         if additional.exists():
             shutil.rmtree(additional)
-        environment = dict(os.environ, ANDROID_SERIAL=args.serial)
+        environment = dict(os.environ, ANDROID_SERIAL='emulator-5554')
+        lock.on_empty = lambda: stop_emulator(environment, lock)
+        ensure_emulator(environment, lock)
         # Capture/sanitize output here, so AGP/adb failure diagnostics cannot expose arguments.
         with (destination / 'gradle.log').open('w') as log:
             status = run_gradle(command, environment, log, [password, token], lock)
