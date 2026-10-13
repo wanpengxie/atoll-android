@@ -13,6 +13,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.atoll.app.files.FilesScreen
+import dev.atoll.app.files.FilePaths
 import dev.atoll.app.core.Origin
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.theme.AtollTheme
@@ -23,6 +25,9 @@ import androidx.compose.foundation.gestures.scrollBy
 fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val graph = viewModel.graph
+    val services by graph.services.collectAsStateWithLifecycle()
+    val features = viewModel.session(services)
+    var recentOpen by remember { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -72,7 +77,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     if (last != null) listState.scrollBy((last.offset + last.size - listState.layoutInfo.viewportEndOffset).coerceAtLeast(0).toFloat())
                                 } finally { autoScrolling = false }
                             }
-                            LaunchedEffect(conversation.entries.lastOrNull()?.key, conversation.entries.size) {
+                            LaunchedEffect(state.route?.tab) { graph.follow(state.route?.tab == "conversation" && following) }
+                            LaunchedEffect(state.route?.tab, conversation.entries.lastOrNull()?.key, conversation.entries.size) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (!initialized || following) {
                                     scrollEnd()
                                     initialized = true
@@ -95,11 +102,24 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             var jump by remember { mutableStateOf(0) }
                             LaunchedEffect(jump) { if (jump > 0) { scrollEnd(); following = true; graph.follow(true) } }
+                            val files = if (state.route?.tab == "files") features?.files(state.route!!.channel) else null
+                            LaunchedEffect(files, state.route?.focus) {
+                                if (files != null) state.route?.focus?.let(files::openLink)
+                            }
                             ChannelScreen(conversation, ComposerViewState(composer),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
                                 onBack = { drawer = true }, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter,
-                                onText = { composer = it }, onSend = {}, onOlder = { following = false; graph.follow(false); graph.older() },
-                                onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link) else runCatching { uriHandler.openUri(link) } },
+                                onText = { composer = it }, onSend = {},
+                                onMenu = { action -> when (action) {
+                                    "打开文件" -> graph.files(true)
+                                    "关闭文件" -> graph.files(false)
+                                    "最近阅读" -> recentOpen = true
+                                } }, onOlder = { following = false; graph.follow(false); graph.older() },
+                                onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
+                                    else if (FilePaths.fromLink(state.route!!.channel, link) != null && features != null) {
+                                        features.files(state.route!!.channel).openLink(link); graph.files(true)
+                                    } else runCatching { uriHandler.openUri(link) } },
+                                contentOverride = files?.let { vm -> { FilesScreen(vm, onClose = { graph.files(false) }) } },
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             LaunchedEffect(state.route?.focus) {
                                 val key = state.route?.focus?.takeIf { it.startsWith("turn:") }?.substringAfter(':') ?: return@LaunchedEffect
@@ -108,6 +128,17 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                         }
                     }
+                }
+                if (recentOpen && features != null) {
+                    val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
+                    AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },
+                        text = { Column(Modifier.heightIn(max = 400.dp)) {
+                            if (recent.isEmpty()) Text("尚未阅读文件")
+                            androidx.compose.foundation.lazy.LazyColumn { items(recent.size) { index ->
+                                val reference = recent[index]
+                                TextButton({ features.files(reference.channelId).open(reference); graph.route("atoll://channels/${reference.channelId}/files"); recentOpen = false }) { Text(reference.name) }
+                            } }
+                        } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
                 if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout)
             }
