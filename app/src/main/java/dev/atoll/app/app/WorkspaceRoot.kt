@@ -15,6 +15,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
 import dev.atoll.app.compose.ComposerActor
 import dev.atoll.app.compose.TimelineMessageActions
+import dev.atoll.app.compose.TimelineSubmissionStatus
 import dev.atoll.app.waiting.WaitingDock
 import dev.atoll.app.waiting.editorBinding
 import dev.atoll.app.tasks.ApprovalCard
@@ -56,6 +57,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val features = viewModel.session(services)
     val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
+    val localSubmissions = features?.composer?.submissions?.collectAsStateWithLifecycle()?.value.orEmpty()
+    val localById = remember(localSubmissions) { localSubmissions.associateBy { it.messageId } }
     val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
     val actionRoster = remember(state.roster) { state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) } }
@@ -70,7 +73,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val activity by viewModel.activity.collectAsStateWithLifecycle()
     fun enterCreatedChannel(id: String) {
         val operation = features?.governance?.creations?.value?.lastOrNull { it.targetId == id }
-        if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services.boot, enter = true) else graph.openChannel(id)
+        if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services, enter = true) else graph.openChannel(id)
     }
     var activityOpen by rememberSaveable { mutableStateOf(false) }
     var selectedMessage by remember { mutableStateOf<String?>(null) }
@@ -252,12 +255,15 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                             onStop = waiting?.let { owner -> { id -> owner.stop(id) } },
                                             busyActors = waitingState?.busyActors.orEmpty(), content = default)
                                     } else default()
+                                    if (target?.seq == 0L && features != null) localById[target.envelope.id]?.let { row ->
+                                        TimelineSubmissionStatus(row, features.composer::retry, features.composer::cancel)
+                                    }
                                 },
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
                             if (features != null && !terminal) {
                             if (waiting != null) WaitingDock(waiting)
-                            AtollComposer(features.composer, editing = waitingState?.let { waiting?.editorBinding(it) },
+                            AtollComposer(features.composer, showLocalEchoes = false, editing = waitingState?.let { waiting?.editorBinding(it) },
                                 onPickChannelFiles = { pickingFile = true },
                                 onPreviewAttachment = { reference -> features.files(reference.channelId).open(reference); graph.files(true) })
                             }

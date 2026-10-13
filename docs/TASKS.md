@@ -180,7 +180,15 @@ Each package owns its files; live checks run on our test node.
 4. **W3-tasks** (sol-1, after governance live tests) — task source seq,
    timer records scoped to session/world, KV resource panel (§8.3).
 5. Large-screen layout (§2 breakpoints, rail collapse/resize, header slots,
-   keyboard shortcuts) — not scheduled; waiting for the user's call.
+   keyboard shortcuts) — dropped by the user (2026-10-13).
+6. Web-side bugs found during parity work — fix in web and Android together
+   (user: "有问题就修"): `/status` blocked by the manifest check (actor.describe
+   is answered by every actor's standard layer; sol-2), timer firing
+   recognition, plaintext existing secret in ui.form, self human.message
+   classed as agent_run (sol-1). atoll-web changes go on branches for the
+   user's review.
+7. Native vs web speed comparison on the same emulator and test channel
+   (sol-4).
 
 ## Status (lead keeps this current)
 
