@@ -303,10 +303,11 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 Text(info, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                 TextButton({ restoreNoticeDismissed = true }) { Text("关闭") }
                             } }
-                            state.channelError?.let { failure -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                            state.channelError?.takeUnless { state.channelErrorDismissed }?.let { failure -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(failure, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                     TextButton({ graph.retryChannel(state.route!!.channel) }) { Text("重试") }
+                                    TextButton({ graph.dismissChannelError(state.route!!.channel, failure) }) { Text("关闭") }
                                 }
                             } }
                             Box(Modifier.weight(1f)) {
