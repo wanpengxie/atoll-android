@@ -2,12 +2,15 @@ package dev.atoll.app.governance
 
 import androidx.lifecycle.ViewModel
 import dev.atoll.app.core.*
+import dev.atoll.app.app.WorkspaceServices
+import dev.atoll.app.tasks.ActivityOperation
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 import java.util.UUID
 
 data class GovernanceState(val channel: String = "", val selfId: String = "", val writable: Boolean = false,
+    val memberChannels: Set<String> = emptySet(),
     val directory: GovernanceDirectory = GovernanceDirectory(), val loading: Boolean = false, val busy: Boolean = false,
     val message: String = "", val error: String = "", val channelView: JsonObject? = null,
     val entries: List<JsonObject>? = null, val memberView: JsonObject? = null, val keyNames: List<String>? = null,
@@ -28,6 +31,7 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
     val state = mutableState.asStateFlow()
     private val mutableCreations = MutableStateFlow<List<ChannelCreation>>(emptyList())
     val creations = mutableCreations.asStateFlow()
+    val activityOperations: StateFlow<List<ActivityOperation>> = creations.map(::governanceActivityOperations).stateIn(scope,SharingStarted.Eagerly,emptyList())
     private var memberships: Set<String> = emptySet()
     private var knownChannels: List<JsonObject> = emptyList()
     private var directoryJob: Job? = null
@@ -36,6 +40,10 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
     private val pollers = mutableMapOf<String, Job>()
     init { scope.launch(start = CoroutineStart.UNDISPATCHED) { frames.collect { frame ->
         if (frame is DownFrame.Feed) {
+            val relevant = creations.value.filter { operation ->
+                frame.row.channelId == operation.parentId && (frame.row.envelope.id == operation.requestId || frame.row.envelope.parentId == operation.requestId || frame.row.envelope.correlationId == operation.requestId)
+            }.map { it.requestId }.toSet()
+            if (relevant.isEmpty()) return@collect
             mutableCreations.value = mutableCreations.value.map { operation ->
                 if (frame.row.channelId != operation.parentId) operation else {
                     val envelope = frame.row.envelope
@@ -43,7 +51,7 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
                     else operation.terminal(envelope).converge(knownChannels, memberships)
                 }
             }
-            creations.value.filter { it.targetId.isNotEmpty() && !it.failed && !it.ready }.forEach { poll(it.requestId) }
+            creations.value.filter { it.requestId in relevant && it.targetId.isNotEmpty() && !it.failed && !it.ready }.forEach { poll(it.requestId) }
         }
     } } }
     fun context(channel: String, selfId: String, writable: Boolean, memberChannels: Set<String>) {
@@ -51,8 +59,8 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
         mutableCreations.value = creations.value.map { it.converge(knownChannels, memberships) }
         if (state.value.channel != channel) {
             contextRevision++; directoryJob?.cancel(); operationJob?.cancel()
-            mutableState.value = GovernanceState(channel, selfId, writable)
-        } else mutableState.value = state.value.copy(selfId = selfId, writable = writable)
+            mutableState.value = GovernanceState(channel, selfId, writable, memberChannels)
+        } else mutableState.value = state.value.copy(selfId = selfId, writable = writable, memberChannels = memberChannels)
     }
     fun refresh() {
         val channel = state.value.channel; if (channel.isEmpty()) return
@@ -77,6 +85,9 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
             introducedPrincipal = when (command.word) { "system.member.admit" -> command.payload.text("principal"); "system.member.create" -> ""; else -> state.value.introducedPrincipal },
             introducedEntry = when (command.word) { "system.member.create" -> value.obj("entry").text("id"); "system.member.admit" -> ""; else -> state.value.introducedEntry })
         refresh()
+        if (command.word in setOf("system.channel.set","system.device.attach","system.device.detach")) {
+            mutableState.value = state.value.copy(channelView = port.execute(channel,GovernanceCommands.channelGet(channel)))
+        }
     }
     fun readChannel() = runOperation(write = false) { channel ->
         mutableState.value = state.value.copy(channelView = port.execute(channel, GovernanceCommands.channelGet(channel)))
@@ -113,12 +124,13 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
             finally { if (revision == contextRevision) mutableState.value = state.value.copy(busy = false) }
         }
     }
-    fun create(form: ChannelCreateForm) {
-        if (!state.value.writable || form.parent != state.value.channel || form.selfPrincipal != principalId) { mutableState.value = state.value.copy(error = "当前频道或账户未确认可写"); return }
-        if (creations.value.any { it.parentId == form.parent && !it.ready && !it.failed }) return
+    fun create(form: ChannelCreateForm): String? {
+        if (!state.value.writable || form.parent != state.value.channel || form.selfPrincipal != principalId) { mutableState.value = state.value.copy(error = "当前频道或账户未确认可写"); return null }
+        if (creations.value.any { it.parentId == form.parent && !it.ready && !it.failed }) return null
         val command = try { GovernanceCommands.channelCreate(form) } catch (failure: Exception) {
-            mutableState.value = state.value.copy(error = errorText(failure)); return
+            mutableState.value = state.value.copy(error = errorText(failure)); return null
         }
+        mutableState.value = state.value.copy(error = "",message = "")
         val id = UUID.randomUUID().toString()
         mutableCreations.value = (creations.value + ChannelCreation(id, form.parent, form.name.trim(), now())).takeLast(50)
         scope.launch {
@@ -138,6 +150,7 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
                 }
             }
         }
+        return id
     }
     fun refreshCreation(id: String) { pollers.remove(id)?.cancel(); poll(id) }
     private fun poll(id: String) {
@@ -160,4 +173,15 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
     override fun close() { scope.cancel() }
     override fun onCleared() { close() }
     private fun errorText(failure: Exception): String = if (failure is WireException) "${failure.code}：${failure.message.orEmpty()}" else failure.message ?: "操作失败"
+}
+
+/** Workspace mounts this once and publishes its current access/membership facts through context(). */
+fun createGovernanceViewModel(services: WorkspaceServices,channelId: String):GovernanceViewModel =
+    GovernanceViewModel(GovernanceRepository(services.wire,services.obs),services.principalId,services.wire.frames).also {
+        it.context(channelId,services.selfIds[channelId].orEmpty(),false,services.selfIds.keys)
+    }
+fun governanceActivityOperations(creations: List<ChannelCreation>):List<ActivityOperation> = creations.map { item ->
+    ActivityOperation("channel-create:${item.requestId}",item.parentId,"创建频道 ${item.name}",when { item.failed -> "failed";item.ready -> "completed";item.uncertain -> "uncertain";else -> "active" },
+        item.error.ifEmpty { "${listOf(item.ledger,item.observable,item.membership,item.serving).count { it }}/4 步已确认" },item.startedAt,
+        buildJsonObject { put("channelId",item.parentId);put("view","conversation");put("objectType","turn");put("objectId",item.requestId);put("requestId",item.requestId) })
 }

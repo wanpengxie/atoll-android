@@ -15,7 +15,7 @@ interface GovernancePort {
 }
 data class GovernanceDirectory(val channels: List<JsonObject> = emptyList(), val actors: List<JsonObject> = emptyList(),
     val devices: List<JsonObject> = emptyList(), val principals: List<JsonObject> = emptyList(), val descriptions: List<JsonObject> = emptyList(),
-    val profile: JsonObject = JsonObject(emptyMap()))
+    val profile: JsonObject = JsonObject(emptyMap()),val channelDevices: List<JsonObject> = emptyList())
 
 class GovernanceRepository(private val wire: WireClient, private val obs: ObsClient) : GovernancePort {
     override suspend fun channels(): List<JsonObject> = obs.spaceChannels().rows()
@@ -32,8 +32,9 @@ class GovernanceRepository(private val wire: WireClient, private val obs: ObsCli
         val principals = async { obs.spacePrincipals() }
         val descriptions = async { obs.spaceActorDescriptions() }
         val profile = async { obs.channelProfile(channel) }
+        val attached = async { obs.channelDevices(channel) }
         GovernanceDirectory(channels.await().rows(), actors.await().rows(), devices.await().rows(),
-            principals.await().rows(), descriptions.await().rows().map { it.declared() }, profile.await().rows().firstOrNull()?.declared() ?: JsonObject(emptyMap()))
+            principals.await().rows(), descriptions.await().rows().map { it.declared() }, profile.await().rows().firstOrNull()?.declared() ?: JsonObject(emptyMap()),attached.await().rows())
     }
     override suspend fun resource(channel: String, payload: JsonObject): JsonObject = wire.request(Up.RESOURCE, JsonObject(payload + ("channel_id" to JsonPrimitive(channel)))).also {
         if (it.text("status") == "rejected") throw WireException("resource", it.text("detail").ifEmpty { "rejected" }, "资源操作被拒绝")

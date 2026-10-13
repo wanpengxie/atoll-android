@@ -28,7 +28,7 @@ object GovernanceCommands {
     fun channelDelete(channel: String) = command("system.channel.delete") { put("channel_id", required(channel)) }
     fun channelCreate(form: ChannelCreateForm) = command("system.channel.create") {
         val name = form.name.trim()
-        require(name.matches(Regex("[a-z0-9-]{1,63}"))) { "频道名须为 1–63 位小写字母、数字或连字符" }
+        require(validateGovernanceChannelName(name).isEmpty()) { validateGovernanceChannelName(name) }
         put("name", name); put("parent", required(form.parent))
         val humans = (listOf(required(form.selfPrincipal)) + form.humans.map(::required)).distinct()
         require("guest" !in humans) { "不能添加 guest" }
