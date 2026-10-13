@@ -161,9 +161,45 @@ class RunnerTest(unittest.TestCase):
             response.calls = 0
             with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.subprocess.Popen') as start:
                 instrumented.ensure_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+                self.assertTrue((lock.base / 'emulator.started-by-e2e').exists())
                 self.assertIn('-port', start.call_args.args[0])
                 self.assertIn('5554', start.call_args.args[0])
                 self.assertEqual('emulator-5554', start.call_args.kwargs['env']['ANDROID_SERIAL'])
+
+    def test_existing_emulator_is_never_stopped_without_our_marker(self):
+        lock = unittest.mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            lock.base = Path(tmp)
+            def response(command, **kwargs):
+                result = unittest.mock.Mock(returncode=0)
+                result.stdout = 'List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else '1\n'
+                return result
+            with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.subprocess.Popen') as start:
+                instrumented.ensure_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+                start.assert_not_called()
+                self.assertFalse((lock.base / 'emulator.started-by-e2e').exists())
+            with patch('instrumented.subprocess.run') as adb:
+                instrumented.stop_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+                adb.assert_not_called()
+
+    def test_owned_emulator_disappears_before_marker_and_lock_are_released(self):
+        lock = unittest.mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            lock.base = Path(tmp); marker = lock.base / 'emulator.started-by-e2e'; marker.write_text('emulator-5554\n')
+            replies = iter(['List of devices attached\nemulator-5554\tdevice\ne5ca3495\tdevice\n', '',
+                            'List of devices attached\nemulator-5554\toffline\ne5ca3495\tdevice\n',
+                            'List of devices attached\ne5ca3495\tdevice\n'])
+            commands = []
+            def response(command, **kwargs):
+                self.assertEqual('emulator-5554', kwargs['env']['ANDROID_SERIAL'])
+                self.assertTrue(marker.exists())
+                commands.append(command)
+                result = unittest.mock.Mock(stdout=next(replies)); return result
+            with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.time.sleep'):
+                instrumented.stop_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+            self.assertFalse(marker.exists())
+            self.assertEqual(['adb', '-s', 'emulator-5554', 'emu', 'kill'], commands[1])
+            self.assertEqual(4, len(commands))
 
     def test_shutdown_only_when_queue_empty_and_while_lock_still_owned(self):
         with tempfile.TemporaryDirectory() as tmp:

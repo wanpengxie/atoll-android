@@ -50,6 +50,7 @@ def ensure_emulator(environment, lock):
                               '-no-snapshot-load', '-no-snapshot-save', '-gpu', 'host',
                               '-dns-server', '100.100.100.100,223.5.5.5'], env=environment,
                              stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        (lock.base / 'emulator.started-by-e2e').write_text('emulator-5554\n')
         lock.event('emulator-started', serial='emulator-5554')
     deadline = time.monotonic() + 300
     while time.monotonic() < deadline:
@@ -64,10 +65,20 @@ def ensure_emulator(environment, lock):
 
 
 def stop_emulator(environment, lock):
+    lock.check_owner()
+    marker = lock.base / 'emulator.started-by-e2e'
+    if not marker.exists():
+        return  # An already running user/Ash emulator belongs to its starter.
     if 'emulator-5554' in device_states(environment, lock):
         subprocess.run(['adb', '-s', 'emulator-5554', 'emu', 'kill'], env=environment,
                        capture_output=True, text=True, check=True, timeout=15)
+        deadline = time.monotonic() + 60
+        while 'emulator-5554' in device_states(environment, lock):
+            if time.monotonic() >= deadline:
+                raise Failure('emulator-5554 is still shutting down; lock retained')
+            time.sleep(2)
         lock.event('emulator-stopped', serial='emulator-5554')
+    marker.unlink()
 
 
 def release_emulator(owner):
