@@ -30,14 +30,15 @@ fun TerminalScreen(
     var ctrl by remember { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     val surface = remember(context, channelId, device, generation) { RemoteTerminalSurface(context) }
+    DisposableEffect(surface) { onDispose { surface.dispose() } }
     val latestAttached by rememberUpdatedState(onAttached)
     var handle by remember(surface) { mutableStateOf<PtyHandle?>(null) }
     SideEffect { surface.setTheme(theme); surface.control(ctrl); surface.onControlConsumed = { ctrl = false } }
     LaunchedEffect(client, channelId, device, generation, visible, surface) {
         if (!visible || device.isEmpty()) return@LaunchedEffect
         val stream = client.attach(channelId, device, surface.columns, surface.rows, surface::onReady, surface::onData)
-        handle = stream; surface.bind(stream); latestAttached?.invoke(stream)
-        try { stream.status.collect { status = it } }
+        handle = stream
+        try { surface.bind(stream); latestAttached?.invoke(stream); stream.status.collect { status = it } }
         finally { surface.unbind(stream); stream.detach(); handle = null }
     }
     Column(modifier.fillMaxSize()) {

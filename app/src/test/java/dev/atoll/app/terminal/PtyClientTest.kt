@@ -2,6 +2,7 @@ package dev.atoll.app.terminal
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.test.*
 import kotlinx.serialization.json.*
 import okhttp3.*
 import okhttp3.mockwebserver.*
@@ -13,25 +14,44 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
 class PtyClientTest {
-    private class Fixture(delays: List<Long> = listOf(10, 20, 30), idle: Long = 200) : AutoCloseable {
+    private class Fixture(delays: List<Long> = listOf(10, 20, 30), idle: Long = 200, dispatcher: CoroutineDispatcher = Dispatchers.IO) : AutoCloseable {
         val server = MockWebServer()
         val text = LinkedBlockingQueue<JsonObject>()
         val binary = LinkedBlockingQueue<PtyBytes>()
         val sockets = CopyOnWriteArrayList<WebSocket>()
+        val closed = LinkedBlockingQueue<Unit>()
         val http = OkHttpClient()
         val client: PtyClient
-        init { server.start(); upgrade(); client = PtyClient(server.url("/").toString(), http, delays, idle) }
+        init { server.start(); upgrade(); client = PtyClient(server.url("/").toString(), http, delays, idle, dispatcher) }
         fun upgrade() { server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) { sockets.add(ws) }
             override fun onMessage(ws: WebSocket, value: String) { text.add(Json.parseToJsonElement(value).jsonObject) }
             override fun onMessage(ws: WebSocket, value: ByteString) { binary.add(PtyFrames.decode(value)!!) }
             override fun onClosing(ws: WebSocket, code: Int, reason: String) { ws.close(code, reason) }
+            override fun onClosed(ws: WebSocket, code: Int, reason: String) { closed.add(Unit) }
         })) }
         fun next(type: String): JsonObject = (text.poll(5, TimeUnit.SECONDS) ?: throw AssertionError("Missing $type")).also { assertEquals(type, it["type"]!!.jsonPrimitive.content) }
         fun ready(id: Long, session: String = "session-1") { assertTrue(sockets.last().send("""{"type":"ready","id":$id,"session":"$session"}""")) }
         fun error(id: Long) { sockets.last().send("""{"type":"error","id":$id,"code":"session_not_found","detail":"session gone"}""") }
         suspend fun ready(handle: PtyHandle) = withTimeout(5_000) { handle.status.filterIsInstance<PtyStatus.Ready>().first() }
         override fun close() { client.close(); sockets.forEach { it.close(1000, "test") }; server.shutdown(); http.dispatcher.executorService.shutdown(); http.connectionPool.evictAll() }
+    }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test fun cancelledCallerAfterActorCompletesAttachDoesNotLeaveOrphanStream() {
+        val actorClock = TestCoroutineScheduler()
+        val callerClock = TestCoroutineScheduler()
+        val caller = CoroutineScope(SupervisorJob() + StandardTestDispatcher(callerClock))
+        Fixture(dispatcher = StandardTestDispatcher(actorClock), idle = 10).use { f ->
+            var resumed = false
+            val job = caller.launch { f.client.attach("c", "d", onData = {}); resumed = true }
+            callerClock.runCurrent() // caller awaits attach
+            actorClock.runCurrent() // stream created; caller's continuation is pending
+            job.cancel(); callerClock.runCurrent(); actorClock.runCurrent()
+            assertFalse(resumed)
+            actorClock.advanceTimeBy(11); actorClock.runCurrent()
+            assertNotNull("cancelled stream must permit idle socket shutdown", f.closed.poll(5, TimeUnit.SECONDS))
+            f.client.close(); actorClock.runCurrent(); caller.cancel()
+        }
     }
     @Test fun multiplexesAndInstallsCallbacksBeforeFirstReplay() = runBlocking<Unit> {
         Fixture().use { f ->

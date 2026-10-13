@@ -6,8 +6,6 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.graphics.Typeface
 import android.graphics.Color
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.InputType
 import android.text.SpannableStringBuilder
@@ -19,6 +17,8 @@ import android.widget.TextView
 import com.termux.terminal.*
 import com.termux.view.*
 import java.util.ArrayDeque
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlin.math.max
 
 /**
@@ -28,7 +28,12 @@ import kotlin.math.max
  */
 class RemoteTerminalSurface(context: Context) : FrameLayout(context) {
     val terminalView = TerminalView(context, null)
-    private val handler = Handler(Looper.getMainLooper())
+    private sealed interface ScreenUpdate {
+        data object Reset : ScreenUpdate
+        data class Data(val bytes: ByteArray) : ScreenUpdate
+    }
+    private val updates = Channel<ScreenUpdate>(Channel.UNLIMITED)
+    private val rendering = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var handle: PtyHandle? = null
     private var theme = TerminalTheme.DARK
     private var ctrl = false
@@ -139,6 +144,29 @@ class RemoteTerminalSurface(context: Context) : FrameLayout(context) {
         }
         addView(terminalView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         setTheme(TerminalTheme.DARK)
+        rendering.launch {
+            while (true) {
+                var event = updates.receiveCatching().getOrNull() ?: break
+                // Coalesce small WS chunks for one refresh per display frame,
+                // while limiting emulator parsing work to 64 KiB per batch.
+                delay(16)
+                var bytes = 0
+                while (true) {
+                    when (event) {
+                        ScreenUpdate.Reset -> {
+                            emulator = createEmulator(); terminalView.mEmulator = emulator
+                            terminalView.topRow = 0; setTheme(theme)
+                        }
+                        is ScreenUpdate.Data -> {
+                            emulator.append(event.bytes, event.bytes.size); bytes += event.bytes.size
+                        }
+                    }
+                    if (bytes >= 64 * 1024) break
+                    event = updates.tryReceive().getOrNull() ?: break
+                }
+                terminalView.onScreenUpdated()
+            }
+        }
     }
     private fun createEmulator() = TerminalEmulator(output, columns, rows, 5000, emulatorClient)
     fun bind(stream: PtyHandle) {
@@ -148,12 +176,10 @@ class RemoteTerminalSurface(context: Context) : FrameLayout(context) {
         pendingBytes = 0
     }
     fun unbind(stream: PtyHandle) { if (handle === stream) { handle = null; pending.clear(); pendingBytes = 0 } }
-    /** Posted before replay bytes by the PTY actor, preserving reset/replay order. */
-    fun onReady() { handler.post {
-        emulator = createEmulator(); terminalView.mEmulator = emulator; terminalView.topRow = 0
-        setTheme(theme); terminalView.onScreenUpdated()
-    } }
-    fun onData(bytes: ByteArray) { handler.post { emulator.append(bytes, bytes.size); terminalView.onScreenUpdated() } }
+    /** Reset precedes replay in the same actor-owned queue, including across batches. */
+    fun onReady() { updates.trySend(ScreenUpdate.Reset) }
+    fun onData(bytes: ByteArray) { updates.trySend(ScreenUpdate.Data(bytes)) }
+    fun dispose() { updates.close(); rendering.cancel(); pending.clear(); pendingBytes = 0; handle = null }
     private fun send(bytes: ByteArray) {
         val stream = handle
         if (stream != null) stream.write(bytes)

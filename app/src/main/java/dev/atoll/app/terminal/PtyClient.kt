@@ -49,19 +49,27 @@ class PtyClient(
     suspend fun attach(channelId: String, deviceId: String, cols: Int = 80, rows: Int = 24, onReady: () -> Unit = {}, onData: (ByteArray) -> Unit): PtyHandle {
         require(channelId.isNotBlank() && deviceId.isNotBlank())
         val result = CompletableDeferred<PtyHandle>(currentCoroutineContext()[Job])
+        var created: PtyHandle? = null // read and written only inside actor commands
         check(enqueue {
             if (!result.isActive) return@enqueue
             if (stopped) { result.completeExceptionally(IllegalStateException("PTY client closed")); return@enqueue }
             val handle = PtyHandle(nextId++, this)
+            created = handle
             val stream = Stream(handle, channelId, deviceId, cols.coerceIn(4, 65535), rows.coerceIn(4, 65535), onData, onReady)
             stream.session = sessions[stream.key].orEmpty()
             streams[handle.id] = stream
             idle?.cancel(); idle = null
-            if (!result.complete(handle)) { drop(handle.id, false); return@enqueue }
+            if (!result.complete(handle)) { dropStream(handle.id, false); return@enqueue }
             ensure()
             if (open) sendOpen(stream)
         }) { "PTY client closed" }
-        return result.await()
+        return try { result.await() }
+        catch (e: CancellationException) {
+            // A completed deferred can still lose to cancellation before the
+            // caller resumes. Remove that stream as well as pre-completion ones.
+            enqueue { created?.let { dropStream(it.id, false) } }
+            throw e
+        }
     }
 
     internal fun write(id: Long, bytes: ByteArray) {
