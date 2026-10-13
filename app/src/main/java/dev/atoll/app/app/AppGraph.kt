@@ -115,6 +115,7 @@ class AppGraph(private val context: Context) {
     fun route(value: String?) { AppRoute.parse(value)?.let { post(Navigate(it, push = true)) } }
     fun tab(value: ChannelTab) { post(Tab(value)) }
     fun files(open: Boolean) { post(Files(open)) }
+    fun resources() { post(Resources) }
     fun terminal(open: Boolean) { post(Terminal(open)) }
     fun back() { post(Back) }
     fun follow(value: Boolean) { post(Follow(value)) }
@@ -207,6 +208,7 @@ class AppGraph(private val context: Context) {
             is Files -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).files(event.open))
             }
+            Resources -> route?.let { current -> saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).resources()) }
             is Terminal -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).terminal(event.open))
             }
@@ -650,6 +652,7 @@ class AppGraph(private val context: Context) {
     private data object Back : Event
     private data class Tab(val value: ChannelTab) : Event
     private data class Files(val open: Boolean) : Event
+    private data object Resources : Event
     private data class Terminal(val open: Boolean) : Event
     private data object Reconnect : Event
     private data object Upgrade : Event

@@ -4,6 +4,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ChannelSurfaceTest {
+    @Test fun resourceTabHasItsOwnRouteAndSurvivesTasksTerminalAndStoredChannelReturn() {
+        val resources = ChannelSurface().resources()
+        assertEquals("resources", resources.routeTab)
+        assertEquals(resources, ChannelSurface.decode(resources.encode()))
+        assertEquals(resources, resources.selectTab(true).selectTab(false))
+        assertEquals(resources, resources.terminal(true).terminal(false))
+        assertEquals("files", resources.files(true).routeTab)
+        assertEquals(resources, ChannelSurface.fromRoute("resources"))
+        assertEquals(AppRoute("c", "resources"), AppRoute.parse("atoll://channels/c/resources"))
+    }
     @Test fun filesChoiceSurvivesTasksAndStoredChannelReturn() {
         val files = ChannelSurface().files(true)
         assertEquals("files", files.routeTab)
