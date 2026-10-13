@@ -35,6 +35,7 @@ data class WorkspaceState(
     val login: LoginViewState = LoginViewState(),
     val navigation: ChannelNavigationViewState = ChannelNavigationViewState(emptyList(), ConnectionPhase.CONNECTING, AccountViewState("")),
     val route: AppRoute? = null,
+    val globalPanel: WorkspacePanel? = null,
     val canForward: Boolean = false,
     val canBack: Boolean = false,
     val conversation: ConversationViewState? = null,
@@ -82,7 +83,8 @@ class AppGraph(private val context: Context) {
     private val rosterGenerations = mutableMapOf<String, Long>()
     private val actorRosters = mutableMapOf<String, List<ActorRecord>>()
     private val accesses = mutableMapOf<String, ChannelAccess>()
-    private val history = RouteHistory()
+    private val history = RouteHistory<WorkspaceLocation>()
+    private var globalPanel: WorkspacePanel? = null
     private val focus = AtomicReference("")
     private val channelNotices = mutableMapOf<String, String>()
     private val errorNotices = ChannelErrorNotices()
@@ -225,13 +227,15 @@ class AppGraph(private val context: Context) {
                 if (added || event.enter) loadTree(epoch)
                 if (event.enter) navigate(AppRoute(event.id), true, restoreSurface = true) else publish()
             }
-            Back -> if (history.canBack) navigate(history.back(route), false)
-                else navigate(route?.takeIf { it.focus != null }?.copy(focus = null), false)
-            Forward -> if (history.canForward) navigate(history.forward(route), false)
-            CloseFocus -> if (route?.focus != null) {
-                navigate(if (history.canBack) history.back(route) else route?.copy(focus = null), false)
+            Back -> if (history.canBack) restoreLocation(history.back(WorkspaceLocation(route, globalPanel)))
+                else navigate(if (globalPanel != null) route else route?.takeIf { it.focus != null }?.copy(focus = null), false)
+            Forward -> if (history.canForward) restoreLocation(history.forward(WorkspaceLocation(route, globalPanel)))
+            CloseFocus -> if (globalPanel != null || route?.focus != null) {
+                if (history.canBack) restoreLocation(history.back(WorkspaceLocation(route, globalPanel)))
+                else navigate(if (globalPanel != null) route else route?.copy(focus = null), false)
             }
-            is Panel -> route?.let { navigate(it.copy(focus = "panel:${event.value.key}"), true) }
+            is Panel -> if (event.value == WorkspacePanel.Activity) navigate(route, true, overlay = event.value)
+                else route?.let { navigate(it.copy(focus = "panel:${event.value.key}"), true) }
             is Tab -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).selectTab(event.value == ChannelTab.Tasks))
             }
@@ -433,6 +437,7 @@ class AppGraph(private val context: Context) {
                 preferences.clearWorld(rt.namespace)
                 records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); rosterLoading.clear(); accesses.clear(); surfaces.clear()
                 route = route?.copy(tab = "conversation", focus = null); history.clear()
+                globalPanel = null
                 errorNotices.clear()
                 rt.world++
                 rt.hub = SyncHub(rt.gate, rt.store, rt.scope)
@@ -500,7 +505,9 @@ class AppGraph(private val context: Context) {
         if (route?.channel == id) { controller.follow(route?.tab == "conversation"); controller.open(records[id] ?: fallback(id)); controller.foreground(foreground); loadRoster(id) }
     }
 
-    private suspend fun navigate(request: AppRoute?, push: Boolean, force: Boolean = false, restoreSurface: Boolean = false) {
+    private suspend fun restoreLocation(location: WorkspaceLocation) = navigate(location.route, false, overlay = location.globalPanel)
+
+    private suspend fun navigate(request: AppRoute?, push: Boolean, force: Boolean = false, restoreSurface: Boolean = false, overlay: WorkspacePanel? = null) {
         val rt = runtime ?: return
         var target = request?.let { value -> records.values.firstOrNull { it.id == value.channel || it.qualifiedName == value.channel }?.let { value.copy(channel = it.id) } ?: value }
         target?.let { value ->
@@ -511,11 +518,12 @@ class AppGraph(private val context: Context) {
             target = value.copy(tab = surface.routeTab)
         }
         val selected = target
-        if (selected == route && !force) { publish(); return }
-        if (push) history.push(route)
+        if (selected == route && overlay == globalPanel && !force) { publish(); return }
+        if (push) history.push(WorkspaceLocation(route, globalPanel))
         val channelChanged = route?.channel != selected?.channel
         if (channelChanged) controllers[route?.channel]?.closeView()
         route = selected
+        globalPanel = overlay
         focus.set(selected?.channel.orEmpty())
         channelOpenedAt = SystemClock.elapsedRealtime()
         if (selected != null) {
@@ -635,11 +643,12 @@ class AppGraph(private val context: Context) {
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.MemberUnavailable, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel,
-            identityReady = mutableState.value.identityConfirmed && !mutableServices.value?.selfIds?.get(route?.channel).isNullOrBlank(),
+            identityReady = channelIdentityReady(mutableState.value.identityConfirmed, currentChannel?.access,
+                mutableServices.value?.selfIds?.get(route?.channel).orEmpty()),
             filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         val channelError = channelState?.error ?: channelNotices[route?.channel]
         val errorDismissed = route?.channel?.let { errorNotices.visible(it, channelError) == null && channelError != null } == true
-        mutableState.value = mutableState.value.copy(navigation = nav, route = route, canForward = history.canForward, canBack = history.canBack, conversation = conversation,
+        mutableState.value = mutableState.value.copy(navigation = nav, route = route, globalPanel = globalPanel, canForward = history.canForward, canBack = history.canBack, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice, channelError = channelError, channelErrorDismissed = errorDismissed,
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true, browsePosition = channelState?.browsePosition, restoreNotice = channelState?.restoreNotice, rowSequences = channelState?.rowSequences.orEmpty(),
@@ -660,7 +669,7 @@ class AppGraph(private val context: Context) {
         runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
-        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; history.clear(); notice = null; upgrade = null; exporting = false
+        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; globalPanel = null; history.clear(); notice = null; upgrade = null; exporting = false
     }
     private fun fallback(id: String) = ChannelRecord(id, id, null, id)
     private fun cachedTree(records: Collection<ChannelRecord>) = buildJsonObject {

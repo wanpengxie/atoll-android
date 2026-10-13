@@ -8,6 +8,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ComposerBridgeTest {
+    @Test fun scopeIdentityBecomesUnknownForAnObserverEvenIfAnOldSelfIdIsStillPresent() {
+        val oldSelf = "human:self"
+        assertTrue(channelIdentityReady(true, ChannelAccess.MemberActive, oldSelf))
+        assertTrue(channelIdentityReady(true, ChannelAccess.MemberStale, oldSelf))
+        assertFalse(channelIdentityReady(true, ChannelAccess.ObserverActive, oldSelf))
+        assertFalse(channelIdentityReady(true, ChannelAccess.ObserverStale, oldSelf))
+        assertFalse(channelIdentityReady(false, ChannelAccess.MemberActive, oldSelf))
+        assertFalse(channelIdentityReady(true, ChannelAccess.MemberActive, ""))
+    }
     @Test fun membershipIsRequiredEvenWhenObserverContentIsAvailable() {
         assertFalse(composerWritable(ChannelAccess.ObserverActive, ""))
         assertFalse(composerWritable(ChannelAccess.ObserverActive, "human:self"))

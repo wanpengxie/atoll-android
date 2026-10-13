@@ -92,12 +92,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val emptyRoster = remember { MutableStateFlow<RosterViewModel?>(null) }
     val rosterOwner by (features?.roster ?: emptyRoster).collectAsStateWithLifecycle()
     val roster = rosterOwner?.takeIf { it.channelId == state.route?.channel }
-    var rosterOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
-    var actorOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
-    var governanceOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var spaceOpen by remember(services?.wire, services?.boot) { mutableStateOf(false) }
     var createChannelOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     val routeFocus = RouteFocus.parse(state.route?.focus, state.route?.tab.orEmpty())
+    val actorOpen = routeFocus?.kind == FocusKind.Participant
+    val rosterOpen = actorOpen || routeFocus?.kind == FocusKind.Panel && routeFocus.key == WorkspacePanel.Members.key
+    val governanceOpen = routeFocus?.kind == FocusKind.Channel
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
@@ -105,7 +105,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
         val operation = features?.governance?.creations?.value?.lastOrNull { it.targetId == id }
         if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services, enter = true) else graph.openChannel(id)
     }
-    var activityOpen by rememberSaveable { mutableStateOf(false) }
+    val activityOpen = state.globalPanel == WorkspacePanel.Activity
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
@@ -118,7 +118,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
         onDownload = { reference, destination -> features?.files(reference.channelId)?.download(context, reference, destination) },
         downloading = { state.route?.channel?.let { features?.files(it)?.state?.value?.download != null } == true })
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
-    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; activityOpen = false } }
+    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val markdownCache = remember(services?.wire, services?.boot) { MarkdownCache() }
     AtollTheme {
@@ -139,7 +139,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     } }
                     if (state.route == null) {
-                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { activityOpen = true },
+                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { graph.panel(WorkspacePanel.Activity) },
                             onCreate = { createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) spaceOpen = true })
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
@@ -327,15 +327,15 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.CloseTerminal -> graph.terminal(false)
                                     Item.ExportPerformance -> graph.export(true)
                                     is ChannelMenuAction.Process -> {
-                                        val target = processTarget(action.messageId,messageTargets,state.timelineSource)
+                                        val target = processTarget(action.messageId, messageTargets, state.timelineSource)
                                         val id = target?.turn?.requestId ?: target?.envelope?.id
                                         if (id != null) graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Turn, id))
                                     }
                                     Item.Waiting -> waiting?.setCollapsed(false)
                                     Item.NewTask -> tasks?.beginCreation()
                                     Item.Running -> graph.panel(WorkspacePanel.Running)
-                                    Item.Members -> { actorOpen = false; rosterOpen = true }
-                                    Item.Details -> governanceOpen = true
+                                    Item.Members -> graph.panel(WorkspacePanel.Members)
+                                    Item.Details -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Channel, state.route!!.channel))
                                     Item.NewChild -> createChannelOpen = true
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
@@ -401,7 +401,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 }
                 if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
                 if (features != null && (governanceOpen || spaceOpen && state.navigation.account.root)) Dialog(
-                    onDismissRequest = { governanceOpen = false; spaceOpen = false },
+                    onDismissRequest = { if (spaceOpen) spaceOpen = false else graph.closeFocus() },
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) {
                         if (spaceOpen) SpaceAdministrationScreen(features.governance, Modifier.safeDrawingPadding(), onClose = { spaceOpen = false })
@@ -409,19 +409,18 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             val declared = row["declared"] as? JsonObject ?: row
                             val id = declared["id"].string().ifEmpty { row["key"].string() }
                             if (id.isNotEmpty() && state.route != null) {
-                                features.roster(state.route!!.channel).select(id)
-                                governanceOpen = false; rosterOpen = true; actorOpen = true
+                                graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, id))
                             }
-                        }, onEnterChannel = { governanceOpen = false; graph.openChannel(it) }, onClose = { governanceOpen = false })
+                        }, onEnterChannel = graph::openChannel, onClose = graph::closeFocus)
                     }
                 }
                 if (createChannelOpen && features != null) ChannelCreateDialog(features.governance,
                     onEnterChannel = { createChannelOpen = false; enterCreatedChannel(it) }, onClose = { createChannelOpen = false })
-                if (rosterOpen && roster != null) Dialog(onDismissRequest = { rosterOpen = false; actorOpen = false; roster.clearSelection() },
+                if (rosterOpen && roster != null) Dialog(onDismissRequest = graph::closeFocus,
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) {
-                        if (actorOpen) ActorDetail(roster, Modifier.safeDrawingPadding(), onClose = { actorOpen = false; roster.clearSelection() })
-                        else RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = { rosterOpen = false }, onSelect = { actorOpen = true })
+                        if (actorOpen) ActorDetail(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus)
+                        else RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus, onSelect = { actor -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, actor.id)) })
                     }
                 }
                 if (routeFocus?.kind == FocusKind.Turn) key(routeFocus.key) {
@@ -470,6 +469,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         else graph.closeFocus()
                     }
                     when (routeFocus.key) {
+                        WorkspacePanel.Members.key -> Unit // Rendered by the roster owner above.
                         WorkspacePanel.Running.key -> RunningDrawer(remember(state.timeline, state.roster) { runningPanel(state.timeline?.runningTasks.orEmpty(), state.roster) }, ::jumpLoaded, ::closeOrJump)
                         WorkspacePanel.Stars.key -> StarredDrawer(remember(starredState, state.route?.channel, state.roster) {
                             starredState.drawerItems(state.route?.channel.orEmpty(), state.roster.associate { it.id to it.name }, ::panelTime)
@@ -494,23 +494,22 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     if (routeFocus?.kind == FocusKind.Artifact && state.route?.tab != "files") graph.files(true)
                     if (routeFocus?.kind == FocusKind.WorkItem && state.route?.tab != "tasks") graph.tab(ChannelTab.Tasks)
                     if (routeFocus?.kind == FocusKind.Participant && roster != null) {
-                        roster.select(routeFocus.key); rosterOpen = true; actorOpen = true
+                        if (roster.state.value.selected?.id != routeFocus.key) roster.select(routeFocus.key)
                     }
-                    if (routeFocus?.kind == FocusKind.Channel) governanceOpen = true
                 }
                 if (features != null) UiFormsHost(features.forms, state.roster.associate { it.id to it.name }, state.navigation.channels.associate { it.id to it.name })
-                if (activityOpen) Dialog(onDismissRequest = { activityOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+                if (activityOpen) Dialog(onDismissRequest = graph::closeFocus, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) { Column(Modifier.safeDrawingPadding()) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text("活动中心", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                            TextButton({ activityOpen = false }) { Text("关闭") }
+                            TextButton(graph::closeFocus) { Text("关闭") }
                         }
                         ActivityCenterScreen(activity, Modifier.weight(1f), onSource = { source ->
-                            taskSourceLink(source)?.let { activityOpen = false; graph.route(it) }
+                            taskSourceLink(source)?.let(graph::route)
                         })
                     } }
                 }
-                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true },
+                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; graph.panel(WorkspacePanel.Activity) },
                     onCreate = { drawer = false; createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) { drawer = false; spaceOpen = true } })
             }
         }

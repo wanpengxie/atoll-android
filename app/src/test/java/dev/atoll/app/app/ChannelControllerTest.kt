@@ -57,6 +57,28 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
+    @Test fun observerShowsAllRowsWithoutErasingMemberFilterPreferences() = runBlocking {
+        val saved = ChannelViewOptions(mineOnly = true, actorFilters = setOf("agent:absent"))
+        val fixture = Fixture(head = 1, rows = listOf(row(1)), selfId = "", options = saved)
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val view = fixture.await { it.conversation != null }.conversation!!
+            assertFalse(view.mineOnly)
+            assertTrue(view.actorFilters.isEmpty())
+            assertEquals("q1:request", view.entries.single().key)
+            assertEquals(saved, fixture.preferences.options("ns", "c"))
+        } finally { fixture.stop() }
+
+        val member = Fixture(head = 1, rows = listOf(row(1)), options = saved)
+        try {
+            member.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val view = member.await { it.conversation != null }.conversation!!
+            assertTrue(view.mineOnly)
+            assertEquals(saved.actorFilters, view.actorFilters)
+            assertTrue(view.entries.isEmpty())
+        } finally { member.stop() }
+    }
+
     @Test fun cacheReaderFailuresAreVisibleAndCanBeRetried() = runBlocking {
         val fixture = Fixture(head = 1, rows = listOf(row(1)))
         try {
@@ -248,7 +270,8 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
-    private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true, browse: BrowsePosition? = null) {
+    private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true, browse: BrowsePosition? = null,
+        selfId: String = "human:self", options: ChannelViewOptions? = null) {
         val memory = MemoryRowStore()
         val lookups = AtomicInteger()
         val failNextRead = AtomicBoolean()
@@ -267,10 +290,11 @@ class ChannelControllerTest {
         init {
             runBlocking {
                 memory.commit("c", rows, if (head > 0) listOf(CoverageRange(1, head)) else emptyList())
+                if (options != null) preferences.saveOptions("ns", "c", options)
                 if (browse != null) preferences.put("ns", "c.browse", browse.encode())
                 if (baseline) preferences.put("ns", "c.baselined", "true")
                 hub = SyncHub(wire, store, scope)
-                controller = ChannelController("c", "human:self", hub.channel("c"), store, preferences, "ns", head, scope)
+                controller = ChannelController("c", selfId, hub.channel("c"), store, preferences, "ns", head, scope)
                 withTimeout(10_000) { wire.frames.subscriptionCount.first { it > 0 } }
             }
         }
