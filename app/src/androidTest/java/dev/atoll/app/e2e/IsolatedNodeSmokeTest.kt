@@ -255,6 +255,10 @@ class IsolatedNodeSmokeTest {
             waitFor(hasText(qualifiedName)); compose.waitUntil(40_000) { graph.state.value.route?.channel != config.channel }
         }
         step("retire-child") {
+            val retiredId = graph.state.value.route?.channel ?: error("Created child is not open")
+            val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
+            check(retiredId != config.channel && graph.state.value.navigation.channels.first { it.id == retiredId }.name == "$parentName.$child")
+            val s = services()
             menu("频道详情"); click("危险操作")
             val field = waitFor(hasSetTextAction() and SemanticsMatcher("retire confirmation") {
                 it.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text -> text.text.startsWith("输入 ") && text.text.endsWith(" 确认") }
@@ -262,7 +266,14 @@ class IsolatedNodeSmokeTest {
             val label = field.fetchSemanticsNode().config.getOrNull(SemanticsProperties.Text).orEmpty().first { it.text.startsWith("输入 ") }.text
             field.performTextReplacement(label.removePrefix("输入 ").removeSuffix(" 确认"))
             click("退役当前频道"); click("确认")
-            waitFor(hasText("频道退役终态已确认", substring = true))
+            // Retirement ends membership and removes the local details dialog before
+            // its success notice can render. Assert navigation and directory facts.
+            compose.waitUntil(40_000) { graph.state.value.route == null }
+            waitFor(hasText("我的频道")); waitFor(hasText("频道成员关系已结束"))
+            runBlocking { withTimeout(30_000) {
+                while (channelRecords(s.obs.spaceChannels(config.channel)).any { it.id == retiredId }) delay(250)
+            } }
+            File(output, "retire-observer.json").writeText(buildJsonObject { put("channel_id", retiredId); put("absent", true) }.toString())
             compose.runOnUiThread { compose.activity.startActivity(Intent(context, MainActivity::class.java)
                 .setData(Uri.parse("atoll://channels/${config.channel}")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
             if (nodes(hasText("关闭") and hasClickAction()).isNotEmpty()) click("关闭")
