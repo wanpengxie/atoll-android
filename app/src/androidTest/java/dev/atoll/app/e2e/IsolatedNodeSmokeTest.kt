@@ -13,10 +13,13 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.atoll.app.AtollApp
 import dev.atoll.app.MainActivity
 import dev.atoll.app.app.*
+import dev.atoll.app.core.DownFrame
 import dev.atoll.app.files.FileRepository
 import dev.atoll.app.terminal.PtyStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.*
 import okhttp3.Request
 import org.junit.Rule
@@ -54,7 +57,12 @@ class IsolatedNodeSmokeTest {
     private val filename = "android-e2e-$runId.txt"
     private val child = "e2e-$runId"
     private val records = mutableListOf<JsonObject>()
-    private val output by lazy { File(context.getExternalFilesDir("e2e-artifacts"), runId).also { it.mkdirs() } }
+    private val output by lazy {
+        val path = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
+            ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output"
+        require(path == "/sdcard/Android/media/dev.atoll.app/additional_test_output") { "Unexpected artifact path" }
+        File(path, runId).also { check(it.mkdirs() || it.isDirectory) }
+    }
     private val compose = createAndroidComposeRule<MainActivity>()
     private val prepare = object : ExternalResource() {
         override fun before() = runBlocking<Unit> {
@@ -62,6 +70,9 @@ class IsolatedNodeSmokeTest {
             val preferences = AppPreferences(context)
             preferences.saveAccount(config.url, "root")
             preferences.forgetBootstrap(config.url, "root")
+            preferences.put(accountNamespace(config.url, "root"), "last-channel", "")
+            preferences.put(accountNamespace(config.url, "root"), "${config.channel}.surface", "")
+            preferences.saveOptions(accountNamespace(config.url, "root"), config.channel, ChannelViewOptions())
             context.getSharedPreferences("identity_${accountNamespace(config.url, "root")}", Context.MODE_PRIVATE).edit().clear().commit()
         }
     }
@@ -81,7 +92,10 @@ class IsolatedNodeSmokeTest {
         try { field.performTextReplacement(value) } catch (failure: Throwable) {
             if (private) throw AssertionError("Password replacement action failed") else throw failure
         }
-        compose.waitUntil(timeoutMillis = 10_000) { field.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text == value }
+        compose.waitUntil(timeoutMillis = 10_000) {
+            val actual = field.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text
+            if (private) actual?.length == value.length else actual == value
+        }
     }
     private fun menu(label: String) { waitFor(hasContentDescription("频道菜单") and hasClickAction()).performClick(); click(label) }
     private fun services(): WorkspaceServices = graph.services.value?.also { check(it.server == TEST_URL) { "Session origin is not the isolated node" } }
@@ -89,8 +103,21 @@ class IsolatedNodeSmokeTest {
     private fun send(text: String) {
         waitFor(editor).performTextReplacement(text)
         compose.waitUntil(timeoutMillis = 10_000) { nodes(editor).singleOrNull()?.config?.getOrNull(SemanticsProperties.EditableText)?.text == text }
-        waitFor(hasContentDescription("发送") and hasClickAction()).performClick()
+        waitFor(hasContentDescription("发送") and hasClickAction() and isEnabled()).performClick()
         compose.waitUntil(timeoutMillis = 20_000) { nodes(editor).singleOrNull()?.config?.getOrNull(SemanticsProperties.EditableText)?.text == "" }
+    }
+    private fun holdQueue() {
+        val terminal = CompletableDeferred<dev.atoll.app.core.Envelope>()
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            terminal.complete(services().wire.frames.filterIsInstance<DownFrame.Feed>().map { it.row.envelope }
+                .first { it.senderId == config.codex && it.type == "agent.hold" && it.isTerminal })
+        }
+        try {
+            send("/hold {\"duration_ms\":180000}")
+            // A durable handoff is not the receiver's acceptance; admit the hold before sending asks.
+            check(runBlocking { withTimeout(30_000) { terminal.await() } }.status == "completed") { "UI hold command failed" }
+        } finally { scope.cancel() }
     }
     private fun waitingRow(text: String): SemanticsMatcher = SemanticsMatcher("waiting row") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("atoll.waiting.") == true
@@ -121,6 +148,7 @@ class IsolatedNodeSmokeTest {
         } catch (failure: Throwable) {
             runCatching { capture("$name-failed") }
             File(output, "$name-failure.txt").writeText(config.redact(failure.stackTraceToString()))
+            println(config.redact(failure.stackTraceToString()))
             records += buildJsonObject { put("step", name); put("status", "failed"); put("error", failure.javaClass.simpleName) }
             throw AssertionError("Smoke failed at $name (${failure.javaClass.simpleName}); artifacts: ${output.absolutePath}")
         } finally { summary() }
@@ -130,13 +158,13 @@ class IsolatedNodeSmokeTest {
         step("login") {
             waitFor(hasText("进入 Atoll"))
             replace("服务器地址", config.url); replace("账号", "root"); replace("密码", config.password, private = true)
-            compose.waitUntil(timeoutMillis = 10_000) {
-                val form = graph.state.value.login
-                form.server == config.url && form.account == "root" && form.password == config.password
-            }
-            check(graph.state.value.login.server == TEST_URL)
+            // The login screen now owns local fields and only publishes them at submit.
+            // Read the rendered server field at that boundary; password semantics are masked.
+            val serverField = waitFor(hasSetTextAction() and hasText("服务器地址"))
+            check(serverField.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text == TEST_URL)
             click("进入 Atoll")
-            waitFor(hasText("OPEN")); compose.waitUntil(40_000) { graph.services.value?.server == TEST_URL }
+            compose.waitUntil(40_000) { graph.services.value?.server == TEST_URL && graph.state.value.identityConfirmed &&
+                graph.state.value.navigation.connection == dev.atoll.app.ui.screens.ConnectionPhase.OPEN }
         }
         step("channel-list") { waitFor(hasText("OPEN")); waitFor(hasText("android-test", substring = true)) }
         step("open-channel") {
@@ -144,13 +172,14 @@ class IsolatedNodeSmokeTest {
             waitFor(editor)
             compose.waitUntil(40_000) { graph.state.value.route?.channel == config.channel && services().selfIds[config.channel] != null }
             compose.waitUntil(40_000) { graph.state.value.roster.any { it.id == config.codex } }
+            check(graph.state.value.roster.filter { it.kind == "agent" }.map { it.id } == listOf(config.codex)) { "Test fixture must have only its codex agent" }
         }
         step("codex-reply") {
             send("Reply only ${marker}_REPLY. Isolated Android UI smoke test; do not change files.")
             answer("${marker}_REPLY")
         }
         step("waiting-queue") {
-            send("/hold {\"duration_ms\":180000}")
+            holdQueue()
             send("Run the shell command sleep 30, then reply only ${marker}_SLOW. Do not change files.")
             send("Ignore this extra isolated test instruction; keep your current reply. ${marker}_Q2")
             send("Discard this isolated UI test request. ${marker}_Q3")

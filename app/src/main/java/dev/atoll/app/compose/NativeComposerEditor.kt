@@ -17,6 +17,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.requestFocus
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.insertTextAtCursor
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setText
 import androidx.compose.ui.text.AnnotatedString
@@ -35,8 +40,22 @@ internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, en
     onSend: () -> Unit, onFocus: (Boolean) -> Unit, onFiles: (List<android.net.Uri>) -> Unit, onDrag: (Boolean) -> Unit) {
     var native by remember { mutableStateOf<NativeEditor?>(null) }
     var semanticText by remember { mutableStateOf("") }
+    var semanticFocus by remember { mutableStateOf(false) }
     AndroidView(modifier = modifier.testTag("atoll.composer.editor").semantics {
         editableText = AnnotatedString(semanticText)
+        this[SemanticsProperties.IsEditable] = enabled
+        if (!enabled) disabled()
+        focused = semanticFocus
+        requestFocus { enabled && native?.requestFocus() == true }
+        insertTextAtCursor { value ->
+            val writer = native
+            if (!enabled || writer == null) false else {
+                val start = minOf(writer.selectionStart, writer.selectionEnd).coerceIn(0, writer.length())
+                val end = maxOf(writer.selectionStart, writer.selectionEnd).coerceIn(start, writer.length())
+                writer.text.replace(start, end, value.text)
+                writer.setSelection(start + value.length); true
+            }
+        }
         setText { value ->
             val writer = native
             if (!enabled || writer == null) false else {
@@ -74,7 +93,7 @@ internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, en
         }
     } }, update = { editor ->
         editor.valueCallback = { value -> semanticText = value.text; onValue(value) }; editor.keyCallback = onKey; editor.sendCallback = onSend
-        editor.focusCallback = onFocus; editor.filesCallback = onFiles; editor.dragCallback = onDrag
+        editor.focusCallback = { value -> semanticFocus = value; onFocus(value) }; editor.filesCallback = onFiles; editor.dragCallback = onDrag
         editor.isEnabled = enabled; editor.maxLines = maxLines
         if (editor.writeAuthority.accept(command)) {
             editor.suppress = true

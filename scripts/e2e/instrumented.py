@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -37,7 +38,8 @@ def main(argv=None):
     if not re.fullmatch(r'[A-Za-z0-9]{32}', password) or not token:
         raise Failure('isolated test credentials are unavailable')
     parameters = {'class': 'dev.atoll.app.e2e.IsolatedNodeSmokeTest', 'atollUrl': URL, 'atollPassword': password,
-                  'atollToken': token, 'atollChannelId': node['channel_id'], 'atollCodexId': node['codex_actor_id']}
+                  'atollToken': token, 'atollChannelId': node['channel_id'], 'atollCodexId': node['codex_actor_id'],
+                  'additionalTestOutputDir': '/sdcard/Android/media/dev.atoll.app/additional_test_output'}
     command = ['./gradlew', '--console=plain', 'connectedDebugAndroidTest'] + [
         '-Pandroid.testInstrumentationRunnerArguments.' + key + '=' + value for key, value in parameters.items()]
     destination = args.output.resolve() / time.strftime('%Y%m%d-%H%M%S')
@@ -57,11 +59,10 @@ def main(argv=None):
             except BaseException:
                 process.terminate(); process.wait(timeout=20)
                 raise
-        # Public screenshots/summary only, never private data or another package.
-        try:
-            adb.run('pull', '/sdcard/Android/data/dev.atoll.app/files/e2e-artifacts/', str(destination / 'app-artifacts'), timeout=60)
-        except Failure:
-            pass
+        # AGP collects additional outputs before it uninstalls the test packages.
+        additional = Path('app/build/outputs/connected_android_test_additional_output')
+        if additional.is_dir():
+            shutil.copytree(additional, destination / 'app-artifacts')
     (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': 'connectedDebugAndroidTest', 'exit_code': status}, indent=2))
     print('Instrumented artifacts: ' + str(destination))
     return status
