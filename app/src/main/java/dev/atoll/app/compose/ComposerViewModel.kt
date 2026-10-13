@@ -127,13 +127,33 @@ class ComposerViewModel(
                 }
                 val frames = if (command is ParsedCommand.Command) listOf(SlashCommands.frame(current.channelId, UUID.randomUUID().toString(), command, draft, current.targetAgent, current.online, manifests["${current.channelId}\u0000${current.targetAgent?.id.orEmpty()}"])) else
                     ComposerDelivery.messageFrames(current.channelId, draft, current.delivery, { UUID.randomUUID().toString() }, now() + 24 * 60 * 60 * 1000)
-                val accepted = frames.map { frame -> LocalSubmission(frame.text("id"), current.channelId, frame, (frame["payload"] as? JsonObject)?.text("text").orEmpty(), current.delivery.label, createdAt = now()) }
+                val accepted = frames.map { frame -> prepareSubmission(frame, (frame["payload"] as? JsonObject)?.text("text").orEmpty(), current.delivery.label) }
                 engine.accept(accepted)
                 if (mutable.value.channelId == current.channelId && mutable.value.draft == current.draft) changed(ComposerDraft(manualAgentId = draft.manualAgentId))
                 if (current.delivery.recipients.size == 1 && current.targetAgent != null) recentAgentId = current.targetAgent!!.id
             } catch (error: Exception) { if (mutable.value.channelId == current.channelId) report(error) }
             finally { if (mutable.value.channelId == current.channelId) mutable.value = mutable.value.copy(sending = false) }
         }
+    }
+    /** Tasks and other request UIs use the same durable journal, without touching the draft. */
+    suspend fun submitFrame(frame: JsonObject, text: String, targetLabel: String): String {
+        val submission = prepareSubmission(frame, text, targetLabel)
+        engine.accept(listOf(submission))
+        return submission.messageId
+    }
+    private fun prepareSubmission(frame: JsonObject, text: String, targetLabel: String): LocalSubmission {
+        val channel = frame.text("channel_id")
+        if (channel.isEmpty() || writeAccess.value[channel] != true) throw ComposerFailure("composer_channel_readonly", "当前频道不可写")
+        val attached = wire.state.value as? WireState.Attached
+        if (serverBoot.isNotEmpty() && attached != null && attached.receipt.text("boot") != serverBoot) throw ComposerFailure("composer_world_changed", "节点已重置，请重新打开频道")
+        require(frame.text("kind") == "request" && frame.text("msg_type").isNotEmpty()) { "提交必须是带类型的请求" }
+        val created = now()
+        val expires = if ("expires_at_ms" in frame) (frame["expires_at_ms"] as? JsonPrimitive)?.longOrNull
+            ?: throw ComposerFailure("composer_expiry_invalid", "请求过期时间无效") else created + 24 * 60 * 60 * 1000
+        if (expires <= created) throw ComposerFailure("composer_expired", "请求已过期")
+        val id = frame.text("id").ifEmpty { UUID.randomUUID().toString() }
+        val normalized = JsonObject(frame + ("id" to JsonPrimitive(id)) + ("expires_at_ms" to JsonPrimitive(expires)))
+        return LocalSubmission(id, channel, normalized, text, targetLabel, createdAt = created)
     }
     fun retry(id: String) { scope.launch { try { engine.retry(id) } catch (error: Exception) { report(error) } } }
     fun cancel(id: String) { scope.launch { try { engine.cancel(id) } catch (error: Exception) { report(error) } } }
