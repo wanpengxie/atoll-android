@@ -39,6 +39,7 @@ data class WorkspaceState(
     val firstOrigin: Origin? = null,
     val channelOpenedAt: Long = 0,
     val notice: String? = null,
+    val channelError: String? = null,
     val incompatible: String = "",
     val timeline: TimelineSnapshot? = null,
     val roster: List<ActorRecord> = emptyList(),
@@ -77,6 +78,7 @@ class AppGraph(private val context: Context) {
     private val accesses = mutableMapOf<String, ChannelAccess>()
     private val backStack = ArrayDeque<AppRoute?>()
     private val focus = AtomicReference("")
+    private val channelNotices = mutableMapOf<String, String>()
     private var requestedRoute: AppRoute? = null
     private var requestedRestoreSurface = false
     private val surfaces = mutableMapOf<String, ChannelSurface>()
@@ -124,6 +126,7 @@ class AppGraph(private val context: Context) {
     fun scopeToggle() { post(ScopeToggle) }
     fun filter(actor: String) { post(Filter(actor)) }
     fun older() { post(Older) }
+    fun retryChannel(id: String) { post(RetryChannel(id)) }
     fun jumpToBottom() { post(Jump) }
     fun foreground(value: Boolean) { post(Foreground(value)) }
     fun dismissNotice() { post(Notice(null)) }
@@ -178,8 +181,17 @@ class AppGraph(private val context: Context) {
                 preferences.put(runtime!!.namespace, "channels", cachedTree(records.values).toString())
                 saveBootstrap()
                 if (event.failure != null) notice = event.failure
-                if (route != null && route!!.channel !in records && route!!.channel !in memberships) { notice = "该频道已关闭"; navigate(null, false) }
+                if (event.records != null && route != null && route!!.channel !in records && route!!.channel !in memberships) {
+                    notice = "该频道已关闭，已切换频道"
+                    navigate(fallbackChannelRoute(records.values, memberships.keys), false)
+                }
                 publish(); maybeRequestedRoute()
+                if (event.records != null && requestedRoute != null && requestedRoute!!.resolve(records.values, memberships.keys) == null) {
+                    requestedRoute = null; requestedRestoreSurface = false
+                    preferences.put(runtime!!.namespace, "last-channel", "")
+                    notice = "频道不存在或不可访问，已切换频道"
+                    navigate(fallbackChannelRoute(records.values, memberships.keys), false)
+                }
             }
             is Roster -> if (event.epoch == epoch && event.world == runtime?.world) {
                 if (rosterLoading[event.channel] == event.generation) rosterLoading.remove(event.channel)
@@ -253,6 +265,12 @@ class AppGraph(private val context: Context) {
             ScopeToggle -> controllers[route?.channel]?.toggleScope()
             is Filter -> controllers[route?.channel]?.filter(event.id)
             Older -> controllers[route?.channel]?.loadOlder()
+            is RetryChannel -> if (event.id == route?.channel) {
+                channelNotices.remove(event.id)
+                if (event.id in memberships) controllers[event.id]?.retry()
+                else navigate(route, false, force = true)
+                publish()
+            }
             Jump -> { controllers[route?.channel]?.jumpToBottom(); channelOpenedAt = SystemClock.elapsedRealtime(); publish() }
             is Foreground -> {
                 val resumed = !foreground && event.value
@@ -291,8 +309,9 @@ class AppGraph(private val context: Context) {
                 mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false, error = "会话已失效，请重新登录"))
             }
             is Observed -> if (event.epoch == epoch && event.world == runtime?.world && event.id == route?.channel) {
-                if (event.failure != null) { accesses[event.id] = ChannelAccess.Denied; notice = "无法访问该频道：${event.failure}" }
+                if (event.failure != null) { accesses[event.id] = ChannelAccess.Denied; channelNotices[event.id] = "无法访问该频道：${event.failure}" }
                 else {
+                    channelNotices.remove(event.id)
                     val rt = runtime!!
                     val attached = rt.gate.state.value as? WireState.Attached ?: return
                     val meta = requireNotNull(event.meta)
@@ -523,8 +542,9 @@ class AppGraph(private val context: Context) {
     private suspend fun maybeRequestedRoute() {
         if (runtime?.gate?.state?.value !is WireState.Attached) return
         val requested = requestedRoute ?: return
-        val match = records.values.firstOrNull { it.id == requested.channel || it.qualifiedName == requested.channel }
-        if (match != null || requested.channel in memberships) { requestedRoute = null; navigate(requested.copy(channel = match?.id ?: requested.channel), false, restoreSurface = requestedRestoreSurface) }
+        requested.resolve(records.values, memberships.keys)?.let { resolved ->
+            requestedRoute = null; navigate(resolved, false, restoreSurface = requestedRestoreSurface)
+        }
     }
 
     private fun loadTree(requestEpoch: Long) {
@@ -589,10 +609,10 @@ class AppGraph(private val context: Context) {
         val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.name, rt.principal == "root"), route?.channel, upgrade = upgrade?.view())
         val channelState = channelStates[route?.channel]
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
-        val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
+        val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.MemberUnavailable, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
-            firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
+            firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice, channelError = channelState?.error ?: channelNotices[route?.channel],
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true,
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
@@ -607,6 +627,7 @@ class AppGraph(private val context: Context) {
     }
     private suspend fun tearDown(incrementEpoch: Boolean = true) {
         if (incrementEpoch) epoch++
+        channelNotices.clear()
         runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
@@ -665,6 +686,7 @@ class AppGraph(private val context: Context) {
     private data object ScopeToggle : Event
     private data class Filter(val id: String?) : Event
     private data object Older : Event
+    private data class RetryChannel(val id: String) : Event
     private data object Jump : Event
     private data class Foreground(val value: Boolean) : Event
     private data object NetworkAvailable : Event

@@ -14,8 +14,22 @@ import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ChannelControllerTest {
+    @Test fun cacheReaderFailuresAreVisibleAndCanBeRetried() = runBlocking {
+        val fixture = Fixture(head = 1, rows = listOf(row(1)))
+        try {
+            fixture.await { it.sync.current && it.taskFacts.isNotEmpty() }
+            fixture.failNextRead.set(true)
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            assertEquals("temporary cache failure", fixture.await { it.error != null }.error)
+            fixture.controller.retry()
+            val restored = fixture.await { it.error == null && it.conversation != null }
+            assertEquals("q1:request", restored.conversation!!.entries.single().key)
+        } finally { fixture.stop() }
+    }
+
     @Test fun oldWindowsKeepTheirRowsAndReadOnlyToTheLoadedBoundaryThenReturnToTail() = runBlocking {
         val fixture = Fixture(head = 5100, rows = (1L..5100).map(::row))
         try {
@@ -163,9 +177,11 @@ class ChannelControllerTest {
     private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true) {
         val memory = MemoryRowStore()
         val lookups = AtomicInteger()
+        val failNextRead = AtomicBoolean()
         val store = object : RowStore by memory {
             override suspend fun rows(channelId: String, beforeSeq: Long, limit: Int): List<Row> {
                 lookups.incrementAndGet()
+                if (failNextRead.compareAndSet(true, false)) error("temporary cache failure")
                 return memory.rows(channelId, beforeSeq, limit)
             }
         }

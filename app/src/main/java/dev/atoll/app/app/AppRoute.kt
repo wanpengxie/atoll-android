@@ -20,3 +20,16 @@ data class AppRoute(val channel: String, val tab: String = "conversation", val f
         }.getOrNull()
     }
 }
+
+/** Names are resolved only against declared channels; memberships may arrive first. */
+fun AppRoute.resolve(records: Collection<ChannelRecord>, memberIds: Set<String>): AppRoute? {
+    val id = records.firstOrNull { it.id == channel || it.qualifiedName == channel }?.id
+        ?: channel.takeIf { it in memberIds } ?: return null
+    return copy(channel = id)
+}
+
+fun fallbackChannelRoute(records: Collection<ChannelRecord>, memberIds: Set<String>): AppRoute? {
+    val ordered = sortedChannels(records).map { it.first }
+    val record = ordered.firstOrNull { it.id in memberIds } ?: ordered.firstOrNull() ?: return null
+    return AppRoute(record.id)
+}

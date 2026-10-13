@@ -106,6 +106,7 @@ class ChannelController(
     suspend fun toggleScope() { commands.send(ChangeScope) }
     suspend fun filter(actor: String?) { commands.send(Filter(actor)) }
     suspend fun loadOlder() { commands.send(LoadOlder) }
+    suspend fun retry() { commands.send(Retry) }
     suspend fun jumpToBottom() { commands.send(Jump) }
     suspend fun visibleRows(keys: Set<String>) { commands.send(VisibleRows(keys)) }
     suspend fun localPlacement(echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { commands.send(LocalPlacement(echoes, placed)) }
@@ -116,6 +117,8 @@ class ChannelController(
             is Open -> { record = command.record; loadTail() }
             CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; timelineSource = null; firstOrigin = null; rowSequences = emptyMap(); localEchoes = emptyList(); timelinePlaced = emptySet() }
             is Batch -> if (command.epoch == readerEpoch) apply(command.batch)
+            is ReadFailed -> if (command.epoch == readerEpoch) error = command.message
+            Retry -> { error = null; sync.retry(); loadTail() }
             is Sync -> {
                 if (syncState.generation != command.value.generation) activity.clear()
                 val recovered = !syncState.current && command.value.current
@@ -197,8 +200,15 @@ class ChannelController(
         windowHigh = Long.MAX_VALUE
         newRoots.clear()
         firstOrigin = null
+        error = null
         val epoch = readerEpoch
-        reader = scope.launch { sync.open().collect { commands.send(Batch(epoch, it)) } }
+        reader = scope.launch {
+            try { sync.open().collect { commands.send(Batch(epoch, it)) } }
+            catch (failure: Exception) {
+                if (failure is CancellationException) throw failure
+                commands.send(ReadFailed(epoch, failure.message ?: "频道读取失败"))
+            }
+        }
     }
 
     private suspend fun apply(batch: RowBatch) {
@@ -289,6 +299,8 @@ class ChannelController(
     private data class Open(val record: ChannelRecord) : Command
     private data object CloseView : Command
     private data class Batch(val epoch: Long, val batch: RowBatch) : Command
+    private data class ReadFailed(val epoch: Long, val message: String) : Command
+    private data object Retry : Command
     private data class Sync(val value: SyncState) : Command
     private data class Live(val row: Row) : Command
     private data class Roster(val actors: List<ActorRecord>) : Command
