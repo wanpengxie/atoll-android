@@ -15,16 +15,18 @@ import java.util.UUID
 interface WaitingPort {
     suspend fun actor(actorId: String, type: String, payload: JsonObject, messageId: String): JsonObject
     suspend fun cancel(targetId: String)
+    suspend fun cancelLocal(targetId: String) { error("本机发件箱未接入") }
     /** Must journal and use the frame's existing ID, just like normal composer sends. */
     suspend fun submit(frame: JsonObject, text: String, targetLabel: String): String
 }
 
-data class WaitingRow(val turn: Turn, val actions: WaitingActions, val labels: List<String>)
+data class WaitingRow(val turn: Turn, val actions: WaitingActions, val labels: List<String>, val localSubmission: LocalSubmission? = null)
 data class WaitingGroup(val actorId: String, val name: String, val rows: List<WaitingRow>, val paused: Boolean = false, val busy: Boolean = false)
 data class WaitingUiState(val groups: List<WaitingGroup> = emptyList(), val collapsed: Boolean = false,
     val edit: EditState = EditState(), val warningTarget: Turn? = null, val warning: String = "", val error: String = "", val online: Boolean = false,
     /** Shared by timeline edit entries; the dock remains the owner of capability probing. */
-    val safeEditActors: Set<String> = emptySet(), val busyActors: Set<String> = emptySet())
+    val safeEditActors: Set<String> = emptySet(), val busyActors: Set<String> = emptySet(),
+    val localEchoes: List<TimelineEntry> = emptyList(), val timelinePlaced: Set<String> = emptySet())
 
 /** One writer, independent actor I/O. No queue reconstruction or network work in composition. */
 class WaitingViewModel(
@@ -54,6 +56,8 @@ class WaitingViewModel(
     private val contextVersions = mutableMapOf<String, Long>()
     private val busy = hashSetOf<String>()
     private val local = mutableMapOf<String, LocalSubmission>()
+    private val placement = OutboxPlacement()
+    private var receiverBusy: Set<String> = emptySet()
     private val releases = mutableMapOf<String, EditSession>()
     private val releasing = hashSetOf<String>()
     private val holdsPending = hashSetOf<String>()
@@ -77,9 +81,9 @@ class WaitingViewModel(
         enqueue { rebuild() }
     }
     private fun enqueue(action: () -> Unit) { events.trySend(action) }
-    fun updateSnapshot(snapshot: TimelineSnapshot, newerUnloaded: Boolean = false) = enqueue {
+    fun updateSnapshot(snapshot: TimelineSnapshot, newerUnloaded: Boolean = false, busyActorIds: Set<String> = receiverBusy) = enqueue {
         require(snapshot.channelId == channelId)
-        latest = snapshot; detached = newerUnloaded
+        latest = snapshot; detached = newerUnloaded; receiverBusy = busyActorIds.toSet()
         val warning = mutable.value.warningTarget
         if (detached || warning != null && turn(warning.requestId)?.terminal != null) mutable.value = mutable.value.copy(warningTarget = null, warning = "")
         if (detached) transition(EditMachine.exit(mutable.value.edit, "已退出编辑：正在浏览较早的历史"))
@@ -160,6 +164,13 @@ class WaitingViewModel(
     }
     fun extra(targetId: String, word: String) = enqueue { turn(targetId)?.let { target -> actions(target).extras.find { it.word == word }?.let { control(target, it) } } }
     fun cancel(targetId: String) = enqueue {
+        val localRow = mutable.value.groups.flatMap { it.rows }.firstOrNull { it.turn.requestId == targetId }?.localSubmission
+        if (localRow != null) {
+            scope.launch { runCatching { port.cancelLocal(targetId) }.exceptionOrNull()?.let { failure ->
+                enqueue { mutable.value = mutable.value.copy(error = failure.message ?: "取消本机发送失败") }
+            } }
+            return@enqueue
+        }
         val target = turn(targetId) ?: return@enqueue
         if (!actions(target).canCancel) return@enqueue
         action(target.actor()) { cancelOne(target) }
@@ -169,6 +180,10 @@ class WaitingViewModel(
         action(actorId) { port.actor(actorId, "agent.steer", buildJsonObject { put("all", true) }, UUID.randomUUID().toString()) }
     }
     fun cancelAll(actorId: String) = enqueue {
+        val localIds = mutable.value.groups.firstOrNull { it.actorId == actorId }?.rows.orEmpty().mapNotNull { it.localSubmission?.messageId }
+        if (localIds.isNotEmpty()) scope.launch { for (id in localIds) runCatching { port.cancelLocal(id) }.exceptionOrNull()?.let { failure ->
+            enqueue { mutable.value = mutable.value.copy(error = failure.message ?: "取消本机发送失败") }
+        } }
         val targets = latest.waitingTurns.filter { it.actor() == actorId && actions(it).canCancel }
         if (targets.isEmpty() || mutable.value.edit.session?.actorId == actorId) return@enqueue
         action(actorId) {
@@ -343,14 +358,21 @@ class WaitingViewModel(
     }
     private fun rebuild() {
         val editing = mutable.value.edit.session
-        val groups = if (detached || !active) emptyList() else latest.waitingTurns.groupBy { it.actor() }.map { (actor, turns) ->
+        fun turns(entry: TimelineEntry): List<Turn> = listOfNotNull(entry.turn) + entry.thread.flatMap(::turns)
+        val canonical = if (local.isEmpty() && placement.empty) emptyMap() else
+            (latest.waitingTurns + latest.items.flatMap { turns(it.entry) }).associateBy { it.requestId }
+        val projection = placement.project(channelId, self, local.values, canonical, receiverBusy, now())
+        val localWaiting = projection.waiting.associateBy { it.messageId }
+        val waiting = latest.waitingTurns.filter { it.requestId !in projection.timelinePlaced } + projection.waiting.map { it.localTimelineEntry(self).turn!! }
+        val groups = if (detached || !active) emptyList() else waiting.groupBy { it.actor() }.map { (actor, turns) ->
             val frozen = contexts[actor]?.get("frozen") as? JsonObject
             val paused = frozen != null && (frozen.number("until") == 0L || frozen.number("until") > now())
             WaitingGroup(actor, roster[actor] ?: actor, turns.map { turn ->
-                val actions = actions(turn)
+                val localRow = localWaiting[turn.requestId]
+                val actions = if (localRow != null) WaitingActions(canCancel = writable) else actions(turn)
                 val submission = local[turn.requestId]
                 val labels = buildList {
-                    if (submission?.state == SendState.QUEUED && !mutable.value.online) add("等待连接后发出")
+                    if (submission?.state == SendState.QUEUED) add(if (mutable.value.online) "等待发送" else "等待连接后发出")
                     else if (submission != null && submission.state != SendState.REJECTED) add("确认中")
                     if (paused) add("已暂停")
                     if (actions.steering) add("正在并入…")
@@ -358,11 +380,12 @@ class WaitingViewModel(
                     if (editing?.targetId == turn.requestId) add("正在编辑")
                     else if (!WaitingRules.leaseSupported(manifests[actor]) && (turn.controlFrame()["controls"] as? JsonArray).orEmpty().any { (it as? JsonObject)?.text("word") == "agent.replace" } && actor in manifests) add("Agent 不支持安全编辑")
                 }
-                WaitingRow(turn, actions, labels)
+                WaitingRow(turn, actions, labels, localRow)
             }, paused, actor in busy || editing?.actorId == actor)
         }
         mutable.value = mutable.value.copy(groups = groups,
-            safeEditActors = manifests.filterValues(WaitingRules::leaseSupported).keys.toSet(), busyActors = busy.toSet())
+            safeEditActors = manifests.filterValues(WaitingRules::leaseSupported).keys.toSet(), busyActors = busy.toSet(),
+            localEchoes = if (detached) emptyList() else projection.localEchoes, timelinePlaced = projection.timelinePlaced)
     }
     override fun close() {
         enqueue {
@@ -385,5 +408,6 @@ fun createWaitingViewModel(services: WorkspaceServices, channelId: String, snaps
     WaitingViewModel(channelId, services.wire, object : WaitingPort {
         override suspend fun actor(actorId: String, type: String, payload: JsonObject, messageId: String) = services.wire.actorRequest(channelId, actorId, type, payload, messageId = messageId)
         override suspend fun cancel(targetId: String) { services.wire.request(Up.CANCEL, payload("channel_id" to channelId, "req_id" to targetId)) }
+        override suspend fun cancelLocal(targetId: String) { composer.cancel(targetId) }
         override suspend fun submit(frame: JsonObject, text: String, targetLabel: String) = composer.submitFrame(frame, text, targetLabel)
     }, snapshot, services.selfIds[channelId].orEmpty())

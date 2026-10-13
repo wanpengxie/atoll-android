@@ -78,7 +78,8 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
     }
     Column(modifier.background(if (dragging) AtollColors.Selected else AtollColors.Input).padding(horizontal = 10.dp, vertical = 5.dp)) {
         if (dragging) Text("松开以上传到当前频道", color = AtollColors.Agent, fontSize = 12.sp)
-        if (showLocalEchoes) ComposerLocalEchoes(state.submissions, viewModel::retry, viewModel::cancel)
+        // Timeline/dock own normal handoffs once mounted; rejected sends keep their recovery entry.
+        ComposerLocalEchoes(if (showLocalEchoes) state.submissions else state.submissions.filter { it.state == SendState.REJECTED }, viewModel::retry, viewModel::cancel)
         if (!state.online) Text("离线编辑；发送会先保存到本机，连接可用后自动发送。", color = AtollColors.Warning, fontSize = 12.sp)
         if (!state.writable) Text("当前频道不可写；草稿仍保留在当前设备", color = AtollColors.Muted, fontSize = 12.sp)
         if (state.error.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
@@ -202,6 +203,27 @@ fun ComposerLocalEchoes(rows: List<LocalSubmission>, onRetry: (String) -> Unit, 
             }
         }
     }
+}
+
+/** Put below a local timeline bubble. The durable journal owns retry/cancellation. */
+@Composable
+fun TimelineSubmissionStatus(row: LocalSubmission, onRetry: (String) -> Unit, onCancel: (String) -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(submissionLabel(row), Modifier.weight(1f), fontSize = 11.sp, color = AtollColors.Muted)
+        if (row.state in setOf(SendState.REJECTED, SendState.UNCERTAIN) && !row.cancelRequested)
+            TextButton({ onRetry(row.messageId) }, Modifier.heightIn(min = 44.dp)) { Text("使用原编号重试", fontSize = 11.sp) }
+        TextButton({ onCancel(row.messageId) }, Modifier.heightIn(min = 44.dp)) { Text("取消", fontSize = 11.sp) }
+    }
+    if (row.error.isNotEmpty()) Text(row.error, Modifier.padding(horizontal = 16.dp), fontSize = 11.sp, color = AtollColors.Accent)
+}
+
+fun submissionLabel(row: LocalSubmission): String = if (row.cancelRequested) "取消待确认" else when (row.state) {
+    SendState.QUEUED -> "已保存到本机，待发送"
+    SendState.TRANSMITTING -> "发送中"
+    SendState.ACCEPTED -> "已接受，等待账本"
+    SendState.DELAYED -> "账本确认延迟"
+    SendState.UNCERTAIN -> "发送结果待确认，正在通过重连账本核对。"
+    SendState.REJECTED -> "发送失败"
 }
 internal suspend fun uploadFiles(context: Context, uris: List<Uri>): List<UploadFile> = withContext(Dispatchers.IO) {
     uris.map { uri ->
