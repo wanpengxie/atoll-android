@@ -36,6 +36,8 @@ android {
         // app's external files dir, which adb can write without run-as.
         create("benchmark") {
             initWith(getByName("release"))
+            // Rules for the minified instrumented test APK only.
+            testProguardFiles("proguard-test-rules.pro")
             matchingFallbacks += "release"
             buildConfigField("boolean", "DEV_AUTH_EXTERNAL", "true")
         }
