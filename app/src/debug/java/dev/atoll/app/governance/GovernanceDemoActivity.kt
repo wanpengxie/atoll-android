@@ -67,8 +67,8 @@ private class DemoGovernancePort:GovernancePort {
     private var body=demoJson("""{"description":"Android 客户端开发与验证","serving":1,"devices":[],"members":[{"id":"e1","name":"Codex","body":{"class":"codex"}},{"id":"e2","name":"文件工具","body":{"actor":"files@2"}}]}""")
     private var revision=3
     private val keys=mutableMapOf("demo_key" to "dummy-value")
-    override suspend fun directory(channel: String)=GovernanceDirectory(channelRows,members,devices,people,descriptions,channelRows.first().declared(),devices.filter { (body["devices"] as? JsonArray)?.contains(JsonPrimitive(it.directoryId()))==true })
-    override suspend fun channels()=channelRows
+    override suspend fun directory(channel: String)=GovernanceDirectory(channelRows,members,devices,people,descriptions,channelRows.first(),devices.filter { (body["devices"] as? JsonArray)?.contains(JsonPrimitive(it.directoryId()))==true })
+    override suspend fun channels(parent: String)=channelRows.filter { it.declared().text("parent_id")==parent }
     override suspend fun execute(channel: String,command: GovernanceCommand,id: String,accepted: ()->Unit):JsonObject {
         accepted();delay(150)
         val p=command.payload

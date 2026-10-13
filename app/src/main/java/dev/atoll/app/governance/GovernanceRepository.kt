@@ -10,7 +10,7 @@ import java.util.UUID
 interface GovernancePort {
     suspend fun execute(channel: String, command: GovernanceCommand, id: String = UUID.randomUUID().toString(), accepted: () -> Unit = {}): JsonObject
     suspend fun directory(channel: String): GovernanceDirectory
-    suspend fun channels(): List<JsonObject>
+    suspend fun channels(parent: String): List<JsonObject>
     suspend fun resource(channel: String, payload: JsonObject): JsonObject
 }
 data class GovernanceDirectory(val channels: List<JsonObject> = emptyList(), val actors: List<JsonObject> = emptyList(),
@@ -18,7 +18,7 @@ data class GovernanceDirectory(val channels: List<JsonObject> = emptyList(), val
     val profile: JsonObject = JsonObject(emptyMap()),val channelDevices: List<JsonObject> = emptyList())
 
 class GovernanceRepository(private val wire: WireClient, private val obs: ObsClient) : GovernancePort {
-    override suspend fun channels(): List<JsonObject> = obs.spaceChannels().rows()
+    override suspend fun channels(parent: String): List<JsonObject> = obs.spaceChannels(parent).rows()
     override suspend fun execute(channel: String, command: GovernanceCommand, id: String, accepted: () -> Unit): JsonObject {
         val receiptAware = object : WireClient by wire {
             override suspend fun request(type: String, payload: JsonObject): JsonObject = wire.request(type, payload).also { accepted() }
@@ -26,15 +26,30 @@ class GovernanceRepository(private val wire: WireClient, private val obs: ObsCli
         return receiptAware.actorRequest(channel, "system", command.word, command.payload, messageId = id)
     }
     override suspend fun directory(channel: String): GovernanceDirectory = kotlinx.coroutines.coroutineScope {
-        val channels = async { obs.spaceChannels() }
+        val channels = async { channelTree() }
         val actors = async { obs.channelActors(channel) }
         val devices = async { obs.spaceDaemons() }
         val principals = async { obs.spacePrincipals() }
         val descriptions = async { obs.spaceActorDescriptions() }
         val profile = async { obs.channelProfile(channel) }
         val attached = async { obs.channelDevices(channel) }
-        GovernanceDirectory(channels.await().rows(), actors.await().rows(), devices.await().rows(),
-            principals.await().rows(), descriptions.await().rows().map { it.declared() }, profile.await().rows().firstOrNull()?.declared() ?: JsonObject(emptyMap()),attached.await().rows())
+        GovernanceDirectory(channels.await(), actors.await().rows(), devices.await().rows(),
+            principals.await().rows(), descriptions.await().rows().map { it.declared() }, profile.await().rows().firstOrNull() ?: JsonObject(emptyMap()),attached.await().rows())
+    }
+    private suspend fun channelTree(): List<JsonObject> = kotlinx.coroutines.coroutineScope {
+        val seen = linkedMapOf<String,JsonObject>()
+        val readers = kotlinx.coroutines.sync.Semaphore(4)
+        var frontier = obs.spaceChannels().rows()
+        while (frontier.isNotEmpty()) {
+            val fresh = frontier.filter { row -> row.directoryId().isNotEmpty() && row.directoryId() !in seen }
+            fresh.forEach { seen[it.directoryId()] = it }
+            val pages = fresh.filter { it.declared().text("type")!="actor" }.map { row -> async {
+                readers.acquire()
+                try { channels(row.directoryId()) } finally { readers.release() }
+            } }
+            frontier = pages.flatMap { it.await() }
+        }
+        seen.values.toList()
     }
     override suspend fun resource(channel: String, payload: JsonObject): JsonObject = wire.request(Up.RESOURCE, JsonObject(payload + ("channel_id" to JsonPrimitive(channel)))).also {
         if (it.text("status") == "rejected") throw WireException("resource", it.text("detail").ifEmpty { "rejected" }, "资源操作被拒绝")

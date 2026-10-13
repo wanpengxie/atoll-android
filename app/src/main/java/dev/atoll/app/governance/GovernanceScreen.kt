@@ -118,8 +118,8 @@ private fun ChannelMembers(vm: GovernanceViewModel,state: GovernanceState,onActo
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         item { GovernanceCard(channelName(state)) {
             Text("ID：${state.channel}\n父级：${current.text("parent_id").ifEmpty { "无（空间根）" }}\nOwner：${current.text("owner_principal").ifEmpty { "—" }}")
-            val row=state.directory.channels.firstOrNull { it.directoryId()==state.channel }
-            Text(when (row?.measure("open")) { true -> "服务中";false -> "未服务";else -> "服务状态未知" })
+            val row=currentChannelRow(state)
+            Text(when (row.measure("open")) { true -> "服务中";false -> "未服务";else -> "服务状态未知" })
             TextButton(onClick=vm::refresh,enabled=!state.loading) { Text("刷新目录事实") }
         } }
         item { GovernanceCard("频道状态") {

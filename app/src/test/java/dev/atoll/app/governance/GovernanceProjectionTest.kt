@@ -26,6 +26,12 @@ class GovernanceProjectionTest {
         val channels=listOf("""{"declared":{"id":"c0","name":"renamed"}}""","""{"declared":{"id":"c0.lobby"}}""","""{"declared":{"id":"a","qualified_name":"c0.dev"}}""","""{"declared":{"id":"observer","qualified_name":"c0.observer"}}""").map(::row)
         assertEquals(listOf("a"),governanceCopyableChannels(channels,setOf("c0","c0.lobby","a")).map { it.directoryId() })
     }
+    @Test fun channelProfilePreservesDeclaredAndActualWhenTheTreeHasNoCurrentRow() {
+        val profile=row("""{"declared":{"id":"nested","qualified_name":"c0.test.nested"},"actual":{"measures":[{"name":"open","value":true}]}}""")
+        val state=GovernanceState(channel="nested",directory=GovernanceDirectory(profile=profile))
+        assertEquals("c0.test.nested",channelName(state));assertEquals(true,currentChannelRow(state).measure("open"))
+        assertEquals(profile,currentChannelRow(state))
+    }
     @Test fun descriptionReadabilityAndChannelNameValidationMatchWeb() {
         assertEquals("",validateGovernanceChannelName("a"));assertEquals("",validateGovernanceChannelName("a".repeat(63)));assertFalse(validateGovernanceChannelName("-bad").isEmpty());assertFalse(validateGovernanceChannelName("bad-").isEmpty());assertFalse(validateGovernanceChannelName("UPPER").isEmpty())
         val kernel=GovernanceState(channelView=row("""{"description":{"body":{"readonly":true}}}"""));assertFalse(descriptionEditable(kernel))

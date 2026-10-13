@@ -30,7 +30,8 @@ internal fun descriptionLabel(row: JsonObject,rows: List<JsonObject>):String {
 fun governanceCopyableChannels(channels: List<JsonObject>,memberships: Set<String>):List<JsonObject> = channels.filter { row ->
     val d=row.declared();row.directoryId() in memberships && row.directoryId() !in setOf("c0","c0.lobby","c0.home") && d.text("qualified_name").ifEmpty { d.text("name") } !in setOf("c0","c0.lobby","c0.home")
 }
-internal fun currentChannel(state: GovernanceState)=state.directory.channels.firstOrNull { it.directoryId()==state.channel }?.declared() ?: state.directory.profile.takeIf { it.text("id")==state.channel } ?: Envelope.EMPTY
+internal fun currentChannelRow(state: GovernanceState)=state.directory.profile.takeIf { it.directoryId()==state.channel } ?: state.directory.channels.firstOrNull { it.directoryId()==state.channel } ?: Envelope.EMPTY
+internal fun currentChannel(state: GovernanceState)=currentChannelRow(state).declared()
 internal fun channelName(state: GovernanceState)=currentChannel(state).text("qualified_name").ifEmpty { currentChannel(state).text("name").ifEmpty { state.channel } }
 internal fun descriptionBody(state: GovernanceState)=state.channelView?.obj("description")?.get("body") as? JsonObject
 internal fun descriptionEditable(state: GovernanceState)=descriptionBody(state)?.let { !it.bool("readonly") } == true
