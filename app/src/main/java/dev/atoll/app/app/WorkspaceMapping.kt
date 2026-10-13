@@ -75,6 +75,8 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
 
     private fun render(item: PresentationItem, self: String, names: Map<String, String>, newerUnloaded: Boolean,
         source: TimelineSource?, restarts: Map<String,Long>, instant: Long): List<UiEntry> {
+        if (item.entry.kind=="narration") return source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
+            .mapNotNull { row -> narrationText(row.envelope,names)?.let { UiEntry.Notice("${item.key}:${row.envelope.id}",it) } }.orEmpty()
         val result = mutableListOf<UiEntry>()
         fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
@@ -85,7 +87,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
             val turn = entry.turn
             if (turn == null) {
                 val envelope = entry.envelope ?: return
-                if (entry.kind == "narration" || ConversationVisibility.weakNoticeEvent(envelope)) result += UiEntry.Notice(key, messageText(envelope).ifBlank { envelope.type })
+                if (entry.kind == "narration" || ConversationVisibility.weakNoticeEvent(envelope)) result += UiEntry.Notice(key, weakNoticeText(envelope,names,time(envelope.ts)))
                 else message(envelope, "$key:message", continuation = continuation)
                 return
             }
@@ -172,4 +174,54 @@ private fun terminalResult(envelope: Envelope, requestType: String): MappedResul
         return MappedResult(result = ResultViewState(business, title))
     }
     return MappedResult(result = ResultViewState(acknowledgement = true))
+}
+
+private fun prose(body: JsonObject): String {
+    for (key in listOf("new_text","text","body","answer","message","content","prompt")) body[key].string().takeIf(String::isNotBlank)?.let { return it }
+    (body["input"] as? JsonObject)?.get("text").string().takeIf(String::isNotBlank)?.let { return it }
+    return body.objects("content").filter { it["type"].string()=="text" }.map { it["text"].string() }.filter(String::isNotBlank).joinToString("\n\n")
+}
+private fun weakNoticeText(envelope: Envelope,names: Map<String,String>,time: String): String {
+    val line=prose(envelope.body).lineSequence().map(String::trim).firstOrNull(String::isNotEmpty)
+        ?: when(envelope.type) { "actor.initializing" -> "正在启动";"actor.ready" -> "已就绪";else -> "后台状态已更新" }
+    return (names[envelope.senderId] ?: envelope.senderId) + " " + dev.atoll.app.tasks.compactWorkTitle(line) + if(time.isEmpty()) "" else " · $time"
+}
+private fun narrationText(e: Envelope,names: Map<String,String>):String? {
+    if(!e.hasBody) return null
+    val body=e.body
+    when(e.type) {
+        "system.member.created","system.member.deleted" -> {
+            val member=body["member"].string()
+            if(member.isEmpty()) return "无法识别的频道活动"
+            if(body["body"].string().startsWith("generated")) return null
+            val name=names[member] ?: member
+            return if(e.type=="system.member.created") "$name 已加入频道"
+                else "$name 已离开频道"+body["reason"].string().takeIf(String::isNotEmpty)?.let { "（原因：$it）" }.orEmpty()
+        }
+        "system.channel.inbound" -> {
+            val from=body["from_channel"].string();val type=body["request_type"].string();val local=body["local_request_id"].string()
+            return if(from.isEmpty() || type.isEmpty() || local.isEmpty()) "无法识别的频道活动" else "收到来自 $from 的频道请求：$type"
+        }
+        "system.build.started","system.build.finished" -> {
+            val objectValue=body["object"] as? JsonObject ?: return "无法识别的频道活动"
+            val kind=objectValue["kind"].string();if(kind.isEmpty()) return "无法识别的频道活动"
+            val label=if(kind=="member") "成员 "+listOf("name","actor_id","config_id","generated").firstNotNullOfOrNull { objectValue[it].string().takeIf(String::isNotEmpty) }.orEmpty()
+                else if(kind=="channel") "频道 "+objectValue["channel_name"].string().ifEmpty { objectValue["channel"].string() } else "对象"
+            val attempt=body.longValue("attempt").takeIf { it>0 } ?: 1
+            val state=when(body["state"].string()) { "ready" -> "已就绪";"serving" -> "服务中";"stopped" -> "已停止：改描述或配置、或重启后才会再构建";else -> "" }
+            return when {
+                e.type=="system.build.started" || body["result"].string().isEmpty() -> "开始构建$label（第 $attempt 次尝试）"
+                body["result"].string()=="ok" -> "${label}构建成功"+state.takeIf(String::isNotEmpty)?.let { "，$it" }.orEmpty()
+                body["result"].string()=="superseded" -> "${label}的这次构建被更新的值取代"
+                else -> "${label}构建失败（第 $attempt 次尝试"+state.takeIf(String::isNotEmpty)?.let { "，$it" }.orEmpty()+"）"+body["reason"].string().takeIf(String::isNotEmpty)?.let { "：$it" }.orEmpty()
+            }
+        }
+    }
+    val label=when(e.type) {
+        "system.member.updated" -> "成员已更新";"system.member.create" -> "添加参与者";"system.member.restart" -> "重启参与者"
+        "system.member.delete" -> "移除参与者";"system.member.list" -> "查看频道成员";"system.channel.create" -> "创建子频道"
+        "system.channel.set" -> "更新频道配置";"system.channel.delete" -> "退役频道"
+        else -> if(e.kind!="event" && e.type.startsWith("system.")) "系统操作" else "后台状态已更新"
+    }
+    return label + when(e.status) { "completed" -> "（已完成）";"failed" -> "（失败）";"processing" -> "（处理中）";"queued" -> "（排队中）";else -> "" }
 }

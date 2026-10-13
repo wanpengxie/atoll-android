@@ -275,7 +275,7 @@ class ChannelController(
         timelineSource = model.snapshot()
         if (!newerUnloaded) updateActivityFacts(timelineSource!!)
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded,
+            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded, showNarration = true,
             localEchoes = if (newerUnloaded) emptyList() else localEchoes, timelinePlaced = timelinePlaced))
         timeline = snapshot
         rowSequences = timelineRowSequences(snapshot)

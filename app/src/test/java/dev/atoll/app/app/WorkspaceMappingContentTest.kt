@@ -118,5 +118,25 @@ class WorkspaceMappingContentTest {
         val answer=TimelineMapper().map(snapshot,"human:self",emptyList(),source=replica.snapshot()).filterIsInstance<UiEntry.Message>().last().value
         assertEquals("未完成 · Agent 已重启",answer.text);assertNull(answer.status)
     }
+    @Test fun narrationUsesDocumentedFactsAndWeakNoticesNeverExposeRawJsonOrWireTypes() {
+        val replica=ChannelReplica("c","human:self")
+        fun system(seq:Long,id:String,type:String,body:JsonObject):Row {
+            val row=row(seq,id,"event",body,type,sender="system")
+            return row.copy(envelope=Envelope(JsonObject(row.envelope.json+("visibility" to JsonPrimitive("system")))))
+        }
+        replica.apply(RowBatch("c",listOf(
+            system(1,"joined","system.member.created",json("""{"member":"agent:a","body":"class codex"}""")),
+            system(2,"generated","system.member.created",json("""{"member":"internal","body":"generated:service"}""")),
+            system(3,"build","system.build.finished",json("""{"object":{"kind":"member","name":"Agent A"},"attempt":2,"result":"ok","state":"ready"}""")),
+            system(4,"unknown","system.future.event",json("""{"password":"do-not-print","detail":"raw detail"}""")),
+            row(5,"ready","event",json("{}"),"actor.ready"),
+            row(6,"notice","event",buildJsonObject { put("text","First line\nSecond line") },"provider.future")
+        ),Origin.LIVE))
+        val source=replica.snapshot();val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self",showNarration=true))
+        val notices=TimelineMapper().map(snapshot,"human:self",listOf(ActorRecord("agent:a","Agent A","agent")),source=source).filterIsInstance<UiEntry.Notice>().map { it.text }
+        assertTrue("Agent A 已加入频道" in notices);assertTrue("成员 Agent A构建成功，已就绪" in notices)
+        assertTrue(notices.any { it.contains("Agent A 已就绪") });assertTrue(notices.any { it.contains("First line") && !it.contains("Second line") })
+        assertFalse(notices.any { it.contains("generated") || it.contains("password") || it.contains("do-not-print") || it.contains("future") })
+    }
 
 }
