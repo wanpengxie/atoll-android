@@ -1,18 +1,24 @@
 # Atoll Android 安装与使用
 
-安装文件：频道交付目录中的 `atoll-android-release.apk`。这是开启 R8 压缩的
-release 包，当前使用 debug 证书签名。支持 Android 8.0 及以上。
+安装文件：频道目录 `android-release/<源码 hash>/atoll-<版本>.apk`，旁边的 `build.json`
+记录版本、SHA-256 和签名证书指纹。`dry-run/` 下的包标记为非最终，只用于出包流程验证。
+这是开启 R8 压缩的 release 包，当前使用 mbp 的 debug 证书签名。支持 Android 8.0 及以上。
 
 ## 安装
 
 把 APK 下载到手机，用文件管理器点开，按安装器提示允许该来源安装应用，完成后打开
-Atoll。也可以从电脑运行 `adb install -r atoll-android-release.apk`。
+Atoll。也可以从电脑运行 `adb -s <手机序列号> install -r atoll-<版本>.apk`。
+
+同包名（`dev.atoll.app`）、同签名的旧版通常可直接覆盖安装。若提示签名冲突，说明旧版
+使用了另一张证书，需要先卸载旧版再安装；卸载会清除本机登录会话、缓存、草稿和待发送
+队列，先确认没有尚未发出的内容。卸载不会删除节点上的频道消息。此包是 release 构建，
+“debug 证书”仅指签名方式，不代表开启了调试或打包了测试入口。
 
 ## 登录
 
 先在手机上连接你的 Tailscale 网络。登录页填写：
 
-- 服务器地址：`https://tardis.tail6bc2a1.ts.net`
+- 服务器地址：`https://tardis.tail6bc2a1.ts.net`（填节点根地址，不加 `/obs`、`/api` 或频道路径）。
 - 账号：你在该节点上的账号；使用 root 时填 `root`。
 - 密码：该账号的密码。root 密码使用节点上的 `atoll passwd` 设置。
 
