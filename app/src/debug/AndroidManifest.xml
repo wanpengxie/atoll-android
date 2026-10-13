@@ -6,5 +6,9 @@
             android:name="dev.atoll.app.files.FilesDemoActivity"
             android:exported="true"
             android:label="Files demo" />
+        <activity
+            android:name="dev.atoll.app.compose.ComposerDemoActivity"
+            android:exported="true"
+            android:label="Composer demo" />
     </application>
 </manifest>
