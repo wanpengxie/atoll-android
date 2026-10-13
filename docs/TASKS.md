@@ -156,11 +156,14 @@ after the feature is merged.
 | Task | Owner | State |
 |---|---|---|
 | W1 net/model/sync/ui | sol-1..4 | merged |
-| W2-integrate | sol-3 | milestone + files + composer merged; mounting terminal; emulator perf (benchmark build) pending |
-| W2-files | sol-1 | merged (b175d8d) |
-| W2-composer | sol-2 | merged (b8d9f83, a9adfac) |
-| W2-content | sol-4 | merged (3c2a9fe); renderer reuse + real heights in progress |
-| W2-terminal | sol-1 | merged (a7483ab); light-theme/IME screenshots + output coalescing pending |
-| W2-waiting-edit | sol-2 | in progress |
+| W2-integrate | sol-3 | login/list/timeline, files, composer, terminal mounted (9c7d81a); activity center waits for task facts |
+| W2-files | sol-1 | merged |
+| W2-composer | sol-2 | merged; editor drops typed characters (fix in progress); submitFrame for tasks pending |
+| W2-content | sol-4 | merged; renderer reuse + real heights in review queue; then timeline scroll performance |
+| W2-terminal | sol-1 | merged (incl. batched rendering) |
+| W2-waiting-edit | sol-2 | in progress (model: passedInQueue threshold 10) |
 | W2-tasks | sol-1 | in progress |
-| W2-roster, W2-governance, W2-misc | — | queued |
+| W2-misc | sol-3 | in progress |
+| W2-roster, W2-governance | — | queued |
+
+Benchmark build (emulator): cold start to first draw 340 ms; channel open uncached 595 ms, cached 64 ms; scroll janky 5.7 %, p90 23 ms (target p90 <= 16 ms, janky < 2 %).
