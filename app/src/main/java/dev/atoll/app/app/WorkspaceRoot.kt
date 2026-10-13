@@ -429,7 +429,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         val source = state.timelineSource
                         val detached = state.newerUnloaded
                         val panel by produceState<ProcessPanelViewState?>(null, target, source, detached) {
-                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { processPanel(target, source, detached) }
+                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                processPanelUpdates(target, source, detached).collect { value = it }
+                            }
                         }
                         panel?.let { ProcessPanel(it, graph::closeFocus) }
                     } else ContentPanel("过程", graph::closeFocus) {
