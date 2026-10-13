@@ -8,6 +8,8 @@ plugins {
 
 android {
     namespace = "dev.atoll.app"
+    // Instrumented e2e runs on debug by default; -PatollTestBuildType=benchmark runs it on R8 code.
+    testBuildType = providers.gradleProperty("atollTestBuildType").getOrElse("debug").also { require(it in setOf("debug", "benchmark")) }
     compileSdk = 35
 
     defaultConfig {
