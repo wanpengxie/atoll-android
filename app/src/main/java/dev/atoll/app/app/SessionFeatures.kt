@@ -12,10 +12,12 @@ import kotlinx.coroutines.*
 import dev.atoll.app.files.FileHistory
 import dev.atoll.app.files.FilesViewModel
 import dev.atoll.app.net.AndroidKeyValueStore
+import dev.atoll.app.terminal.TerminalPreferences
 
 /** Feature models survive channel switches and rotation, and end with the checked server world. */
 class SessionFeatures(private val context: Context, val services: WorkspaceServices) : ViewModelStoreOwner {
     override val viewModelStore = ViewModelStore()
+    val terminalPreferences = TerminalPreferences(AndroidKeyValueStore(context.getSharedPreferences("terminal_${accountNamespace(services.server, services.principalId)}", Context.MODE_PRIVATE)))
     val fileHistory = FileHistory(AndroidKeyValueStore(context.getSharedPreferences("files", Context.MODE_PRIVATE)),
         services.server, services.principalId, services.boot)
     val composer = ViewModelProvider(this, object : ViewModelProvider.Factory {
