@@ -29,7 +29,8 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String) -> Unit,
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
     onMenu: (String) -> Unit = {}, onLink: ((String) -> Unit)? = null,
-    listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {}) {
+    listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
+    contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Workspace).safeDrawingPadding().imePadding()) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(44.dp)) {
@@ -65,7 +66,10 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             }
         }
         HorizontalDivider(color = AtollColors.Line)
-        if (tab == ChannelTab.Conversation) {
+        if (contentOverride != null) {
+            Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }
+            if (composerVisible) Composer(composer, onText, onSend, onMenu)
+        } else if (tab == ChannelTab.Conversation) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
             LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 3.dp, end = 3.dp, top = 52.dp, bottom = 6.dp)) {
                 if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -95,7 +99,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                 Text("${state.waitingCount} 条等待消息", Modifier.weight(1f), fontSize = 12.sp)
                 TextButton({ onMenu("等待区") }) { Text("展开", fontSize = 12.sp) }
             }
-            Composer(composer, onText, onSend, onMenu)
+            if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else TasksScreen(state.tasks, Modifier.weight(1f)) { onMenu(it) }
     }
 }
