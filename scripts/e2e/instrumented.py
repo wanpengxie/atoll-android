@@ -14,6 +14,17 @@ import urllib.request
 from support import EmulatorLock, Failure, NoRedirect, STEPS, URL, load_node, ssh, validate_url
 
 
+def validate_artifacts(root):
+    summaries = list(root.rglob('summary.json'))
+    if len(summaries) != 1:
+        raise Failure('expected exactly one instrumented smoke summary for this build type')
+    record = json.loads(summaries[0].read_text())
+    steps = record.get('steps', [])
+    if record.get('server') != URL or record.get('pending') != [] or \
+            [row.get('step') for row in steps] != STEPS or any(row.get('status') != 'passed' for row in steps):
+        raise Failure('instrumented run did not pass all 17 isolated-node steps')
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default=URL)
@@ -45,8 +56,12 @@ def main(argv=None):
         '-Pandroid.testInstrumentationRunnerArguments.' + key + '=' + value for key, value in parameters.items()]
     destination = args.output.resolve() / (time.strftime('%Y%m%d-%H%M%S') + '-' + args.build_type)
     destination.mkdir(parents=True)
+    additional = Path('app/build/outputs/connected_android_test_additional_output') / (args.build_type + 'AndroidTest')
     with EmulatorLock(args.owner, args.queue_timeout) as lock:
         lock.check_owner()
+        # Another variant's or a previous run's screenshots cannot establish this run's success.
+        if additional.exists():
+            shutil.rmtree(additional)
         environment = dict(os.environ, ANDROID_SERIAL=args.serial)
         # Capture/sanitize output here, so AGP/adb failure diagnostics cannot expose arguments.
         with (destination / 'gradle.log').open('w') as log:
@@ -60,9 +75,14 @@ def main(argv=None):
                 process.terminate(); process.wait(timeout=20)
                 raise
         # AGP collects additional outputs before it uninstalls the test packages.
-        additional = Path('app/build/outputs/connected_android_test_additional_output')
         if additional.is_dir():
             shutil.copytree(additional, destination / 'app-artifacts')
+    if status == 0:
+        try:
+            validate_artifacts(destination / 'app-artifacts')
+        except Failure as error:
+            print('FAIL ' + str(error), file=sys.stderr)
+            status = 1
     (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': task, 'build_type': args.build_type, 'exit_code': status}, indent=2))
     print('Instrumented artifacts: ' + str(destination))
     return status

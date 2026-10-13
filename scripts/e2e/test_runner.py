@@ -12,6 +12,18 @@ from support import EmulatorLock, Failure, URL, load_node, validate_url
 
 
 class RunnerTest(unittest.TestCase):
+    def test_gradle_success_requires_all17_current_variant_steps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaises(Failure): instrumented.validate_artifacts(root)
+            report = {'server': URL, 'pending': [], 'steps': [{'step': step, 'status': 'passed'} for step in instrumented.STEPS]}
+            path = root / 'summary.json'; path.write_text(json.dumps(report))
+            instrumented.validate_artifacts(root)
+            report['steps'][-1]['status'] = 'failed'; path.write_text(json.dumps(report))
+            with self.assertRaises(Failure): instrumented.validate_artifacts(root)
+            path.write_text(json.dumps({'server': URL, 'pending': [], 'steps': []}))
+            with self.assertRaises(Failure): instrumented.validate_artifacts(root)
+
     def test_both_build_types_dry_run_without_external_operations(self):
         for build_type in ['debug', 'benchmark']:
             with self.subTest(build_type=build_type), patch('instrumented.ssh', side_effect=AssertionError('no secrets')), \
