@@ -21,6 +21,7 @@ class LiveSmokeTest {
         val identity = IdentityClient(url, MemoryKeyValueStore(), client)
         assertTrue(identity.session().isNotEmpty())
         Wire(url, identity.client, "Android JVM smoke").use { wire ->
+            wire.start()
             val attached = withTimeout(15_000) { wire.state.filterIsInstance<WireState.Attached>().first() }
             val memberships = attached.receipt["memberships"]!!.jsonArray
             assertTrue("automation principal has channel memberships", memberships.isNotEmpty())
