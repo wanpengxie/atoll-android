@@ -65,6 +65,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
+    fun enterCreatedChannel(id: String) {
+        val operation = features?.governance?.creations?.value?.lastOrNull { it.targetId == id }
+        if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services.boot, enter = true) else graph.openChannel(id)
+    }
     var activityOpen by rememberSaveable { mutableStateOf(false) }
     var selectedMessage by remember { mutableStateOf<String?>(null) }
     var recentOpen by remember { mutableStateOf(false) }
@@ -272,7 +276,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     }
                 }
                 if (createChannelOpen && features != null) ChannelCreateDialog(features.governance,
-                    onEnterChannel = { createChannelOpen = false; graph.openChannel(it) }, onClose = { createChannelOpen = false })
+                    onEnterChannel = { createChannelOpen = false; enterCreatedChannel(it) }, onClose = { createChannelOpen = false })
                 if (rosterOpen && roster != null) Dialog(onDismissRequest = { rosterOpen = false; actorOpen = false; roster.clearSelection() },
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) {

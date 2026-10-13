@@ -21,6 +21,17 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             graph.services.collectLatest { services ->
+                val current = session(services) ?: return@collectLatest
+                val reported = mutableSetOf<String>()
+                current.governance.creations.collect { operations ->
+                    operations.filter { it.ledger && !it.failed && it.targetId.isNotEmpty() && reported.add(it.targetId) }.forEach {
+                        graph.channelCreated(it.targetId, it.parentId, it.name, current.services.boot)
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            graph.services.collectLatest { services ->
                 val current = session(services)
                 if (current == null) { mutableActivity.value = ActivitySnapshot(emptyList(), emptyList(), true); return@collectLatest }
                 combine(graph.state, current.governance.creations) { state, operations ->
