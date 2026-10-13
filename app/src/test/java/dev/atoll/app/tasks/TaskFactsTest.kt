@@ -18,6 +18,17 @@ class TaskFactsTest {
     })
     private fun add(replica: ChannelReplica, seq: Long, env: Envelope) { replica.apply(RowBatch(channel,listOf(Row(channel,seq,env)),Origin.LIVE)) }
     private fun pending(id: String, state: SendState = SendState.UNCERTAIN, frame: JsonObject = json("""{"msg_type":"agent.ask","audience":["agent"]}""")) = LocalSubmission(id,channel,frame,"重要提交","Agent",state,1,2)
+    @Test fun approvalDetailsSurviveProjectionForAskAndApproveWithoutChangingTheTitle() {
+        for (type in listOf("human.ask","human.approve")) {
+            val replica=ChannelReplica(channel,"me")
+            add(replica,1,envelope("q",type,json("""{"title":"Please review","text":"Short context","detail":"Full details\nSecond paragraph","impact":"Shared workspace"}"""),audience=listOf("me"),sender="agent"))
+            val fact=selectTaskFacts(replica.snapshot(),selfId="me",now=100).single()
+            assertEquals("Please review",fact.title)
+            assertEquals("Full details\nSecond paragraph",fact.description)
+            assertEquals("Shared workspace",fact.diagnostic.text("impact"))
+            assertTrue(fact.actionableBySelf)
+        }
+    }
     @Test fun selfAddressedHumanMessageIsNotAnAgentRunButDirectedMessagesRemainRuns() {
         val replica=ChannelReplica(channel,"me")
         val text="### Diagram\n```mermaid\ngraph TD\nA-->B\n```"
