@@ -2,6 +2,8 @@ package dev.atoll.app.ui.components
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.*
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.theme.AtollColors
@@ -30,7 +33,7 @@ import dev.atoll.app.ui.theme.AtollColors
 val LocalMarkdownCache = staticCompositionLocalOf { MarkdownCache() }
 
 @Composable
-fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, onLink: ((String) -> Unit)? = null) {
+fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, onLink: ((String) -> Unit)? = null, previewHeight: Dp? = null) {
     val cache = LocalMarkdownCache.current
     var blocks by remember(messageId, source, cache) { mutableStateOf(cache.peek(messageId, source)) }
     LaunchedEffect(messageId, source, cache) {
@@ -44,7 +47,16 @@ fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, o
         }
     }
     SelectionContainer(modifier) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (previewHeight != null) {
+            // A collapsed reply must not measure its invisible paragraphs.
+            LazyColumn(Modifier.fillMaxWidth().height(previewHeight), userScrollEnabled = false,
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val document = blocks
+                if (document == null) item { MarkdownPlaceholder(source) }
+                else itemsIndexed(document, key = { index, _ -> "$messageId:block:$index" },
+                    contentType = { _, block -> block.javaClass }) { _, block -> RenderBlocks(listOf(block), linkAction) }
+            }
+        } else Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             blocks?.let { RenderBlocks(it, linkAction) } ?: MarkdownPlaceholder(source)
         }
     }
