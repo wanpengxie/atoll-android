@@ -21,7 +21,7 @@ import kotlinx.serialization.json.*
 @Composable
 fun RosterPanel(viewModel: RosterViewModel, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null, onSelect: ((RosterActor) -> Unit)? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().background(AtollColors.ChannelRail)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("成员 ${state.rows.size}", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
             TextButton(onClick = viewModel::refresh, enabled = state.online && !state.busy) { Text(if (state.busy) "读取中…" else "刷新名册") }
@@ -32,7 +32,7 @@ fun RosterPanel(viewModel: RosterViewModel, modifier: Modifier = Modifier, onClo
         if (state.rows.isEmpty() && !state.busy) Text("暂无业务成员", Modifier.padding(12.dp), color = AtollColors.Muted)
         LazyColumn(Modifier.weight(1f)) {
             items(state.rows, key = { it.id }) { actor ->
-                Row(Modifier.fillMaxWidth().background(if (state.selected?.id == actor.id) AtollColors.Selected else AtollColors.Canvas)
+                Row(Modifier.fillMaxWidth().background(if (state.selected?.id == actor.id) AtollColors.Selected else AtollColors.ChannelRail)
                     .clickable { viewModel.select(actor); onSelect?.invoke(actor) }.heightIn(min = 56.dp).padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(actor.kind.take(1).uppercase().ifEmpty { "?" }, Modifier.width(28.dp), color = AtollColors.Agent)
                     Column(Modifier.weight(1f)) {

@@ -67,6 +67,8 @@ private class RosterFixture : WireClient, RosterPort {
                 body["values"]?.let { own["values"] = applyPatch(info.obj("own_config").obj("values"), it) }
                 own["revision"] = JsonPrimitive(++revision)
                 val next = info.toMutableMap(); next["own_config"] = JsonObject(own)
+                next["desired_host"] = own["desired_host"] ?: JsonPrimitive("")
+                body["values"]?.let { next["effective"] = applyPatch(info["effective"], it) }
                 if (MemberConfig.valueAtPath(own["values"], "service.api_key") != null) next["missing"] = JsonArray(emptyList())
                 info = JsonObject(next); buildJsonObject { put("revision", revision) }
             }
