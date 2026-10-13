@@ -4,6 +4,7 @@ import dev.atoll.app.core.*
 import dev.atoll.app.store.*
 import dev.atoll.app.sync.SyncHub
 import dev.atoll.app.ui.screens.TimelineEntry
+import dev.atoll.app.ui.screens.TimelineEmptyKind
 import dev.atoll.app.compose.LocalSubmission
 import dev.atoll.app.compose.localEnvelope
 import dev.atoll.app.compose.localTimelineEntry
@@ -17,6 +18,45 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ChannelControllerTest {
+    @Test fun scannedEmptyChannelPublishesExplicitEmptyState() = runBlocking {
+        val fixture = Fixture(head = 0, rows = emptyList())
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val state = fixture.await { it.conversation?.let { view -> view.emptyKind == TimelineEmptyKind.Channel && view.emptySettled } == true }
+            assertTrue(state.conversation!!.entries.isEmpty())
+            assertFalse(state.conversation.hasOlder)
+            assertNull(state.conversation.historyStartLabel)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun scanProofReachesStartDespiteInvisibleSequenceNumbers() = runBlocking {
+        val fixture = Fixture(head = 5, rows = listOf(row(5)))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val state = fixture.await { it.conversation?.historyStartLabel != null }
+            assertFalse(state.conversation!!.hasOlder)
+            assertEquals("已到频道最早一条动态", state.conversation.historyStartLabel)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun mineAndActorFilterEmptinessArePublishedWithoutClaimingAnEmptyChannel() = runBlocking {
+        val other = row(1).let { it.copy(envelope = Envelope(JsonObject(it.envelope.json +
+            ("audience" to buildJsonArray { add("human:someone-else") })))) }
+        val fixture = Fixture(head = 1, rows = listOf(other))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val mine = fixture.await { it.conversation?.emptyKind == TimelineEmptyKind.Mine && it.conversation?.emptySettled == true }
+            assertTrue(mine.conversation!!.entries.isEmpty())
+            assertTrue(mine.timelineSource!!.timeline.isNotEmpty())
+            fixture.controller.filter("agent:absent")
+            fixture.await { it.conversation?.emptyKind == TimelineEmptyKind.ActorFilter && it.conversation?.emptySettled == true }
+            fixture.controller.toggleScope()
+            val all = fixture.await { it.conversation?.mineOnly == false }
+            assertTrue(all.conversation!!.entries.isNotEmpty())
+            assertNull(all.conversation.emptyKind)
+        } finally { fixture.stop() }
+    }
+
     @Test fun cacheReaderFailuresAreVisibleAndCanBeRetried() = runBlocking {
         val fixture = Fixture(head = 1, rows = listOf(row(1)))
         try {
@@ -226,7 +266,7 @@ class ChannelControllerTest {
         lateinit var controller: ChannelController
         init {
             runBlocking {
-                memory.commit("c", rows, listOf(CoverageRange(1, head)))
+                memory.commit("c", rows, if (head > 0) listOf(CoverageRange(1, head)) else emptyList())
                 if (browse != null) preferences.put("ns", "c.browse", browse.encode())
                 if (baseline) preferences.put("ns", "c.baselined", "true")
                 hub = SyncHub(wire, store, scope)

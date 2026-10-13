@@ -68,6 +68,7 @@ class ChannelController(
     private var following = true
     private var foreground = true
     private var newerUnloaded = false
+    private var historyStartKnown = false
     private var windowHigh = Long.MAX_VALUE
     private var reader: Job? = null
     private var readerEpoch = 0L
@@ -143,6 +144,11 @@ class ChannelController(
                 else if (!syncState.current) unread = unread.copy(pending = true)
                 if (recovered || advanced && (notificationDirty || taskFactsDirty)) queueUnread()
                 conversation = conversation?.copy(connection = if (syncState.connected) "已连接" else "离线缓存")
+                if (replica?.rowCount == 0 && syncState.current && !syncState.loading) {
+                    refreshHistoryBoundary()
+                    // The scan notification may precede this reader's pending nonempty batch.
+                    if (historyStartKnown) project() else updateFeedback()
+                } else updateFeedback()
             }
             is Live -> {
                 val envelope = command.row.envelope
@@ -200,13 +206,16 @@ class ChannelController(
             }
             is OlderFinished -> if (command.epoch == readerEpoch) {
                 older = null
-                conversation = conversation?.copy(loadingOlder = false, hasOlder = command.hasOlder)
+                if (command.error == null && !command.hasOlder) refreshHistoryBoundary()
+                conversation = conversation?.copy(loadingOlder = false, hasOlder = !historyStartKnown)
+                updateFeedback()
                 error = command.error
             }
             Jump -> { following = true; if (newerUnloaded) loadTail(restoreBrowse = false) else updateBadges() }
             RefreshUnread -> { refresh = null; calculateUnread() }
             ActivityExpiry -> { activityExpiry = null; taskFactsDirty = true; calculateUnread() }
         }
+        updateFeedback()
         publish()
     }
 
@@ -221,6 +230,7 @@ class ChannelController(
         rowSequences = emptyMap()
         timelineSource = null
         newerUnloaded = false
+        historyStartKnown = false
         windowHigh = Long.MAX_VALUE
         newRoots.clear()
         firstOrigin = null
@@ -264,10 +274,28 @@ class ChannelController(
                 newerUnloaded = true
                 windowHigh = kept.lastOrNull()?.seq ?: 0
                 mapper = TimelineMapper()
-            } else model.trim(4500, keepOpenTurns = false)
+            } else { model.trim(4500, keepOpenTurns = false); historyStartKnown = false }
         }
-        if ((change.accepted > 0 || conversation == null) && (model.rowCount > 0 || syncState.headSeq == 0L)) project()
+        if (conversation == null || batch.olderThanWindow) refreshHistoryBoundary()
+        if (change.accepted > 0 || conversation == null) project()
         queueUnread()
+    }
+
+    /** Only first-open/older paging (and completed empty scans) need this small cache lookup. */
+    private suspend fun refreshHistoryBoundary() {
+        val model = replica ?: return
+        val first = model.snapshot().rows.firstOrNull()?.seq
+        if (first == 1L) { historyStartKnown = true; return }
+        val cached = store.channel(id)
+        val boundary = first ?: cached.meta.headSeq
+        val covered = cached.meta.headSeq == 0L && syncState.generation > 0 ||
+            boundary > 0 && cached.coverage.any { it.low == 1L && it.high >= boundary }
+        historyStartKnown = covered && store.rows(id, beforeSeq = first ?: Long.MAX_VALUE, limit = 1).isEmpty()
+    }
+
+    private fun updateFeedback() {
+        conversation = conversation?.let { timelineFeedback(it.copy(hasOlder = !historyStartKnown), timelineSource,
+            historyStartKnown, syncState.current && !syncState.loading, newerUnloaded) }
     }
 
     private fun project() {
@@ -282,9 +310,10 @@ class ChannelController(
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
             entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
-            loadingOlder = previous?.loadingOlder ?: false, hasOlder = previous?.hasOlder ?: ((model.snapshot().rows.firstOrNull()?.seq ?: 1) > 1),
+            loadingOlder = previous?.loadingOlder ?: false, hasOlder = !historyStartKnown,
             connection = if (syncState.connected) "已连接" else "离线缓存", waitingCount = 0,
             runningCount = if (newerUnloaded) 0 else snapshot.runningTasks.size)
+        updateFeedback()
         updateBadges()
     }
 
