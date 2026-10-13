@@ -275,13 +275,13 @@ class ChannelController(
         timelineSource = model.snapshot()
         if (!newerUnloaded) updateActivityFacts(timelineSource!!)
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded,
+            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded, showNarration = true,
             localEchoes = if (newerUnloaded) emptyList() else localEchoes, timelinePlaced = timelinePlaced))
         timeline = snapshot
         rowSequences = timelineRowSequences(snapshot)
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
-            entries = mapper.map(snapshot, selfId, actors, newerUnloaded), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
+            entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
             loadingOlder = previous?.loadingOlder ?: false, hasOlder = previous?.hasOlder ?: ((model.snapshot().rows.firstOrNull()?.seq ?: 1) > 1),
             connection = if (syncState.connected) "已连接" else "离线缓存", waitingCount = 0,
             runningCount = if (newerUnloaded) 0 else snapshot.runningTasks.size)
