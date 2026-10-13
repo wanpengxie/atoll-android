@@ -10,6 +10,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -43,7 +46,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
         copied = try { clipboard.setText(AnnotatedString(copyText)); "✓ 已复制" } catch (_: Exception) { "复制失败" }
         feedback = scope.launch { delay(1600); copied = "" }
     }
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.testTag("atoll.message.${envelope.id}").semantics { text = AnnotatedString(message.text) }.fillMaxWidth()) {
         Box(if (copyText.isNotEmpty() || actions.reply != null) Modifier.combinedClickable(
             onClick = { actions.reply?.let(onReply) }, onLongClickLabel = "复制整条消息",
             onLongClick = { if (copyText.isNotEmpty()) copy() }) else Modifier) { content() }
