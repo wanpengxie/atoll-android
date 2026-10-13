@@ -220,7 +220,8 @@ Each package owns its files; live checks run on our test node.
 | W4 #10 dismissable channel error | sol-3 | merged |
 | W4 #11 identity-ready | sol-3 | merged |
 | W4 N2 process panel lifecycle | sol-3 | merged |
-| W4 #52 data, #07 history | sol-3 | gating one by one |
+| W4 #52 process panel controls | sol-3 | merged |
+| W4 #07 history (+ observer filters) | sol-3 | in progress |
 | W4 #24 data | sol-1 | in progress (merge with sol-4 renderer) |
 | W4 #24 renderer | sol-4 | merged (data from sol-1 pending) |
 | W4 #17 continuation bubbles | sol-4 | in progress |
