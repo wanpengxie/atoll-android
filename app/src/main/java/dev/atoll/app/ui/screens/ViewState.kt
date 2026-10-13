@@ -26,7 +26,7 @@ data class TaskViewState(val id: String, val title: String, val kind: String, va
 @Immutable
 data class ConversationViewState(val channel: ChannelViewState, val agents: List<AgentViewState> = emptyList(),
     val entries: List<TimelineEntry> = emptyList(), val tasks: List<TaskViewState> = emptyList(),
-    val mineOnly: Boolean = true, val actorFilter: String? = null, val loadingOlder: Boolean = false,
+    val mineOnly: Boolean = true, val actorFilters: Set<String> = emptySet(), val loadingOlder: Boolean = false,
     val hasOlder: Boolean = true, val connection: String = "已连接", val waitingCount: Int = 0, val filesOpen: Boolean = false, val terminalOpen: Boolean = false, val runningCount: Int = 0, val newMessages: Int = 0)
 @Immutable
 data class ComposerViewState(val text: String = "", val agent: String = "", val model: String = "", val effort: String = "", val sending: Boolean = false)

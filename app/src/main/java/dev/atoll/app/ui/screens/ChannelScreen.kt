@@ -26,7 +26,7 @@ import dev.atoll.app.ui.theme.AtollColors
 
 @Composable
 fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab: ChannelTab,
-    onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String?) -> Unit,
+    onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String) -> Unit,
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
     onMenu: (String) -> Unit = {}, onLink: ((String) -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {}) {
@@ -165,15 +165,22 @@ fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAct
 }
 
 @Composable
-private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, onActor: (String?) -> Unit, modifier: Modifier) {
+private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit, modifier: Modifier) {
     Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        state.agents.forEach { agent ->
-            Surface(shape = CircleShape, color = if (state.actorFilter == agent.id) AtollColors.Selected else AtollColors.Workspace,
+        if (state.mineOnly) state.agents.forEach { agent ->
+            Surface(shape = CircleShape, color = if (agent.id in state.actorFilters) AtollColors.Selected else AtollColors.Workspace,
                 border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 2.dp) {
-                Row(Modifier.heightIn(min = 36.dp).clickable { onActor(if (state.actorFilter == agent.id) null else agent.id) }.padding(horizontal = 10.dp),
+                Row(Modifier.heightIn(min = 36.dp).clickable { onActor(agent.id) }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (agent.active) Box(Modifier.size(6.dp).background(AtollColors.Online, CircleShape))
                     Text(agent.name, fontSize = 10.sp)
+                }
+            }
+        }
+        if (state.mineOnly) (state.actorFilters - state.agents.map { it.id }.toSet()).forEach { staleId ->
+            Surface(shape = CircleShape, color = AtollColors.Selected, border = BorderStroke(1.dp, AtollColors.ControlLine)) {
+                Box(Modifier.heightIn(min = 44.dp).clickable { onActor(staleId) }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                    Text("已失效 · $staleId", color = AtollColors.Muted, fontSize = 10.sp)
                 }
             }
         }
