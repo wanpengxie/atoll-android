@@ -1,6 +1,6 @@
 # How work is done here
 
-- Repo: tardis `c0.dev/atoll-android` (git, branch `main`). The lead (claude)
+- Repo: tardis `c0.dev/atoll-android` (git, branch `main`; worktrees under `../atoll-android-wt/<worker>`). The lead (claude)
   owns `main`, design, review and merges.
 - Each worker works on its own branch in its own git worktree:
   `git -C <repo> worktree add ../atoll-android-wt/<worker> -b <worker>/<task>`.
@@ -25,8 +25,12 @@
   (`mkdir ~/atoll-build/emulator.lock` succeeds = yours; `rmdir` when done).
 - Node for live tests: `https://tardis.tail6bc2a1.ts.net` (from mbp and the
   emulator). A local automation token is on tardis at
-  `~/.atoll/server/atoll-token` (send as `Authorization: Bearer`); never
-  print it or commit it.
+  `~/.atoll/server/atoll-token` (send as `Authorization: Bearer`). Everything
+  you send through `workspace.bash` — the command and its output — is written
+  to the channel ledger, so never put the token on a command line or print
+  it: read it on mbp at use time, e.g.
+  `ATOLL_TOKEN=$(ssh xiewanpeng@100.99.232.10 cat .atoll/server/atoll-token) ./gradlew ...`.
+  Never commit it.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions
   instead of guessing.
