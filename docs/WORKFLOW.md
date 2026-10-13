@@ -68,6 +68,7 @@
   login in a test must type the test node URL into the server field and
   read it back before submitting.
 - End-to-end UI suite (17 steps on the test node, Compose instrumented):
+  All connected test runs use `scripts/e2e/instrumented.py`; select a pure UI suite with `--class <fully.qualified.TestClass>` (same lease, device protection and audit log; no 17-step summary requirement).
   `python3 scripts/e2e/instrumented.py --owner <worker>` (takes the emulator
   queue, injects the test node URL/credentials as instrumentation arguments,
   collects screenshots and summary.json). Run it before reporting a change

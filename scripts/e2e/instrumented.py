@@ -16,6 +16,13 @@ import urllib.parse
 
 from support import EmulatorLock, Failure, NoRedirect, STEPS, URL, load_node, ssh, validate_url
 
+SMOKE_CLASS = 'dev.atoll.app.e2e.IsolatedNodeSmokeTest'
+
+
+def validate_run_artifacts(root, test_class=None):
+    if test_class is None:
+        validate_artifacts(root)
+
 
 def validate_artifacts(root):
     summaries = list(root.rglob('summary.json'))
@@ -174,6 +181,7 @@ def main(argv=None):
     parser.add_argument('--owner', default='sol-2')
     parser.add_argument('--serial', default='emulator-5554')
     parser.add_argument('--build-type', choices=['debug', 'benchmark'], default='debug')
+    parser.add_argument('--class', dest='test_class', help='Run a UI test class through the same lease; skip the 17-step smoke summary check')
     parser.add_argument('--queue-timeout', type=int, default=900)
     parser.add_argument('--output', type=Path, default=Path.home() / 'atoll-build/e2e-artifacts/instrumented')
     parser.add_argument('--dry-run', action='store_true')
@@ -182,12 +190,15 @@ def main(argv=None):
     validate_url(args.url)
     if args.serial != 'emulator-5554':
         raise Failure('only emulator-5554 is allowed')
+    if args.test_class is not None and not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+', args.test_class, re.ASCII):
+        raise Failure('--class must be a fully qualified test class name')
     if args.release_lock:
         release_emulator(args.owner)
         return 0
     task = 'connected' + args.build_type.capitalize() + 'AndroidTest'
     if args.dry_run:
-        print(json.dumps({'task': task, 'build_type': args.build_type, 'url': URL, 'steps': STEPS,
+        print(json.dumps({'task': task, 'build_type': args.build_type, 'url': URL,
+                          'class': args.test_class or SMOKE_CLASS, 'steps': [] if args.test_class else STEPS,
                           'parameters': ['atollUrl', 'atollPassword', 'atollToken', 'atollChannelId', 'atollCodexId']}, indent=2))
         return 0
     node = load_node()
@@ -196,7 +207,7 @@ def main(argv=None):
     token = ssh('cat atoll-test/server/atoll-token').decode().strip()
     if not re.fullmatch(r'[A-Za-z0-9]{32}', password) or not token:
         raise Failure('isolated test credentials are unavailable')
-    parameters = {'class': 'dev.atoll.app.e2e.IsolatedNodeSmokeTest', 'atollUrl': URL, 'atollPassword': password,
+    parameters = {'class': args.test_class or SMOKE_CLASS, 'atollUrl': URL, 'atollPassword': password,
                   'atollToken': token, 'atollChannelId': node['channel_id'], 'atollCodexId': node['codex_actor_id'],
                   'additionalTestOutputDir': '/sdcard/Android/media/dev.atoll.app/additional_test_output'}
     command = ['./gradlew', '--no-daemon', '--console=plain', '-PatollTestBuildType=' + args.build_type, task] + [
@@ -229,11 +240,12 @@ def main(argv=None):
             shutil.copytree(additional, destination / 'app-artifacts')
     if status == 0:
         try:
-            validate_artifacts(destination / 'app-artifacts')
+            validate_run_artifacts(destination / 'app-artifacts', args.test_class)
         except Failure as error:
             print('FAIL ' + str(error), file=sys.stderr)
             status = 1
-    (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': task, 'build_type': args.build_type, 'exit_code': status}, indent=2))
+    (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': task, 'build_type': args.build_type,
+        'class': args.test_class or SMOKE_CLASS, 'smoke_summary_required': args.test_class is None, 'exit_code': status}, indent=2))
     print('Instrumented artifacts: ' + str(destination))
     return status
 

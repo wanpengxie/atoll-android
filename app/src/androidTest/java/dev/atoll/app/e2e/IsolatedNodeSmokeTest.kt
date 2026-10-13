@@ -6,6 +6,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.atoll.app.AtollApp
@@ -17,6 +20,7 @@ import dev.atoll.app.files.FileReference
 import dev.atoll.app.terminal.PtyStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.*
@@ -31,6 +35,7 @@ import org.junit.runner.RunWith
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TEST_URL = "http://100.99.232.10:18080"
 private val STEPS = listOf("login", "channel-list", "open-channel", "codex-reply", "waiting-queue", "waiting-cancel",
@@ -60,6 +65,8 @@ class IsolatedNodeSmokeTest {
     private val records = mutableListOf<JsonObject>()
     private var fixtureRepository: FileRepository? = null
     private var fixture: FileReference? = null
+    private var loginAttempts = 0
+    private val loginAcknowledged = AtomicBoolean(false)
     private val output by lazy {
         val path = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output"
@@ -96,6 +103,71 @@ class IsolatedNodeSmokeTest {
         return compose.onAllNodes(matcher, useUnmergedTree = unmerged).onFirst()
     }
     private fun click(text: String) = waitFor(hasText(text) and hasClickAction() and isEnabled()).performClick()
+    private fun submitLogin() {
+        compose.runOnUiThread {
+            val activity = compose.activity
+            activity.currentFocus?.clearFocus()
+            WindowInsetsControllerCompat(activity.window, activity.window.decorView).hide(WindowInsetsCompat.Type.ime())
+        }
+        compose.waitUntil(10_000) {
+            !compose.runOnUiThread {
+                ViewCompat.getRootWindowInsets(compose.activity.window.decorView)?.isVisible(WindowInsetsCompat.Type.ime()) == true
+            }
+        }
+        compose.waitForIdle()
+        val initial = graph.state.value
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // Observe before clicking: even a fast failure is an acknowledgement,
+        // and must never turn into a second login request.
+        val observer = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            graph.state.collect { state ->
+                if (state.login.busy || state.phase != initial.phase ||
+                    state.navigation.connection != initial.navigation.connection ||
+                    state.login.error != initial.login.error) loginAcknowledged.set(true)
+            }
+        }
+        try {
+            loginAttempts++
+            click("进入 Atoll")
+            try {
+                compose.waitUntil(2_000) { loginAcknowledged.get() }
+            } catch (_: ComposeTimeoutException) {
+                if (!loginAcknowledged.get()) {
+                    compose.waitForIdle()
+                    // Recheck at the click boundary; a delayed response can arrive during idle.
+                    if (!loginAcknowledged.get()) {
+                        loginAttempts++
+                        click("进入 Atoll")
+                    }
+                }
+            }
+            compose.waitUntil(40_000) {
+                graph.state.value.login.error != null ||
+                    (graph.services.value?.server == TEST_URL && graph.state.value.identityConfirmed &&
+                        graph.state.value.navigation.connection == dev.atoll.app.ui.screens.ConnectionPhase.OPEN)
+            }
+            check(graph.state.value.login.error == null) { "Login page reported an error; see summary.json" }
+        } finally { observer.cancel(); scope.cancel() }
+    }
+
+    private fun loginFailureDetails(): JsonObject {
+        // Report only the error actually rendered by LoginScreen, never editable fields.
+        val visibleError = graph.state.value.login.error?.takeIf { error ->
+            runCatching { nodes(hasText(error), unmerged = true).isNotEmpty() }.getOrDefault(false)
+        }?.let(config::redact)
+        val category = when {
+            visibleError?.contains(Regex("connect|network|timeout|timed out|unreachable|resolve|连接|网络", RegexOption.IGNORE_CASE)) == true -> "network"
+            visibleError?.contains(Regex("credential|unauthorized|401|密码|账号|身份|认证", RegexOption.IGNORE_CASE)) == true -> "identity"
+            !loginAcknowledged.get() && loginAttempts > 0 -> "click"
+            else -> "unknown"
+        }
+        return buildJsonObject {
+            put("category", category); put("ui_error", visibleError?.let(::JsonPrimitive) ?: JsonNull)
+            put("clicks", loginAttempts); put("acknowledged", loginAcknowledged.get())
+            put("phase", graph.state.value.phase.name)
+            put("connection", graph.state.value.navigation.connection.name)
+        }
+    }
     private fun replace(label: String, value: String, private: Boolean = false) {
         val field = waitFor(hasSetTextAction() and hasText(label))
         try { field.performTextReplacement(value) } catch (failure: Throwable) {
@@ -163,7 +235,10 @@ class IsolatedNodeSmokeTest {
             runCatching { capture("$name-failed") }
             File(output, "$name-failure.txt").writeText(config.redact(failure.stackTraceToString()))
             println(config.redact(failure.stackTraceToString()))
-            records += buildJsonObject { put("step", name); put("status", "failed"); put("error", failure.javaClass.simpleName) }
+            records += buildJsonObject {
+                put("step", name); put("status", "failed"); put("error", failure.javaClass.simpleName)
+                if (name == "login") put("login", loginFailureDetails())
+            }
             throw AssertionError("Smoke failed at $name (${failure.javaClass.simpleName}); artifacts: ${output.absolutePath}")
         } finally { summary() }
     }
@@ -176,9 +251,7 @@ class IsolatedNodeSmokeTest {
             // Read the rendered server field at that boundary; password semantics are masked.
             val serverField = waitFor(hasSetTextAction() and hasText("服务器地址"))
             check(serverField.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text == TEST_URL)
-            click("进入 Atoll")
-            compose.waitUntil(40_000) { graph.services.value?.server == TEST_URL && graph.state.value.identityConfirmed &&
-                graph.state.value.navigation.connection == dev.atoll.app.ui.screens.ConnectionPhase.OPEN }
+            submitLogin()
             // The real UI session is established before any authenticated fixture cleanup.
             val s = services()
             runBlocking { withTimeout(40_000) {
