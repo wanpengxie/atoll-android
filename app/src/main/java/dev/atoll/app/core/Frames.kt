@@ -31,7 +31,7 @@ sealed interface DownFrame {
     data class Error(val ref: String, val frame: String, val code: String, val detail: String) : DownFrame
 
     /** A ledger row: live (ref empty) or part of the history page answering [ref]. */
-    data class Feed(val ref: String, val row: Row) : DownFrame
+    data class Feed(val ref: String, val row: Row, val generation: Long = 0) : DownFrame
 
     /** Live coverage: the node scanned [scanLowSeq]..[scannedSeq] of the channel. */
     data class Checkpoint(val channelId: String, val scanLowSeq: Long, val scannedSeq: Long, val generation: Long) : DownFrame
