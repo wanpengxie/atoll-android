@@ -5,7 +5,9 @@ import androidx.compose.runtime.Immutable
 @Immutable
 data class LoginViewState(val server: String = "", val account: String = "", val password: String = "", val busy: Boolean = false, val error: String? = null)
 @Immutable
-data class ChannelViewState(val id: String, val name: String, val description: String = "", val unread: Int = 0, val running: Int = 0, val updated: String = "")
+data class ChannelViewState(val id: String, val name: String, val description: String = "", val unread: Int = 0, val running: Int = 0, val updated: String = "",
+    val access: ChannelAccess = ChannelAccess.MemberActive, val unreadPhase: UnreadPhase = UnreadPhase.Ready,
+    val activity: List<AgentActivityViewState> = emptyList(), val parentId: String? = null, val depth: Int = 0, val runningElapsed: String = "")
 @Immutable
 data class AgentViewState(val id: String, val name: String, val active: Boolean = false)
 enum class MessageStatus(val label: String) { Processing("处理中"), Queued("排队中"), Failed("失败") }
@@ -25,7 +27,7 @@ data class TaskViewState(val id: String, val title: String, val kind: String, va
 data class ConversationViewState(val channel: ChannelViewState, val agents: List<AgentViewState> = emptyList(),
     val entries: List<TimelineEntry> = emptyList(), val tasks: List<TaskViewState> = emptyList(),
     val mineOnly: Boolean = true, val actorFilter: String? = null, val loadingOlder: Boolean = false,
-    val hasOlder: Boolean = true, val connection: String = "已连接", val waitingCount: Int = 0)
+    val hasOlder: Boolean = true, val connection: String = "已连接", val waitingCount: Int = 0, val filesOpen: Boolean = false, val terminalOpen: Boolean = false, val runningCount: Int = 0, val newMessages: Int = 0)
 @Immutable
 data class ComposerViewState(val text: String = "", val agent: String = "", val model: String = "", val effort: String = "", val sending: Boolean = false)
 enum class ChannelTab { Conversation, Tasks }

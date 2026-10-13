@@ -3,6 +3,8 @@ package dev.atoll.app.ui.screens
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,17 +28,28 @@ import dev.atoll.app.ui.theme.AtollColors
 fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab: ChannelTab,
     onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String?) -> Unit,
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
-    onMenu: (String) -> Unit = {}, onLink: ((String) -> Unit)? = null) {
+    onMenu: (String) -> Unit = {}, onLink: ((String) -> Unit)? = null,
+    listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {}) {
+    var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Workspace).safeDrawingPadding().imePadding()) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(44.dp)) {
             val titleWidth = (maxWidth / 2 - 90.dp).coerceAtLeast(0.dp)
             Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onBack, Modifier.size(44.dp)) { Icon(Icons.Outlined.Menu, "频道列表", Modifier.size(20.dp)) }
+                IconButton(onBack, Modifier.size(44.dp)) { Text("‹", fontSize = 24.sp, color = AtollColors.Text) }
                 Text(state.channel.name, Modifier.widthIn(max = titleWidth), fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.weight(1f))
-                IconButton({ onMenu("文件") }, Modifier.size(44.dp)) { Icon(Icons.Outlined.FolderOpen, "文件", Modifier.size(19.dp)) }
-                IconButton({ onMenu("更多") }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(20.dp)) }
+                TextButton({ onMenu("成员") }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) { Text("成员", fontSize = 11.sp, color = AtollColors.Muted) }
+                Box {
+                    IconButton({ menuOpen = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(20.dp)) }
+                    DropdownMenu(menuOpen, { menuOpen = false }) {
+                        val choices = listOf("频道详情", "定时动作", "高级资源工具", "新建子频道", "导出性能记录", "重启频道",
+                            if (state.filesOpen) "关闭文件" else "打开文件", "最近阅读", "星标消息", "后台任务(${state.runningCount})",
+                            if (state.terminalOpen) "关闭终端" else "打开终端")
+                        choices.forEach { label -> DropdownMenuItem(text = { Text(label, fontSize = 13.sp) },
+                            enabled = label != "重启频道", onClick = { menuOpen = false; onMenu(label) }) }
+                    }
+                }
             }
             Row(Modifier.align(Alignment.Center)) {
                 ChannelTab.entries.forEach { choice ->
@@ -54,7 +67,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
         HorizontalDivider(color = AtollColors.Line)
         if (tab == ChannelTab.Conversation) {
             Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 3.dp, end = 3.dp, top = 52.dp, bottom = 6.dp)) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 3.dp, end = 3.dp, top = 52.dp, bottom = 6.dp)) {
                 if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     TextButton(onOlder, enabled = !state.loadingOlder) { Text(if (state.loadingOlder) "正在加载历史…" else "加载更早消息", fontSize = 11.sp) }
                 } }
@@ -67,6 +80,14 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                     Text("开始一段对话", style = MaterialTheme.typography.titleMedium)
                     Text("发送消息，与频道成员一起工作。", color = AtollColors.Muted, style = MaterialTheme.typography.bodySmall)
                 } }
+            }
+            if (state.newMessages > 0 || listState.canScrollForward) {
+                Surface(Modifier.align(Alignment.BottomCenter).padding(8.dp), color = AtollColors.Workspace,
+                    shape = CircleShape, shadowElevation = 4.dp, border = BorderStroke(1.dp, AtollColors.ControlLine)) {
+                    TextButton(onJumpToBottom) {
+                        Text(if (state.newMessages > 0) "↓ ${state.newMessages} 条新动态" else "↓", fontSize = 12.sp, color = AtollColors.Text)
+                    }
+                }
             }
             FloatingFilters(state, onScope, onActor, Modifier.align(Alignment.TopEnd).padding(8.dp))
             }
@@ -86,7 +107,7 @@ fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> U
         Column(Modifier.padding(6.dp)) {
             Row(verticalAlignment = Alignment.Bottom) {
                 BasicTextField(state.text, onText, Modifier.weight(1f).heightIn(min = 44.dp, max = 150.dp).onFocusChanged { focused = it.isFocused }.padding(8.dp), textStyle = TextStyle(color = AtollColors.Text, fontSize = 16.sp, lineHeight = 24.sp),
-                    decorationBox = { inner -> if (state.text.isEmpty()) Text("发送消息…", color = AtollColors.Muted, fontSize = 16.sp); inner() })
+                    decorationBox = { inner -> if (state.text.isEmpty()) Text("输入消息；@ 选择成员，/ 使用命令", color = AtollColors.Muted, fontSize = 16.sp); inner() })
                 IconButton(onSend, enabled = state.text.isNotBlank() && !state.sending,
                     modifier = Modifier.background(if (state.text.isBlank()) AtollColors.MutedSurface else AtollColors.Accent, RoundedCornerShape(10.dp))) {
                     Icon(Icons.Outlined.ArrowUpward, "发送", tint = if (state.text.isBlank()) AtollColors.Muted else AtollColors.Workspace)
