@@ -14,7 +14,8 @@ enum class MessageStatus(val label: String) { Processing("处理中"), Queued("�
 @Immutable
 data class MessageViewState(val id: String, val sender: String, val text: String, val time: String,
     val agent: Boolean = false, val self: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
-    val progress: String? = null, val recipient: String? = null)
+    val progress: String? = null, val recipient: String? = null, val latest: Boolean = false,
+    val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null, val subTasks: List<SubTaskViewState> = emptyList())
 sealed interface TimelineEntry {
     val key: String
     data class Message(val value: MessageViewState) : TimelineEntry { override val key get() = value.id }

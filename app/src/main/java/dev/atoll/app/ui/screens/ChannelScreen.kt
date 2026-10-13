@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -170,7 +172,7 @@ private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, o
         if (state.mineOnly) state.agents.forEach { agent ->
             Surface(shape = CircleShape, color = if (agent.id in state.actorFilters) AtollColors.Selected else AtollColors.Workspace,
                 border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 2.dp) {
-                Row(Modifier.heightIn(min = 36.dp).clickable { onActor(agent.id) }.padding(horizontal = 10.dp),
+                Row(Modifier.heightIn(min = 44.dp).clickable { onActor(agent.id) }.semantics { selected = agent.id in state.actorFilters }.padding(horizontal = 10.dp),
                     verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     if (agent.active) Box(Modifier.size(6.dp).background(AtollColors.Online, CircleShape))
                     Text(agent.name, fontSize = 10.sp)
@@ -179,13 +181,13 @@ private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, o
         }
         if (state.mineOnly) (state.actorFilters - state.agents.map { it.id }.toSet()).forEach { staleId ->
             Surface(shape = CircleShape, color = AtollColors.Selected, border = BorderStroke(1.dp, AtollColors.ControlLine)) {
-                Box(Modifier.heightIn(min = 44.dp).clickable { onActor(staleId) }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
+                Box(Modifier.heightIn(min = 44.dp).clickable { onActor(staleId) }.semantics { selected = true }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
                     Text("已失效 · $staleId", color = AtollColors.Muted, fontSize = 10.sp)
                 }
             }
         }
         Surface(shape = CircleShape, color = AtollColors.Workspace, border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 4.dp) {
-            Box(Modifier.heightIn(min = 36.dp).clickable(onClick = onScope).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+            Box(Modifier.heightIn(min = 44.dp).clickable(onClick = onScope).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
                 Text(if (state.mineOnly) "与我相关" else "全部", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
             }
         }

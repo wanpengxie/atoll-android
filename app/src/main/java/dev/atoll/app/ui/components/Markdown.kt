@@ -3,8 +3,17 @@ package dev.atoll.app.ui.components
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.InlineTextContent
+import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.shape.RoundedCornerShape
+import coil3.compose.SubcomposeAsyncImage
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.Alignment
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -21,9 +30,9 @@ val LocalMarkdownCache = staticCompositionLocalOf { MarkdownCache() }
 @Composable
 fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, onLink: ((String) -> Unit)? = null) {
     val cache = LocalMarkdownCache.current
-    val blocks by produceState<List<MarkdownBlock>?>(null, messageId, source, cache) {
-        value = null
-        value = cache.get(messageId, source)
+    var blocks by remember(messageId, source, cache) { mutableStateOf(cache.peek(messageId, source)) }
+    LaunchedEffect(messageId, source, cache) {
+        if (blocks == null) blocks = cache.get(messageId, source)
     }
     val uri = LocalUriHandler.current
     val linkAction: (String) -> Unit = onLink ?: { address ->
@@ -34,7 +43,7 @@ fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, o
     }
     SelectionContainer(modifier) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            blocks?.let { RenderBlocks(it, linkAction) } ?: Text(source, style = MaterialTheme.typography.bodyMedium)
+            blocks?.let { RenderBlocks(it, linkAction) } ?: MarkdownPlaceholder(source)
         }
     }
 }
@@ -44,10 +53,15 @@ private fun RenderBlocks(blocks: List<MarkdownBlock>, onLink: (String) -> Unit) 
         when (block) {
             is MarkdownBlock.Paragraph -> {
                 val size = when (block.heading) { 1 -> 23; 2 -> 20; 3 -> 18; 4, 5, 6 -> 16; else -> 14 }
-                Text(richText(block.runs, onLink), fontSize = size.sp, lineHeight = (size * 1.5).sp,
-                    fontWeight = if (block.heading > 0) FontWeight.SemiBold else FontWeight.Normal)
+                if (block.runs.any { it.image != null }) {
+                    block.runs.forEach { run ->
+                        if (run.image != null) MarkdownImage(run.image, run.text, onLink)
+                        else ParagraphText(listOf(run), size, block.heading, onLink)
+                    }
+                } else ParagraphText(block.runs, size, block.heading, onLink)
             }
-            is MarkdownBlock.Code -> CodeBlock(block)
+            is MarkdownBlock.Code -> if (block.language.lowercase() == "mermaid") MermaidBlock(block.text) else CodeBlock(block)
+            is MarkdownBlock.Math -> RichBitmap(if (block.display) "math-display" else "math", block.source)
             is MarkdownBlock.Quote -> Row(Modifier.fillMaxWidth().background(AtollColors.MutedSurface)) {
                 Box(Modifier.width(3.dp).heightIn(min = 32.dp).background(AtollColors.ControlLine))
                 Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { RenderBlocks(block.blocks, onLink) }
@@ -69,7 +83,8 @@ private fun RenderBlocks(blocks: List<MarkdownBlock>, onLink: (String) -> Unit) 
     }
 }
 private fun richText(runs: List<MarkdownRun>, onLink: (String) -> Unit): AnnotatedString = buildAnnotatedString {
-    runs.forEach { run ->
+    runs.forEachIndexed { index, run ->
+        if (run.math != null) { appendInlineContent("math-$index", run.text); return@forEachIndexed }
         val style = SpanStyle(
             fontWeight = if (run.bold) FontWeight.Bold else null,
             fontStyle = if (run.italic) FontStyle.Italic else null,
@@ -86,17 +101,69 @@ private fun richText(runs: List<MarkdownRun>, onLink: (String) -> Unit): Annotat
     }
 }
 @Composable
-private fun CodeBlock(block: MarkdownBlock.Code) {
+fun CodeBlock(block: MarkdownBlock.Code) {
     val clipboard = LocalClipboardManager.current
     var copied by remember(block.text) { mutableStateOf(false) }
     Surface(color = AtollColors.Code, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
         Column {
             Row(Modifier.fillMaxWidth().padding(start = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(block.language.ifEmpty { "代码" }, Modifier.padding(top = 12.dp), fontSize = 11.sp, color = AtollColors.Muted)
+                Text(block.language.ifEmpty { "text" }, Modifier.padding(top = 12.dp), fontSize = 11.sp, color = AtollColors.Muted)
                 TextButton(onClick = { clipboard.setText(AnnotatedString(block.text)); copied = true }) { Text(if (copied) "已复制" else "复制", fontSize = 11.sp) }
             }
-            Text(block.text, Modifier.horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp),
-                fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp)
+            Row(Modifier.horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, bottom = 12.dp)) {
+                if (block.lineCount >= 5) Text(block.lineNumbers,
+                    Modifier.padding(end = 12.dp), color = AtollColors.Muted, fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp)
+                Text(highlightedText(block.tokens.ifEmpty { listOf(CodeToken(block.text)) }), fontFamily = FontFamily.Monospace, fontSize = 12.sp, lineHeight = 18.sp)
+            }
         }
+    }
+}
+
+@Composable
+private fun MarkdownPlaceholder(source: String) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val lines = estimateVisualLines(source, (maxWidth.value / 7).toInt().coerceAtLeast(12))
+        Box(Modifier.fillMaxWidth().height((lines * 21).dp).background(AtollColors.Code.copy(alpha = .5f)))
+    }
+}
+
+private fun highlightedText(tokens: List<CodeToken>) = buildAnnotatedString {
+    tokens.forEach { token ->
+        val color = when (token.tone) {
+            CodeTone.Plain -> AtollColors.Text; CodeTone.Comment -> AtollColors.Muted
+            CodeTone.String -> Color(0xFF18713F); CodeTone.Keyword -> Color(0xFF6750A4); CodeTone.Number -> Color(0xFFA94700)
+        }
+        withStyle(SpanStyle(color = color)) { append(token.text) }
+    }
+}
+@Composable
+private fun ParagraphText(runs: List<MarkdownRun>, size: Int, heading: Int, onLink: (String) -> Unit) {
+    val inlineContent = runs.mapIndexedNotNull { index, run -> run.math?.let { fragment ->
+        "math-$index" to InlineTextContent(Placeholder((fragment.source.length * 9).coerceIn(40, 180).sp, 28.sp, PlaceholderVerticalAlign.Center)) {
+            RichBitmap("math", fragment.source)
+        }
+    } }.toMap()
+    Text(richText(runs, onLink), inlineContent = inlineContent, fontSize = size.sp, lineHeight = (size * 1.5).sp,
+        fontWeight = if (heading > 0) FontWeight.SemiBold else FontWeight.Normal)
+}
+@Composable
+fun MermaidBlock(source: String) {
+    var showSource by rememberSaveable(source) { mutableStateOf(false) }
+    Surface(shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, AtollColors.Line)) {
+        Column {
+            Row(Modifier.fillMaxWidth().padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("mermaid", Modifier.weight(1f), fontSize = 11.sp, color = AtollColors.Muted)
+                TextButton({ showSource = !showSource }) { Text(if (showSource) "查看图表" else "查看源码", fontSize = 12.sp) }
+            }
+            if (showSource) CodeBlock(MarkdownBlock.Code(source, "mermaid")) else RichBitmap("mermaid", source)
+        }
+    }
+}
+@Composable
+fun MarkdownImage(source: String, alt: String, onOpen: (String) -> Unit = {}) {
+    Surface(Modifier.fillMaxWidth().aspectRatio(16f / 9).clickable { onOpen(source) }, shape = RoundedCornerShape(8.dp), color = AtollColors.Code) {
+        SubcomposeAsyncImage(model = source, contentDescription = alt.ifEmpty { "图片" }, contentScale = ContentScale.Fit,
+            loading = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("正在加载图片…", color = AtollColors.Muted, fontSize = 12.sp) } },
+            error = { Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("图片无法加载", color = AtollColors.Muted, fontSize = 12.sp) } })
     }
 }
