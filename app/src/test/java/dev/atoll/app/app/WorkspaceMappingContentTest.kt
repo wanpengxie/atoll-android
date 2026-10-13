@@ -139,4 +139,37 @@ class WorkspaceMappingContentTest {
         assertFalse(notices.any { it.contains("generated") || it.contains("password") || it.contains("do-not-print") || it.contains("future") })
     }
 
+    @Test fun toolStartsAndEndsShareOneTrailRecordAndTextStagesRemainProse() {
+        val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"thinking","response",json("""{"status":"processing","process":{"kind":"stage","stage":"thinking"}}"""),parent="q"),
+            row(3,"started","response",json("""{"status":"processing","process":{"kind":"tool","tool":"workspace.bash","tool_call_id":"call","phase":"started","input":{"command":"ls"}}}"""),parent="q"),
+            row(4,"words","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"explanation"}}"""),parent="q"),
+            row(5,"ended","response",json("""{"status":"processing","process":{"kind":"tool","tool":"workspace.bash","tool_call_id":"call","phase":"ended","outcome":"ok","output":"files"}}"""),parent="q"),
+            row(6,"a","response",json("""{"status":"completed","text":"done"}"""),parent="q")).last()
+        val records=answer.trail!!.records
+        assertEquals(2,records.size);assertEquals("tool:call",records.last().id)
+        assertEquals(json("""{"command":"ls"}"""),records.last().input);assertEquals(JsonPrimitive("files"),records.last().output)
+        assertEquals("files",records.last().outputText);assertFalse(answer.trail!!.running)
+        assertEquals("explanation\n\ndone",answer.text)
+    }
+    @Test fun toolDataIsBoundedWithoutTraversingOtherRawProcessFields() {
+        val body=buildJsonObject { put("status","processing");put("process",buildJsonObject {
+            put("kind","tool");put("tool","workspace.read");put("phase","ended");put("tool_call_id","large")
+            put("output","界".repeat(100_000));put("unrelated",JsonObject(mapOf("password" to JsonPrimitive("never-project-me"))))
+        }) }
+        val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),row(2,"p","response",body,parent="q")).last()
+        val record=answer.trail!!.records.single()
+        assertTrue(record.outputText.toByteArray().size<=4096);assertFalse(record.toString().contains("never-project-me"))
+        assertTrue(answer.trail!!.running)
+    }
+    @Test fun nestedToolRequestsFoldIntoTheAnswerTrailInsteadOfFullMessageBubbles() {
+        val request=row(2,"call","request",json("""{"command":"ls"}"""),"workspace.bash","q","agent:a")
+        val tool=request.copy(envelope=Envelope(JsonObject(request.envelope.json+("audience" to buildJsonArray { add("tool:w") }))))
+        val messages=mapped(row(1,"q","request",json("""{"text":"question"}""")),tool,
+            row(3,"tool-reply","response",json("""{"status":"completed","output":"files"}"""),"workspace.bash","call","tool:w"),
+            row(4,"a","response",json("""{"status":"completed","text":"done"}"""),parent="q"))
+        assertEquals(2,messages.size);assertEquals("call:call",messages.last().trail!!.records.single().id)
+        assertEquals(json("""{"command":"ls"}"""),messages.last().trail!!.records.single().input)
+    }
+
 }

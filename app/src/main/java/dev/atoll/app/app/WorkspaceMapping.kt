@@ -78,10 +78,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         if (item.entry.kind=="narration") return source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
             .mapNotNull { row -> narrationText(row.envelope,names)?.let { UiEntry.Notice("${item.key}:${row.envelope.id}",it) } }.orEmpty()
         val result = mutableListOf<UiEntry>()
-        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null) {
+        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
@@ -97,6 +97,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
                     ?.get("text").string().takeIf(String::isNotBlank)
             }
+            val calls = entry.thread.filter { child -> child.turn?.request?.let { it.senderKind!="human" &&
+                (it.type.startsWith("system.") || it.audience.any { audience -> audience.startsWith("tool:") || audience=="system" }) } == true }
+            val lostReason = RequestLifecycle.lostReason(turn,restarts,instant)
+            val trail = progressTrail(turn,calls,terminal==null && lostReason.isEmpty() && !newerUnloaded,::time)
             val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
             if (terminal != null) {
                 val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
@@ -111,10 +115,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val visible = if (!superseded && !interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
                 val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
-                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result)
+                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result,trailState=trail.takeUnless { superseded })
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
-                val lost = RequestLifecycle.lostReason(turn,restarts,instant)
+                val lost = lostReason
                 if (latest != null || lost.isNotEmpty()) {
                     val response = latest ?: Envelope(JsonObject(turn.request.json + mapOf("kind" to JsonPrimitive("response"),
                         "sender" to buildJsonObject { put("id",turn.request.audience.firstOrNull().orEmpty());put("kind","agent") })))
@@ -122,10 +126,11 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                     val label = when (lost) { "restart" -> "未完成 · Agent 已重启";"expired" -> "未完成 · 已过期";else -> "" }
                     message(response, "$key:answer", (streamed + label).filter(String::isNotBlank).joinToString("\n\n"),
                         if (lost.isNotEmpty()) null else if (turn.latestCoreStatus=="processing") MessageStatus.Processing else MessageStatus.Queued,
-                        process?.get("text").string().takeIf(String::isNotBlank) ?: process?.get("stage").string().takeIf(String::isNotBlank))
+                        process?.takeUnless { it["kind"].string()=="stage" && it["stage"].string()=="text" }?.get("text").string().takeIf(String::isNotBlank),
+                        trailState=trail)
                 }
             }
-            if (!superseded) entry.thread.forEach { turn(it, "$key:${it.id}", false) }
+            if (!superseded) entry.thread.filterNot { it in calls }.forEach { turn(it, "$key:${it.id}", false) }
         }
         turn(item.entry, item.key, item.continuation)
         return result
@@ -224,4 +229,71 @@ private fun narrationText(e: Envelope,names: Map<String,String>):String? {
         else -> if(e.kind!="event" && e.type.startsWith("system.")) "系统操作" else "后台状态已更新"
     }
     return label + when(e.status) { "completed" -> "（已完成）";"failed" -> "（失败）";"processing" -> "（处理中）";"queued" -> "（排队中）";else -> "" }
+}
+
+private data class TrailRecord(val seq: Long,val value: ProcessRecordViewState)
+private class ProcessBudget(var nodes: Int=128,var characters: Int=8192)
+/** Visit only the documented input/output fields, within one small shared budget. */
+private fun processValue(value: JsonElement?,budget: ProcessBudget,depth:Int=0):JsonElement? {
+    if(value==null || value==JsonNull) return null
+    if(budget.nodes--<=0) return JsonPrimitive("…（内容已省略）")
+    if(value is JsonPrimitive) {
+        if(!value.isString) return value
+        val limit=minOf(value.content.length,4096,budget.characters.coerceAtLeast(0));budget.characters-=limit
+        return JsonPrimitive(value.content.take(limit)+if(limit<value.content.length) "…（内容已省略）" else "")
+    }
+    if(depth>=3) return JsonPrimitive("…（内容已折叠）")
+    return when(value) {
+        is JsonArray -> JsonArray(value.take(20).map { processValue(it,budget,depth+1) ?: JsonNull })
+        is JsonObject -> JsonObject(value.entries.take(20).associate { it.key.take(64) to (processValue(it.value,budget,depth+1) ?: JsonNull) })
+        else -> null
+    }
+}
+private fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEntry>,running: Boolean,time: (Long)->String):ProgressTrailViewState? {
+    val records=mutableListOf<TrailRecord>();val tools=mutableMapOf<String,Int>()
+    for(row in turn.provisional.sortedBy { it.seq }) {
+        val process=row.envelope.body["process"] as? JsonObject ?: continue
+        val kind=process["kind"].string();val stage=process["stage"].string()
+        if(kind=="stage" && stage!="text") {
+            val body=process["text"].string().take(8192)
+            records+=TrailRecord(row.seq,ProcessRecordViewState("stage:${row.seq}",dev.atoll.app.tasks.compactWorkTitle(body.ifEmpty { if(stage=="thinking") "思考中…" else stage.ifEmpty { "处理中" } }),
+                time(row.envelope.ts),stateOnly=body.isBlank(),body=body))
+            continue
+        }
+        if(kind!="tool") continue
+        val call=process["tool_call_id"].string().ifEmpty { row.seq.toString() }
+        val phase=process["phase"].string();if(phase !in setOf("started","ended")) continue
+        val before=tools[call]?.let { records[it].value }
+        val budget=ProcessBudget();val input=processValue(process["input"],budget) ?: before?.input
+        val output=processValue(process["output"],budget) ?: before?.output
+        val body=process["detail"].string().take(8192).ifEmpty { before?.body.orEmpty() }
+        val identifiers=linkedMapOf<String,String>()
+        listOf("audit_id" to "审计编号","auditId" to "审计编号","tool_call_id" to "调用编号","toolCallId" to "调用编号",
+            "turn_id" to "回合编号","turnId" to "回合编号","trace_id" to "跟踪编号","traceId" to "跟踪编号").forEach { (field,label) ->
+            process[field].string().takeIf(String::isNotBlank)?.let { identifiers.putIfAbsent(label,it) }
+        }
+        identifiers["过程编号"]=row.envelope.id
+        val outputText=dev.atoll.app.ui.components.boundedToolOutput((output as? JsonPrimitive)?.takeIf { it.isString }?.content ?: output?.toString().orEmpty())
+        val tool=process["tool"].string().ifEmpty { "工具" }
+        val line="tool: $tool "+if(phase=="started") "…" else if(process["outcome"].string()=="failed") "失败" else "完成"
+        val record=TrailRecord(row.seq,ProcessRecordViewState("tool:$call",line,time(row.envelope.ts),ProcessKind.Tool,
+            stateOnly=body.isBlank() && input==null && output==null,input=input,output=output,outputText=outputText,body=body,identifiers=identifiers.map { it.key to it.value }))
+        val index=tools[call]
+        if(index==null) { tools[call]=records.size;records+=record } else records[index]=record
+    }
+    for(entry in calls) {
+        val call=entry.turn ?: continue
+        val budget=ProcessBudget()
+        val input=processValue(call.request.body,budget)
+        val output=call.terminal?.takeUnless { call.terminalClosureOnly }?.body?.let { JsonObject(it.filterKeys { key -> key !in ConversationVisibility.terminalTransportFields }) }?.let { processValue(it,budget) }
+        val label=if(call.terminal==null) "…" else if(call.terminal.status=="failed") "失败" else "完成"
+        val outputText=dev.atoll.app.ui.components.boundedToolOutput((output as? JsonPrimitive)?.takeIf { it.isString }?.content ?: output?.toString().orEmpty())
+        records+=TrailRecord(call.lastSeq,ProcessRecordViewState("call:${call.requestId}","tool: ${call.request.type} $label",
+            time(call.terminal?.ts ?: call.request.ts),ProcessKind.Tool,input=input,output=output,outputText=outputText,
+            body=call.terminal?.body?.get("detail").string().take(8192),identifiers=listOf("调用编号" to call.requestId)))
+    }
+    if(records.isEmpty()) return null
+    val start=turn.provisional.firstOrNull { it.envelope.status=="processing" }?.envelope?.ts ?: turn.request.ts
+    return ProgressTrailViewState(dev.atoll.app.tasks.compactWorkTitle(prose(turn.request.body)).ifEmpty { "过程记录" },
+        records.sortedBy { it.seq }.map { it.value },running,start,time(start))
 }
