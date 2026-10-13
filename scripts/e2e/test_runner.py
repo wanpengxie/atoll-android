@@ -63,7 +63,7 @@ class RunnerTest(unittest.TestCase):
             lock._change_queue(False)
             self.assertEqual('sol-1\nsol-3\n', lock.queue.read_text())
 
-    def test_lock_is_verified_and_released_even_if_execution_fails(self):
+    def test_lock_is_verified_and_retained_if_execution_fails(self):
         with tempfile.TemporaryDirectory() as tmp:
             lock = EmulatorLock('sol-2', 1)
             lock.base = Path(tmp); lock.lock = Path(tmp) / 'lock'; lock.queue = Path(tmp) / 'queue'
@@ -71,8 +71,8 @@ class RunnerTest(unittest.TestCase):
                 with lock:
                     lock.check_owner()
                     raise Failure('test execution failed')
-            self.assertFalse(lock.lock.exists()); self.assertEqual('', lock.queue.read_text())
-            with self.assertRaises(Failure): lock.check_owner()
+            self.assertTrue(lock.lock.exists()); self.assertEqual('sol-2\n', lock.queue.read_text())
+            lock.check_owner()
 
     def test_same_owner_cannot_join_or_remove_an_active_runners_queue(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -85,45 +85,105 @@ class RunnerTest(unittest.TestCase):
                 first.check_owner()
                 self.assertEqual('sol-2\n', first.queue.read_text())
 
-    def test_gradle_group_finishes_before_lock_is_released(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp); events = []; marker = root / 'child-result'
-            lock = EmulatorLock('sol-2', 1, lambda event, **fields: events.append(event))
-            lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
-            child = "import time; from pathlib import Path; time.sleep(.3); Path(%r).write_text(str(Path(%r).exists()))" % (str(marker), str(lock.lock))
-            parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c',%r],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)" % child
-            with lock, contextlib.redirect_stdout(io.StringIO()):
-                status = instrumented.run_gradle([sys.executable, '-c', parent], dict(os.environ), io.StringIO(), ['secret'], lock)
-                self.assertEqual(0, status)
-                self.assertEqual('True', marker.read_text())
-                lock.check_owner()
-            self.assertLess(events.index('lock-acquired'), events.index('gradle-start'))
-            self.assertLess(events.index('gradle-group-finished'), events.index('lock-released'))
-
-    def test_cancel_stops_the_entire_group_before_releasing_lock(self):
+    def test_gradle_wait_finishes_before_lock_is_released(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp); events = []
-            lock = EmulatorLock('sol-2', 1, lambda event, **fields: events.append((event, fields)))
+            lock = EmulatorLock('sol-2', 1, lambda event, **fields: events.append(event))
             lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
-            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); print('ready',flush=True); time.sleep(30)"
-            log = io.StringIO()
-            with patch.object(log, 'write', side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
-                with lock:
-                    instrumented.run_gradle([sys.executable, '-c', parent], dict(os.environ), log, ['secret'], lock)
-            group = next(fields['process_id'] for event, fields in events if event == 'gradle-start')
-            self.assertFalse(instrumented.group_running(group))
-            self.assertEqual('lock-released', events[-1][0])
+            with lock, contextlib.redirect_stdout(io.StringIO()):
+                status = instrumented.run_gradle([sys.executable, '-c', 'pass'], dict(os.environ), io.StringIO(), ['secret'], lock)
+                self.assertEqual(0, status)
+                lock.check_owner()
+            self.assertLess(events.index('lock-acquired'), events.index('gradle-start'))
+            self.assertLess(events.index('gradle-finished'), events.index('lock-released'))
 
-    def test_cleanup_failure_retains_lock_and_queue_for_inspection(self):
+    def test_cancel_retains_lock_and_queue_for_manual_inspection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             lock = EmulatorLock('sol-2', 1)
             lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
-            with self.assertRaises(Failure), patch('instrumented.drain_group', side_effect=Failure('not drained')):
+            parent = "import time; print('ready',flush=True); time.sleep(30)"
+            log = io.StringIO()
+            with patch.object(log, 'write', side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt), contextlib.redirect_stderr(io.StringIO()) as output:
                 with lock:
-                    instrumented.run_gradle([sys.executable, '-c', 'pass'], dict(os.environ), io.StringIO(), ['secret'], lock)
+                    instrumented.run_gradle([sys.executable, '-c', parent], dict(os.environ), log, ['secret'], lock)
             self.assertTrue(lock.lock.exists())
             self.assertEqual('sol-2\n', lock.queue.read_text())
+            self.assertIn('--release-lock', output.getvalue())
+
+    def test_other_device_present_requires_explicit_emulator_serial(self):
+        lock = unittest.mock.Mock()
+        with patch('instrumented.subprocess.run') as adb:
+            with self.assertRaises(Failure): instrumented.verify_emulator({}, lock)
+            adb.assert_not_called()
+            adb.return_value.stdout = 'List of devices attached\nemulator-5554\tdevice\ne5ca3495\tdevice\n'
+            environment = {'ANDROID_SERIAL': 'emulator-5554'}
+            instrumented.verify_emulator(environment, lock)
+            self.assertEqual(environment, adb.call_args.kwargs['env'])
+            self.assertEqual(['adb', '-s', 'emulator-5554', 'devices'], adb.call_args.args[0])
+            adb.return_value.stdout = 'List of devices attached\ne5ca3495\tdevice\n'
+            with self.assertRaises(Failure): instrumented.verify_emulator(environment, lock)
+
+    def test_manual_release_refuses_active_instrumentation_or_other_owner(self):
+        with tempfile.TemporaryDirectory() as tmp, patch('support.Path.home', return_value=Path(tmp)):
+            lock = EmulatorLock('sol-2', 1)
+            with lock: lock.retain()
+            def adb_result(command, **kwargs):
+                self.assertEqual('emulator-5554', kwargs['env']['ANDROID_SERIAL'])
+                self.assertEqual(['adb', '-s', 'emulator-5554'], command[:3])
+                result = unittest.mock.Mock()
+                result.stdout = 'List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else 'app_process com.android.commands.am.Am instrument -w runner'
+                return result
+            with patch('instrumented.subprocess.run', side_effect=adb_result):
+                with self.assertRaisesRegex(Failure, 'still active'): instrumented.release_emulator('sol-2')
+                self.assertTrue(lock.lock.exists())
+                with self.assertRaises(Failure): instrumented.release_emulator('sol-3')
+            def idle(command, **kwargs):
+                result = unittest.mock.Mock()
+                result.stdout = 'List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else 'init\n/system/bin/logd\n'
+                return result
+            with patch('instrumented.subprocess.run', side_effect=idle), contextlib.redirect_stdout(io.StringIO()):
+                instrumented.release_emulator('sol-2')
+            self.assertFalse(lock.lock.exists()); self.assertEqual('', lock.queue.read_text())
+
+    def test_emulator_starts_under_lock_and_waits_for_boot_with_explicit_serial(self):
+        lock = unittest.mock.Mock()
+        with tempfile.TemporaryDirectory() as tmp:
+            lock.base = Path(tmp)
+            def response(command, **kwargs):
+                self.assertEqual('emulator-5554', kwargs['env']['ANDROID_SERIAL'])
+                self.assertEqual(['adb', '-s', 'emulator-5554'], command[:3])
+                result = unittest.mock.Mock(returncode=0)
+                result.stdout = 'List of devices attached\n' if command[-1] == 'devices' and response.calls == 0 else \
+                    ('List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else '1\n')
+                response.calls += 1
+                return result
+            response.calls = 0
+            with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.subprocess.Popen') as start:
+                instrumented.ensure_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+                self.assertIn('-port', start.call_args.args[0])
+                self.assertIn('5554', start.call_args.args[0])
+                self.assertEqual('emulator-5554', start.call_args.kwargs['env']['ANDROID_SERIAL'])
+
+    def test_shutdown_only_when_queue_empty_and_while_lock_still_owned(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            def new_lock():
+                lock = EmulatorLock('sol-2', 1)
+                lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
+                return lock
+            with new_lock() as lock:
+                def stop():
+                    lock.check_owner()
+                    self.assertEqual('', lock.queue.read_text())
+                callback = unittest.mock.Mock(side_effect=stop)
+                lock.on_empty = callback
+            callback.assert_called_once()
+            with new_lock() as lock:
+                lock.queue.write_text('sol-2\nsol-3\n')
+                lock.on_empty = callback
+            callback.assert_called_once()
+            self.assertEqual('sol-3\n', lock.queue.read_text())
 
     def test_isolated_password_helper_remains_outside_the_ui_runner(self):
         spec = importlib.util.spec_from_file_location('test_password', Path(__file__).parent.parent / 'test-node-password.py')

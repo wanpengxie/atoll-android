@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -59,6 +60,7 @@ class EmulatorLock:
         self.event = event or (lambda *args, **kwargs: None)
         self.owner_guard = None
         self.identity = None
+        self.on_empty = None
 
     def __enter__(self):
         # A short mutation lock serializes queue appends/removals across runners.
@@ -93,7 +95,7 @@ class EmulatorLock:
             self.owner_guard.close()
             raise
 
-    def _change_queue(self, add):
+    def _change_queue(self, add, on_empty=None):
         import fcntl
         self.base.mkdir(parents=True, exist_ok=True)
         with (self.base / "emulator.queue.guard").open("a") as guard:
@@ -105,6 +107,8 @@ class EmulatorLock:
             else:
                 rows = [row for row in rows if row != self.owner]
             self.queue.write_text("".join(row + "\n" for row in rows))
+            if not rows and on_empty is not None:
+                on_empty()
 
     def check_owner(self):
         try:
@@ -115,19 +119,31 @@ class EmulatorLock:
             raise Failure("emulator lock is not owned by this runner")
 
     def retain(self):
-        self.retained = True
-        self.event('lock-retained')
+        if not self.retained:
+            self.retained = True
+            self.event('lock-retained')
+            print('锁保留，确认模拟器上没有 am instrument 后手动 release：'
+                  'python3 scripts/e2e/instrumented.py --owner ' + self.owner + ' --release-lock', file=sys.stderr)
 
     def __exit__(self, *args):
         try:
+            if args and args[0] is not None:
+                self.retain()
             if self.retained:
                 return
             if self.held:
                 self.check_owner()
+                # Queue changes and optional shutdown happen before releasing
+                # the lease, so another runner cannot install during emu kill.
+                self._change_queue(add=False, on_empty=self.on_empty)
                 (self.lock / "owner").unlink()
                 self.lock.rmdir()
                 self.event('lock-released', lock_inode=self.identity)
-            self._change_queue(add=False)
+            else:
+                self._change_queue(add=False)
+        except BaseException:
+            self.retain()
+            raise
         finally:
             if self.owner_guard is not None:
                 self.owner_guard.close()
