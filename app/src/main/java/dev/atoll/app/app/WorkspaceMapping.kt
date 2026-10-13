@@ -91,10 +91,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         val result = mutableListOf<UiEntry>()
         val tasks = subTaskViews(item.entry.subTasks,names)
         val tasksByRequest = tasks.groupBy { it.requestId.orEmpty() }
-        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList()) {
+        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList(), relatedStates: List<RelatedCallViewState> = emptyList()) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body)))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body), relatedCalls = relatedStates))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
@@ -117,19 +117,25 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
             val requestText = if(approval) listOf(turn.request.body["title"].string().ifEmpty { prose(turn.request.body) },
                 turn.request.body["detail"].string(),turn.request.body["impact"].string().takeIf(String::isNotEmpty)?.let { "影响：$it" }.orEmpty())
                 .filter(String::isNotBlank).joinToString("\n\n") else messageText(turn.request)
-            message(turn.request, "$key:request", text=requestText, continuation = continuation)
             val terminal = turn.terminal
             val ownedTasks = tasksByRequest[turn.requestId].orEmpty()
             val streamed = turn.provisional.mapNotNull { row ->
                 (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
                     ?.get("text").string().takeIf(String::isNotBlank)
             }
-            val calls = entry.thread.filter { child -> child.turn?.request?.let { it.senderKind!="human" &&
-                (it.type.startsWith("system.") || it.audience.any { audience -> audience.startsWith("tool:") || audience=="system" }) } == true }
-            val callIds = calls.mapNotNull { it.turn?.requestId }.toHashSet()
             val lostReason = RequestLifecycle.lostReason(turn,restarts,instant)
-            val trail = progressTrail(turn,calls,terminal==null && lostReason.isEmpty() && !newerUnloaded,::time)
+            val trail = progressTrail(turn,emptyList(),terminal==null && lostReason.isEmpty() && !newerUnloaded,::time)
             val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
+            // A request to this reader must retain the host's live ApprovalCard/resolve entry.
+            val interactive = entry.thread.filter { child -> child.turn?.request?.let {
+                it.type in setOf("human.ask","human.approve") && self in it.audience
+            } == true }
+            val interactiveIds = interactive.map { it.id }.toHashSet()
+            val related = if (superseded && turn.provisional.isEmpty()) emptyList() else
+                relatedCallViews(turn,entry.thread.filterNot { it.id in interactiveIds },names,tasksByRequest,newerUnloaded,superseded,::time)
+            val relatedOnRequest = superseded && streamed.isEmpty() && !turn.terminalClosureOnly
+            message(turn.request, "$key:request", text=requestText, continuation = continuation,
+                relatedStates=if(relatedOnRequest) related else emptyList())
             if (terminal != null) {
                 val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
                 val answer = when {
@@ -144,11 +150,11 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val receipt = if(approval) "已回执 · 处理者："+(names[terminal.senderId] ?: terminal.senderId)+terminal.body["decision"].string().takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty() else ""
                 val text = (listOf(receipt) + visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
-                    message(terminal, "$key:answer", text, if (interrupted) null else if (terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks)
+                    message(terminal, "$key:answer", text, if (interrupted) null else if (terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks,relatedStates=if(relatedOnRequest) emptyList() else related)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 val lost = lostReason
-                if (latest != null || lost.isNotEmpty() || ownedTasks.isNotEmpty()) {
+                if (latest != null || lost.isNotEmpty() || ownedTasks.isNotEmpty() || related.isNotEmpty()) {
                     val response = latest ?: Envelope(JsonObject(turn.request.json + mapOf("kind" to JsonPrimitive("response"),
                         "sender" to buildJsonObject { put("id",turn.request.audience.firstOrNull().orEmpty());put("kind","agent") })))
                     val process = latest?.body?.get("process") as? JsonObject
@@ -156,10 +162,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                     message(response, "$key:answer", (streamed + label).filter(String::isNotBlank).joinToString("\n\n"),
                         if (lost.isNotEmpty() || latest==null) null else if (turn.latestCoreStatus=="processing") MessageStatus.Processing else MessageStatus.Queued,
                         process?.takeUnless { it["kind"].string()=="stage" && it["stage"].string()=="text" }?.get("text").string().takeIf(String::isNotBlank),
-                        trailState=trail,taskStates=ownedTasks)
+                        trailState=trail,taskStates=ownedTasks,relatedStates=related)
                 }
             }
-            if (!superseded) entry.thread.filterNot { it.turn?.requestId in callIds }.forEach { turn(it, "$key:${it.id}", false) }
+            interactive.forEach { turn(it,"$key:${it.id}",false) }
         }
         turn(item.entry, item.key, item.continuation)
         return result
@@ -182,6 +188,74 @@ fun messageText(envelope: Envelope): String {
 
 internal fun JsonObject.objects(key: String) = (this[key] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
 internal fun JsonObject.longValue(key: String) = (this[key] as? JsonPrimitive)?.longOrNull ?: 0L
+
+/** A grouped child process scrolls to the same visible root as its owning turn. */
+internal fun timelineFocusIndex(entries: List<UiEntry>, targets: Map<String,TimelineMessageTarget>,
+    source: TimelineSource?, key: String): Int {
+    fun indexOf(id: String) = entries.indexOfFirst { targets[it.key]?.let { target ->
+        target.turn?.requestId == id || target.envelope.id == id
+    } == true }
+    val direct = indexOf(key)
+    if(direct >= 0) return direct
+    val requestId = processTarget(key,targets,source)?.turn?.requestId ?: return -1
+    fun contains(entry: dev.atoll.app.model.TimelineEntry): Boolean =
+        entry.turn?.requestId == requestId || entry.thread.any(::contains)
+    val ownerId = source?.timeline?.firstOrNull(::contains)?.turn?.requestId ?: return -1
+    return indexOf(ownerId)
+}
+
+/** One flat ledger thread is split into the web collaboration tree and remaining call list. */
+private fun relatedCallViews(root: Turn, thread: List<dev.atoll.app.model.TimelineEntry>, names: Map<String,String>,
+    tasks: Map<String,List<SubTaskViewState>>, detached: Boolean, superseded: Boolean,
+    time: (Long)->String): List<RelatedCallViewState> {
+    val turns = thread.mapNotNull { it.turn }
+    fun conversation(request: Envelope): Boolean {
+        val operation = request.type.startsWith("system.") || request.type == "actor.describe" ||
+            request.audience.isNotEmpty() && request.audience.all { it == "system" }
+        return !superseded && request.senderKind.isNotEmpty() && request.senderKind != "human" && !operation &&
+            request.audience.any { it.startsWith("agent:") || it.startsWith("human:") || it.startsWith("peer:") && request.type == "agent.ask" }
+    }
+    val members = turns.filter { conversation(it.request) }
+    val memberIds = members.map { it.requestId }.toHashSet()
+    val children = members.groupBy { it.request.parentId.takeIf(memberIds::contains) ?: root.requestId }
+    fun view(turn: Turn, depth: Int, conversational: Boolean): RelatedCallViewState {
+        val terminal = turn.terminal
+        val answer = when {
+            turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
+            terminal != null -> terminalResult(terminal,turn.request.type)
+            conversational -> MappedResult()
+            else -> MappedResult("还没有终态。")
+        }
+        val request = turn.request
+        return RelatedCallViewState(turn.requestId,dev.atoll.app.tasks.compactWorkTitle(prose(request.body).ifEmpty { request.type }),
+            names[request.senderId] ?: request.senderId,request.audience.map { names[it] ?: it },time(request.ts),
+            if(terminal==null) MessageStatus.Processing else if(terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed,
+            depth,answer.text,answer.result,progressTrail(turn,emptyList(),terminal==null && !detached,time),
+            terminal?.let { messageAttachments(it.body) }.orEmpty(),conversational,messageText(request),tasks[turn.requestId].orEmpty())
+    }
+    val output = mutableListOf<RelatedCallViewState>()
+    // Iterative preorder keeps projection cheap and does not consume the stack for deep threads.
+    val stack = ArrayDeque<Pair<Turn,Int>>()
+    children[root.requestId].orEmpty().asReversed().forEach { stack.addLast(it to 1) }
+    val seen = hashSetOf(root.requestId)
+    while(stack.isNotEmpty()) {
+        val (turn,depth) = stack.removeLast()
+        if(!seen.add(turn.requestId)) continue
+        output += view(turn,depth,true)
+        children[turn.requestId].orEmpty().asReversed().forEach { stack.addLast(it to depth+1) }
+    }
+    val remaining = turns.filter { it.requestId !in memberIds }
+    val parents = remaining.associate { it.requestId to it.request.parentId }
+    for(turn in remaining) {
+        var depth = 1;var parent = parents[turn.requestId]
+        val visited = hashSetOf(turn.requestId)
+        while(parent != null && parent != root.requestId && parent in parents && visited.add(parent)) {
+            depth++;parent=parents[parent]
+        }
+        output += view(turn,depth,false)
+    }
+    return output
+}
 
 /** Listed attachments take precedence over files, then append non-duplicate resource links. */
 internal fun messageAttachments(body: JsonObject): List<MessageAttachmentViewState> {
