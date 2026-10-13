@@ -40,35 +40,41 @@ fun sortedChannels(records: Collection<ChannelRecord>): List<Pair<ChannelRecord,
     return output
 }
 
-class TimelineMapper {
+class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
     private val clock = DateTimeFormatter.ofPattern("HH:mm")
-    private data class Cached(val revision: String, val continuation: Boolean, val newerUnloaded: Boolean, val latest: Boolean, val value: List<UiEntry>)
+    private data class Cached(val revision: String, val continuation: Boolean, val newerUnloaded: Boolean, val latest: Boolean, val lifecycleKey: String, val value: List<UiEntry>)
     private val cache = mutableMapOf<String, Cached>()
     private var roster = emptyList<ActorRecord>()
     private var selfKey = ""
 
-    fun map(snapshot: TimelineSnapshot, selfId: String, actors: List<ActorRecord>, newerUnloaded: Boolean = false): List<UiEntry> {
+    fun map(snapshot: TimelineSnapshot, selfId: String, actors: List<ActorRecord>, newerUnloaded: Boolean = false, source: TimelineSource? = null): List<UiEntry> {
         val names = actors.associate { it.id to it.name }
         if (actors != roster || selfKey != selfId) { cache.clear(); roster = actors.toList(); selfKey = selfId }
+        val restarts = source?.let(RequestLifecycle::memberRestarts).orEmpty()
+        val instant = now()
         val entries = mutableListOf<UiEntry>()
         var day = ""
         val retained = mutableSetOf<String>()
         for (item in snapshot.items) {
-            if (item.dayKey.isNotEmpty() && item.dayKey != day) { day = item.dayKey; entries += UiEntry.Day("day:$day:${item.key}", day) }
             retained += item.key
             val latest = item.entry.id == snapshot.currentEntryCandidate?.id
+            val lifecycleKey = (listOf(item.entry) + item.entry.thread).mapNotNull { it.turn }.mapNotNull { turn ->
+                RequestLifecycle.lostReason(turn,restarts,instant).takeIf(String::isNotEmpty)?.let { "${turn.requestId}:$it" }
+            }.joinToString("|")
             val previous = cache[item.key]
-            val value = if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest) previous.value
-            else render(item, selfId, names, newerUnloaded).map { entry ->
+            val value = if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest && previous.lifecycleKey == lifecycleKey) previous.value
+            else render(item, selfId, names, newerUnloaded, source, restarts, instant).map { entry ->
                 if (entry is UiEntry.Message) UiEntry.Message(entry.value.copy(latest=latest)) else entry
-            }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, it) }
+            }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
+            if (value.isNotEmpty() && item.dayKey.isNotEmpty() && item.dayKey != day) { day=item.dayKey;entries+=UiEntry.Day("day:$day:${item.key}",day) }
             entries += value
         }
         cache.keys.retainAll(retained)
         return entries
     }
 
-    private fun render(item: PresentationItem, self: String, names: Map<String, String>, newerUnloaded: Boolean): List<UiEntry> {
+    private fun render(item: PresentationItem, self: String, names: Map<String, String>, newerUnloaded: Boolean,
+        source: TimelineSource?, restarts: Map<String,Long>, instant: Long): List<UiEntry> {
         val result = mutableListOf<UiEntry>()
         fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
@@ -106,11 +112,15 @@ class TimelineMapper {
                     message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
-                if (latest != null) {
-                    val process = latest.body["process"] as? JsonObject
-                    message(latest, "$key:answer", streamed.joinToString("\n\n"),
-                        if (turn.latestCoreStatus == "processing") MessageStatus.Processing else MessageStatus.Queued,
-                        process?.get("text").string().takeIf { it.isNotBlank() } ?: process?.get("stage").string().takeIf { it.isNotBlank() })
+                val lost = RequestLifecycle.lostReason(turn,restarts,instant)
+                if (latest != null || lost.isNotEmpty()) {
+                    val response = latest ?: Envelope(JsonObject(turn.request.json + mapOf("kind" to JsonPrimitive("response"),
+                        "sender" to buildJsonObject { put("id",turn.request.audience.firstOrNull().orEmpty());put("kind","agent") })))
+                    val process = latest?.body?.get("process") as? JsonObject
+                    val label = when (lost) { "restart" -> "未完成 · Agent 已重启";"expired" -> "未完成 · 已过期";else -> "" }
+                    message(response, "$key:answer", (streamed + label).filter(String::isNotBlank).joinToString("\n\n"),
+                        if (lost.isNotEmpty()) null else if (turn.latestCoreStatus=="processing") MessageStatus.Processing else MessageStatus.Queued,
+                        process?.get("text").string().takeIf(String::isNotBlank) ?: process?.get("stage").string().takeIf(String::isNotBlank))
                 }
             }
             if (!superseded) entry.thread.forEach { turn(it, "$key:${it.id}", false) }

@@ -93,4 +93,30 @@ class WorkspaceMappingContentTest {
         assertFalse(mapper.map(snapshot,"someone-else",emptyList()).filterIsInstance<UiEntry.Message>().first().value.self)
     }
 
+    @Test fun expiryChangesInvalidateOnlyTheAffectedCachedAnswer() {
+        var now=100L
+        val mapper=TimelineMapper { now };val replica=ChannelReplica("c","human:self")
+        val request=row(1,"q","request",json("""{"text":"question"}"""))
+        val expiry=request.copy(envelope=Envelope(JsonObject(request.envelope.json+("expires_at" to JsonPrimitive(150)))))
+        replica.apply(RowBatch("c",listOf(expiry,row(2,"p","response",json("""{"status":"processing"}"""),parent="q")),Origin.LIVE))
+        val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self",now=now))
+        fun project()=mapper.map(snapshot,"human:self",emptyList(),source=replica.snapshot()).filterIsInstance<UiEntry.Message>().map { it.value }
+        assertNotNull(project().last().status);now=151
+        val expired=project().last();assertEquals("未完成 · 已过期",expired.text);assertNull(expired.status)
+        assertSame(expired,project().last())
+    }
+    @Test fun restartIsReadFromCanonicalSourceEvenWhenTheRestartTurnIsFilteredOut() {
+        val replica=ChannelReplica("c","human:self")
+        val restart=row(3,"restart","request",json("""{"member":"agent:a"}"""),"system.member.restart",sender="agent:other")
+        val command=restart.copy(envelope=Envelope(JsonObject(restart.envelope.json+("audience" to buildJsonArray { add("system") }))))
+        val reply=row(4,"r","response",json("""{"status":"completed"}"""),"system.member.restart","restart","system")
+        val hiddenReply=reply.copy(envelope=Envelope(JsonObject(reply.envelope.json+("audience" to buildJsonArray { add("agent:other") }))))
+        replica.apply(RowBatch("c",listOf(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing"}"""),parent="q"),command,hiddenReply),Origin.LIVE))
+        val snapshot=replica.timeline(TimelineOptions(selfId="human:self"))
+        assertFalse(snapshot.items.any { it.entry.id=="restart" })
+        val answer=TimelineMapper().map(snapshot,"human:self",emptyList(),source=replica.snapshot()).filterIsInstance<UiEntry.Message>().last().value
+        assertEquals("未完成 · Agent 已重启",answer.text);assertNull(answer.status)
+    }
+
 }

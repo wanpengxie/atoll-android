@@ -281,7 +281,7 @@ class ChannelController(
         rowSequences = timelineRowSequences(snapshot)
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
-            entries = mapper.map(snapshot, selfId, actors, newerUnloaded), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
+            entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
             loadingOlder = previous?.loadingOlder ?: false, hasOlder = previous?.hasOlder ?: ((model.snapshot().rows.firstOrNull()?.seq ?: 1) > 1),
             connection = if (syncState.connected) "已连接" else "离线缓存", waitingCount = 0,
             runningCount = if (newerUnloaded) 0 else snapshot.runningTasks.size)
