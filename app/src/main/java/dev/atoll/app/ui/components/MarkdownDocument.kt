@@ -1,6 +1,7 @@
 package dev.atoll.app.ui.components
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import org.commonmark.node.*
 import org.commonmark.parser.Parser
@@ -24,6 +25,7 @@ sealed interface MarkdownBlock {
         val checks: List<Boolean?> = emptyList()) : MarkdownBlock
     data class Table(val rows: List<List<List<MarkdownRun>>>, val alignments: List<String?>) : MarkdownBlock
     data class Math(val source: String, val display: Boolean) : MarkdownBlock
+    data object Error : MarkdownBlock
     data object Rule : MarkdownBlock
 }
 class MarkdownParser {
@@ -100,7 +102,8 @@ class MarkdownParser {
 
 }
 /** Bounded per-message LRU; edits replace the previous parsed text for that id. */
-class MarkdownCache(private val maxEntries: Int = 250, private val maxCharacters: Int = 1_000_000) {
+class MarkdownCache(private val maxEntries: Int = 250, private val maxCharacters: Int = 1_000_000,
+    private val parseDocument: (String) -> List<MarkdownBlock> = { MarkdownParser().parse(it) }) {
     private data class Entry(val source: String, val blocks: List<MarkdownBlock>)
     private val cache = LinkedHashMap<String, Entry>(16, .75f, true)
     private val lock = Any()
@@ -114,7 +117,14 @@ class MarkdownCache(private val maxEntries: Int = 250, private val maxCharacters
             cache[messageId]?.takeIf { it.source == source }?.blocks
         }?.let { return@withContext it }
         // Parsing unrelated messages must not hold the cache lock.
-        val blocks = MarkdownParser().parse(source)
+        val blocks = try {
+            parseDocument(source)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Keep a bad document local to this item. An edit replaces this cached fallback.
+            listOf(MarkdownBlock.Error)
+        }
         synchronized(lock) {
             cache[messageId]?.takeIf { it.source == source }?.let { return@synchronized it.blocks }
             cache.remove(messageId)?.let { characters -= it.source.length }

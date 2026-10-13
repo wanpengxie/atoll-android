@@ -9,6 +9,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
@@ -35,9 +36,9 @@ class MessageContentUiTest {
         "daemon://local-device/c0.android-test/report.pdf")
 
     @Composable
-    private fun TestContent(content: @Composable () -> Unit) {
+    private fun TestContent(cache: MarkdownCache = remember { MarkdownCache() }, content: @Composable () -> Unit) {
         AtollTheme {
-            CompositionLocalProvider(LocalMarkdownCache provides MarkdownCache()) {
+            CompositionLocalProvider(LocalMarkdownCache provides cache) {
                 Surface { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { content() } }
             }
         }
@@ -109,6 +110,26 @@ class MessageContentUiTest {
         compose.onNodeWithText("待办任务").assertIsDisplayed()
         compose.onNodeWithText("普通列表项").assertIsDisplayed()
         screenshot("gfm-task-list")
+    }
+
+    @Test fun markdownParseFailureIsLocalAndRetriesChangedContent() {
+        val source = mutableStateOf("broken")
+        val cache = MarkdownCache(parseDocument = { text ->
+            if (text == "broken") error("Injected parse failure") else MarkdownParser().parse(text)
+        })
+        val errorText = "这条消息暂时无法显示。内容更新后会自动重试。"
+        compose.setContent { TestContent(cache) {
+            Markdown("bad", source.value)
+            Markdown("neighbor", "相邻消息仍可阅读")
+        } }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText(errorText).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(errorText).assertIsDisplayed()
+        compose.onNodeWithText("相邻消息仍可阅读").assertIsDisplayed()
+        screenshot("markdown-error")
+        compose.runOnIdle { source.value = "更新后的消息" }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("更新后的消息").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(errorText).assertDoesNotExist()
+        compose.onNodeWithText("更新后的消息").assertIsDisplayed()
     }
 
     private fun screenshot(name: String) {

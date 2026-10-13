@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
@@ -107,6 +109,8 @@ private fun RenderBlocks(blocks: List<MarkdownBlock>, onLink: (String) -> Unit) 
                 }; HorizontalDivider(color = AtollColors.Line) }
             }
             MarkdownBlock.Rule -> HorizontalDivider(color = AtollColors.Line)
+            MarkdownBlock.Error -> Text("这条消息暂时无法显示。内容更新后会自动重试。",
+                Modifier.semantics { liveRegion = LiveRegionMode.Polite }, color = AtollColors.Accent, fontSize = 12.sp)
         }
     }
 }
