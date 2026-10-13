@@ -1,0 +1,489 @@
+package dev.atoll.app.app
+
+import android.content.Context
+import android.content.pm.ApplicationInfo
+import android.os.Build
+import android.os.SystemClock
+import dev.atoll.app.core.*
+import dev.atoll.app.model.UnreadCount
+import dev.atoll.app.model.TimelineSnapshot
+import dev.atoll.app.net.*
+import dev.atoll.app.store.*
+import dev.atoll.app.sync.SyncHub
+import dev.atoll.app.ui.screens.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import kotlinx.serialization.json.*
+import okhttp3.OkHttpClient
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import java.io.File
+import java.util.concurrent.atomic.AtomicReference
+
+enum class WorkspacePhase { Booting, Login, Workspace, Incompatible }
+data class WorkspaceState(
+    val phase: WorkspacePhase = WorkspacePhase.Booting,
+    val login: LoginViewState = LoginViewState(),
+    val navigation: ChannelNavigationViewState = ChannelNavigationViewState(emptyList(), ConnectionPhase.CONNECTING, AccountViewState("")),
+    val route: AppRoute? = null,
+    val conversation: ConversationViewState? = null,
+    val firstOrigin: Origin? = null,
+    val channelOpenedAt: Long = 0,
+    val notice: String? = null,
+    val incompatible: String = "",
+    val timeline: TimelineSnapshot? = null,
+)
+
+/** Feature packages share authentication/transport without reaching into the manager's state. */
+data class WorkspaceServices(val server: String, val principalId: String, val selfIds: Map<String, String>,
+    val wire: WireClient, val obs: ObsClient, val httpClient: OkHttpClient)
+
+/** Manual app wiring. The manager owns navigation/session facts; channel writers own folds. */
+class AppGraph(private val context: Context) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val commands = Channel<Event>(256)
+    private val mutableState = MutableStateFlow(WorkspaceState())
+    val state: StateFlow<WorkspaceState> = mutableState.asStateFlow()
+    private val mutableServices = MutableStateFlow<WorkspaceServices?>(null)
+    val services: StateFlow<WorkspaceServices?> = mutableServices.asStateFlow()
+    private val preferences = AppPreferences(context)
+    private var runtime: Runtime? = null
+    private var epoch = 0L
+    private val records = linkedMapOf<String, ChannelRecord>()
+    private val memberships = mutableMapOf<String, String>()
+    private val controllers = mutableMapOf<String, ChannelController>()
+    private val channelStates = mutableMapOf<String, ChannelRuntimeState>()
+    private val watchers = mutableMapOf<String, Job>()
+    private val rosterLoading = mutableSetOf<String>()
+    private val actorRosters = mutableMapOf<String, List<ActorRecord>>()
+    private val accesses = mutableMapOf<String, ChannelAccess>()
+    private val backStack = ArrayDeque<AppRoute?>()
+    private val focus = AtomicReference("")
+    private var requestedRoute: AppRoute? = null
+    private var route: AppRoute? = null
+    private var foreground = true
+    private var channelOpenedAt = 0L
+    private var notice: String? = null
+
+    init {
+        scope.launch {
+            for (event in commands) {
+                try { handle(event) }
+                catch (failure: Exception) {
+                    if (failure is CancellationException) throw failure
+                    notice = failure.message ?: "工作区暂时不可用"
+                    if (runtime == null) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login,
+                        login = mutableState.value.login.copy(busy = false, password = "", error = notice))
+                    else publish()
+                }
+            }
+        }
+        scope.launch { commands.send(Restore) }
+        scope.launch { while (isActive) { delay(1000); commands.send(Tick) } }
+    }
+
+    fun login(form: LoginViewState) { post(Login(form)) }
+    fun changeLogin(form: LoginViewState) { post(Form(form)) }
+    fun logout() { post(Logout) }
+    fun openChannel(id: String) { post(Navigate(AppRoute(id), push = true)) }
+    fun route(value: String?) { AppRoute.parse(value)?.let { post(Navigate(it, push = true)) } }
+    fun tab(value: ChannelTab) { post(Tab(value)) }
+    fun back() { post(Back) }
+    fun follow(value: Boolean) { post(Follow(value)) }
+    fun scopeToggle() { post(ScopeToggle) }
+    fun filter(actor: String) { post(Filter(actor)) }
+    fun older() { post(Older) }
+    fun jumpToBottom() { post(Jump) }
+    fun foreground(value: Boolean) { post(Foreground(value)) }
+    fun dismissNotice() { post(Notice(null)) }
+    fun reconnect() { post(Reconnect) }
+    fun notice(value: String) { post(Notice(value)) }
+
+    private fun post(event: Event) { scope.launch { commands.send(event) } }
+
+    private suspend fun handle(event: Event) {
+        when (event) {
+            Restore -> {
+                val (server, account) = preferences.account()
+                mutableState.value = mutableState.value.copy(login = LoginViewState(server, account))
+                val debug = readDevelopmentAuth()
+                if (debug != null) authenticate(debug.server, debug.account, token = debug.token)
+                else if (account.isEmpty()) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login)
+                else authenticate(server, account)
+            }
+            is Form -> mutableState.value = mutableState.value.copy(login = event.value.copy(busy = mutableState.value.login.busy))
+            is Login -> {
+                mutableState.value = mutableState.value.copy(login = event.form.copy(busy = true, error = null))
+                authenticate(event.form.server, event.form.account, password = event.form.password)
+            }
+            is Authenticated -> if (event.epoch == epoch) {
+                if (event.failure != null) {
+                    mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login,
+                        login = mutableState.value.login.copy(busy = false, password = "", error = if (event.restoring && event.failure is IdentityException && event.failure.status == 401) null else event.failure.message))
+                } else connect(requireNotNull(event.auth))
+            }
+            is TransportState -> if (event.epoch == epoch) transport(event.state)
+            is TransportFrame -> if (event.epoch == epoch) incoming(event.frame)
+            is Tree -> if (event.epoch == epoch && event.world == runtime?.world) { event.records.forEach { records[it.id] = it }; publish(); maybeRequestedRoute() }
+            is TreeDone -> if (event.epoch == epoch && event.world == runtime?.world) {
+                event.records?.let { complete -> records.keys.retainAll(complete.map { it.id }.toSet()); complete.forEach { records[it.id] = it } }
+                preferences.put(runtime!!.namespace, "channels", cachedTree(records.values).toString())
+                if (event.failure != null) notice = event.failure
+                if (route != null && route!!.channel !in records && route!!.channel !in memberships) { notice = "该频道已关闭"; navigate(null, false) }
+                publish(); maybeRequestedRoute()
+            }
+            is Roster -> if (event.epoch == epoch && event.world == runtime?.world) {
+                rosterLoading.remove(event.channel)
+                actorRosters[event.channel] = event.actors
+                controllers[event.channel]?.roster(event.actors)
+            }
+            is Controller -> if (event.epoch == epoch && event.world == runtime?.world) { channelStates[event.id] = event.value; publish() }
+            is Navigate -> {
+                if (runtime == null || mutableState.value.phase != WorkspacePhase.Workspace) requestedRoute = event.route
+                else navigate(event.route, event.push)
+            }
+            Back -> if (backStack.isNotEmpty()) navigate(backStack.removeLast(), false) else navigate(null, false)
+            is Tab -> route?.let { navigate(it.copy(tab = if (event.value == ChannelTab.Tasks) "tasks" else "conversation"), false) }
+            Reconnect -> {
+                val rt = runtime
+                if (rt != null && mutableState.value.phase == WorkspacePhase.Incompatible) {
+                    val requestEpoch = ++epoch
+                    val server = mutableServices.value!!.server
+                    val account = mutableState.value.login.account
+                    scope.launch {
+                        try { commands.send(Authenticated(requestEpoch, Auth(server, account, rt.identity.session(), rt.identity), null, false)) }
+                        catch (failure: Exception) { if (failure !is CancellationException) commands.send(Authenticated(requestEpoch, null, failure, false)) }
+                    }
+                } else rt?.wire?.reconnectNow()
+            }
+            is Follow -> controllers[route?.channel]?.follow(event.value)
+            ScopeToggle -> controllers[route?.channel]?.toggleScope()
+            is Filter -> controllers[route?.channel]?.filter(event.id)
+            Older -> controllers[route?.channel]?.loadOlder()
+            Jump -> { controllers[route?.channel]?.jumpToBottom(); channelOpenedAt = SystemClock.elapsedRealtime(); publish() }
+            is Foreground -> {
+                val resumed = !foreground && event.value
+                foreground = event.value
+                controllers[route?.channel]?.foreground(event.value)
+                if (resumed) runtime?.wire?.reconnectNow()
+            }
+            Logout -> {
+                val old = runtime
+                tearDown()
+                scope.launch { runCatching { old?.identity?.logout() }; old?.identity?.cookieJar?.clear() }
+                mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false))
+            }
+            is Expired -> if (event.epoch == epoch && runtime != null) {
+                runtime!!.identity.cookieJar.clear(); tearDown()
+                mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false, error = "会话已失效，请重新登录"))
+            }
+            is Observed -> if (event.epoch == epoch && event.world == runtime?.world && event.id == route?.channel) {
+                if (event.failure != null) { accesses[event.id] = ChannelAccess.Denied; notice = "无法访问该频道：${event.failure}" }
+                else {
+                    val rt = runtime!!
+                    val attached = rt.gate.state.value as? WireState.Attached ?: return
+                    val meta = requireNotNull(event.meta)
+                    val receipt = JsonObject(attached.receipt + ("history_meta" to JsonArray(attached.receipt.objects("history_meta").filter { it["channel_id"].string() != event.id } + meta)))
+                    rt.gate.connection(attached.copy(receipt = receipt))
+                    rt.hub.channel(event.id).retry()
+                    accesses[event.id] = ChannelAccess.ObserverActive
+                    ensureController(event.id, "", meta.longValue("head_seq"))
+                    controllers[event.id]?.open(records[event.id] ?: fallback(event.id))
+                    loadRoster(event.id)
+                }
+                publish()
+            }
+            is Notice -> { notice = event.value; publish() }
+            Tick -> if (runtime != null && mutableState.value.phase == WorkspacePhase.Workspace) publish()
+        }
+    }
+
+    private fun authenticate(serverValue: String, accountValue: String, password: String? = null, token: String? = null) {
+        val requestEpoch = ++epoch
+        scope.launch {
+            try {
+                val url = serverValue.trim().toHttpUrl()
+                require(url.username.isEmpty() && url.password.isEmpty()) { "服务器地址不能包含账号密码" }
+                val server = url.newBuilder().encodedPath("/").query(null).fragment(null).build().toString().trimEnd('/')
+                val account = accountValue.trim()
+                val namespace = accountNamespace(server, account)
+                val keyValues = AndroidKeyValueStore(context.getSharedPreferences("identity_$namespace", Context.MODE_PRIVATE))
+                val http = OkHttpClient.Builder().apply {
+                    if (token != null) addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Authorization", "Bearer $token").build()) }
+                }.build()
+                val identity = IdentityClient(server, keyValues, http)
+                val principal = if (password != null) identity.login(account, password) else identity.session()
+                commands.send(Authenticated(requestEpoch, Auth(server, account, principal, identity), null, password == null))
+            } catch (failure: Exception) {
+                if (failure !is CancellationException) commands.send(Authenticated(requestEpoch, null, failure, password == null))
+            }
+        }
+    }
+
+    private suspend fun connect(auth: Auth) {
+        tearDown(incrementEpoch = false)
+        val requestEpoch = epoch
+        val principalId = auth.principal["id"].string()
+        require(principalId.isNotEmpty()) { "服务器未返回账号身份" }
+        val namespace = accountNamespace(auth.server, principalId)
+        preferences.saveAccount(auth.server, auth.account)
+        val database = AtollDatabase.open(context, "ledger-$namespace.db")
+        val store = RoomRowStore(database)
+        val sessionScope = CoroutineScope(SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default)
+        val http = auth.identity.client.newBuilder().addInterceptor { chain ->
+            chain.proceed(chain.request()).also { if (it.code == 401) post(Expired(requestEpoch)) }
+        }.build()
+        val wire = Wire(auth.server, http, Build.MODEL, focus = { focus.get() })
+        val gate = GatedWireClient(wire)
+        val hub = SyncHub(gate, store, sessionScope)
+        val obs = ObsClient(auth.server, http) { post(Expired(requestEpoch)) }
+        runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope)
+        mutableServices.value = WorkspaceServices(auth.server, principalId, emptyMap(), gate, obs, http)
+        preferences.get(namespace, "channels")?.let { saved -> runCatching { channelRecords(Json.parseToJsonElement(saved).jsonObject).forEach { records[it.id] = it } } }
+        requestedRoute = requestedRoute ?: preferences.get(namespace, "last-channel")?.takeIf { it.isNotEmpty() }?.let { AppRoute(it) }
+        mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Workspace,
+            login = mutableState.value.login.copy(server = auth.server, account = auth.account, password = "", busy = false), notice = null)
+        sessionScope.launch(start = CoroutineStart.UNDISPATCHED) { wire.state.collect { commands.send(TransportState(requestEpoch, it)) } }
+        sessionScope.launch(start = CoroutineStart.UNDISPATCHED) { wire.frames.collect { if (gate.awaitReady(it)) commands.send(TransportFrame(requestEpoch, it)) } }
+        gate.subscribers.first { it > 0 }
+        wire.start()
+        loadTree(requestEpoch)
+        publish()
+    }
+
+    private suspend fun transport(state: WireState) {
+        val rt = runtime ?: return
+        if (state is WireState.Attached) {
+            val boot = state.receipt["boot"].string()
+            val previous = preferences.get(rt.namespace, "boot")
+            if (boot.isNotEmpty() && previous != null && previous != boot) {
+                rt.gate.connection(WireState.Connecting)
+                stopControllers(); rt.hub.stop(); rt.store.clear()
+                preferences.clearWorld(rt.namespace)
+                records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear()
+                rt.world++
+                rt.hub = SyncHub(rt.gate, rt.store, rt.scope)
+                rt.gate.subscribers.first { it > 0 }
+                loadTree(epoch)
+            }
+            if (boot.isNotEmpty()) preferences.put(rt.namespace, "boot", boot)
+            rt.gate.connection(state)
+            applyMemberships(state.receipt)
+            maybeRequestedRoute()
+            if (route != null && route!!.channel !in memberships) navigate(route, false, force = true)
+        } else rt.gate.connection(state)
+        if (state is WireState.Incompatible) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Incompatible, incompatible = state.detail)
+        publish()
+    }
+
+    private suspend fun incoming(frame: DownFrame) {
+        val rt = runtime ?: return
+        // The manager's queue preserves attach -> boot check -> feed ordering.
+        if (!rt.gate.receive(frame)) return
+        when (frame) {
+            is DownFrame.Memberships -> { applyMemberships(frame.payload); publish() }
+            is DownFrame.Feed -> if (frame.ref.isEmpty()) {
+                controllers[frame.row.channelId]?.receive(frame.row)
+                val envelope = frame.row.envelope
+                if (envelope.status == "processing" || envelope.type.startsWith("system.member.")) loadRoster(frame.row.channelId, envelope.type.startsWith("system.member."))
+                if (envelope.type in setOf("system.channel.created", "system.channel.updated", "system.channel.deleted")) loadTree(epoch)
+            }
+            is DownFrame.ObserveEnded -> {
+                accesses[frame.channelId] = if (frame.reason == "channel_retired") ChannelAccess.Denied else ChannelAccess.ObserverStale
+                if (frame.reason == "channel_retired" && route?.channel == frame.channelId) { notice = "该频道已关闭"; navigate(null, false) }
+                publish()
+            }
+            else -> Unit
+        }
+    }
+
+    private suspend fun applyMemberships(payload: JsonObject) {
+        val next = payload.objects("memberships").associate { it["channel_id"].string() to it["actor_id"].string() }.filterKeys(String::isNotEmpty)
+        val removedCurrent = route?.channel in memberships.keys - next.keys
+        for (id in memberships.keys - next.keys) {
+            watchers.remove(id)?.cancelAndJoin(); controllers.remove(id)?.stop(); channelStates.remove(id); accesses.remove(id)
+        }
+        memberships.clear(); memberships.putAll(next)
+        mutableServices.value = mutableServices.value?.copy(selfIds = next.toMap())
+        val heads = payload.objects("history_meta").associate { it["channel_id"].string() to it.longValue("head_seq") }
+        for ((id, self) in next) ensureController(id, self, heads[id] ?: 0)
+        if (removedCurrent) { notice = "频道成员关系已结束"; navigate(null, false) }
+    }
+
+    private suspend fun ensureController(id: String, self: String, head: Long) {
+        if (controllers[id]?.selfId == self) return
+        watchers.remove(id)?.cancelAndJoin(); controllers.remove(id)?.stop()
+        val rt = runtime ?: return
+        val controller = ChannelController(id, self, rt.hub.channel(id), rt.store, preferences, rt.namespace, head, rt.scope)
+        controllers[id] = controller
+        val requestEpoch = epoch
+        val world = rt.world
+        watchers[id] = rt.scope.launch { controller.state.collect { commands.send(Controller(requestEpoch, world, id, it)) } }
+        if (route?.channel == id) { controller.open(records[id] ?: fallback(id)); controller.foreground(foreground); loadRoster(id) }
+    }
+
+    private suspend fun navigate(request: AppRoute?, push: Boolean, force: Boolean = false) {
+        val target = request?.let { value -> records.values.firstOrNull { it.id == value.channel || it.qualifiedName == value.channel }?.let { value.copy(channel = it.id) } ?: value }
+        if (target == route && !force) { publish(); return }
+        if (push) backStack.addLast(route)
+        val channelChanged = route?.channel != target?.channel
+        if (channelChanged) controllers[route?.channel]?.closeView()
+        route = target
+        focus.set(target?.channel.orEmpty())
+        channelOpenedAt = SystemClock.elapsedRealtime()
+        val rt = runtime ?: return
+        if (target != null) {
+            preferences.put(rt.namespace, "last-channel", target.channel)
+            if (target.channel in memberships) {
+                if (channelChanged) controllers[target.channel]?.open(records[target.channel] ?: fallback(target.channel))
+                controllers[target.channel]?.foreground(foreground)
+                loadRoster(target.channel)
+            } else {
+                accesses[target.channel] = ChannelAccess.Loading
+                val requestEpoch = epoch
+                val requestWorld = rt.world
+                rt.scope.launch {
+                    try {
+                        rt.wire.request(Up.OBSERVE, buildJsonObject { put("channel_id", target.channel) })
+                        val attached = rt.wire.state.value as? WireState.Attached ?: error("连接已断开")
+                        val meta = rt.wire.request(Up.CHANNEL_META, buildJsonObject { put("channel_id", target.channel); put("generation", attached.generation) })
+                        commands.send(Observed(requestEpoch, requestWorld, target.channel, meta, null))
+                    } catch (failure: Exception) { if (failure !is CancellationException) commands.send(Observed(requestEpoch, requestWorld, target.channel, null, failure.message)) }
+                }
+            }
+        }
+        publish()
+    }
+
+    private suspend fun maybeRequestedRoute() {
+        val requested = requestedRoute ?: return
+        val match = records.values.firstOrNull { it.id == requested.channel || it.qualifiedName == requested.channel }
+        if (match != null || requested.channel in memberships) { requestedRoute = null; navigate(requested.copy(channel = match?.id ?: requested.channel), false) }
+    }
+
+    private fun loadTree(requestEpoch: Long) {
+        val rt = runtime ?: return
+        val requestWorld = rt.world
+        rt.scope.launch {
+            try {
+                val semaphore = Semaphore(6)
+                suspend fun walk(parent: String): List<ChannelRecord> {
+                    val records = semaphore.withPermit { channelRecords(rt.obs.spaceChannels(parent)) }
+                    commands.send(Tree(requestEpoch, requestWorld, records))
+                    val children = coroutineScope { records.filter { it.type != "actor" }.map { async { walk(it.id) } }.awaitAll().flatten() }
+                    return records + children
+                }
+                val complete = walk("")
+                commands.send(TreeDone(requestEpoch, requestWorld, complete, null))
+            } catch (failure: Exception) { if (failure !is CancellationException) commands.send(TreeDone(requestEpoch, requestWorld, null, failure.message)) }
+        }
+    }
+
+    private fun loadRoster(id: String, force: Boolean = false) {
+        val rt = runtime ?: return
+        if (!force && id in actorRosters) return
+        if (!rosterLoading.add(id)) return
+        val requestEpoch = epoch
+        val requestWorld = rt.world
+        rt.scope.launch {
+            try { commands.send(Roster(requestEpoch, requestWorld, id, actorRecords(rt.obs.channelActors(id)))) }
+            catch (failure: Exception) { if (failure !is CancellationException) commands.send(Roster(requestEpoch, requestWorld, id, emptyList())) }
+        }
+    }
+
+    private fun publish() {
+        val rt = runtime ?: return
+        val phase = when (rt.gate.state.value) {
+            is WireState.Attached -> ConnectionPhase.OPEN
+            is WireState.Disconnected -> ConnectionPhase.RECONNECTING
+            WireState.SignedOut, is WireState.Incompatible -> ConnectionPhase.CLOSED
+            else -> ConnectionPhase.CONNECTING
+        }
+        val all = records.values + memberships.keys.filter { it !in records }.map(::fallback)
+        val channels = sortedChannels(all).map { (record, depth) ->
+            val state = channelStates[record.id]
+            val member = record.id in memberships
+            val access = when {
+                accesses[record.id] != null -> accesses.getValue(record.id)
+                !member -> ChannelAccess.Discoverable
+                state?.error != null -> ChannelAccess.MemberUnavailable
+                phase != ConnectionPhase.OPEN -> ChannelAccess.MemberStale
+                else -> ChannelAccess.MemberActive
+            }
+            val unread = if (member) state?.unread ?: UnreadCount(pending = true) else UnreadCount()
+            ChannelViewState(record.id, record.qualifiedName.ifEmpty { record.name }, record.description, unread.count,
+                state?.activity?.size ?: 0, access = access,
+                unreadPhase = if (unread.pending) UnreadPhase.Recovering else if (unread.unknown) UnreadPhase.Unknown else UnreadPhase.Ready,
+                activity = state?.activity.orEmpty(), parentId = record.parent, depth = depth)
+        }
+        val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.principal, rt.principal == "root"), route?.channel)
+        val channelState = channelStates[route?.channel]
+        val currentChannel = channels.firstOrNull { it.id == route?.channel }
+        val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
+        val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel) }
+        mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
+            firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
+            timeline = channelState?.timeline?.takeIf { contentAllowed })
+    }
+
+    private suspend fun stopControllers() {
+        watchers.values.forEach { it.cancel() }; watchers.values.forEach { it.join() }; watchers.clear()
+        controllers.values.forEach { it.stop() }; controllers.clear()
+    }
+    private suspend fun tearDown(incrementEpoch: Boolean = true) {
+        if (incrementEpoch) epoch++
+        runtime?.let { rt -> stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
+        runtime = null
+        mutableServices.value = null
+        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null
+    }
+    private fun fallback(id: String) = ChannelRecord(id, id, null, id)
+    private fun cachedTree(records: Collection<ChannelRecord>) = buildJsonObject {
+        put("items", buildJsonArray { records.forEach { value -> add(buildJsonObject { put("declared", buildJsonObject {
+            put("id", value.id); put("name", value.name); put("qualified_name", value.qualifiedName); put("type", value.type)
+            value.parent?.let { put("parent_id", it) }; put("description", value.description)
+        }) }) } })
+    }
+
+    /** Opt-in emulator bootstrap. It is read only in a debuggable app and deleted before use. */
+    private suspend fun readDevelopmentAuth(): DevelopmentAuth? = withContext(Dispatchers.IO) {
+        if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return@withContext null
+        val file = File(context.filesDir, "integration-auth.json")
+        if (!file.isFile) return@withContext null
+        val text = try { file.readText() } finally { file.delete() }
+        runCatching { val value = Json.parseToJsonElement(text).jsonObject; DevelopmentAuth(value["server"].string(), value["account"].string(), value["token"].string()) }.getOrNull()
+    }
+
+    private data class DevelopmentAuth(val server: String, val account: String, val token: String)
+    private data class Auth(val server: String, val account: String, val principal: JsonObject, val identity: IdentityClient)
+    private class Runtime(val namespace: String, val principal: String, val identity: IdentityClient, val wire: Wire,
+        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var world: Long = 0)
+    private sealed interface Event
+    private data object Restore : Event
+    private data class Form(val value: LoginViewState) : Event
+    private data class Login(val form: LoginViewState) : Event
+    private data class Authenticated(val epoch: Long, val auth: Auth?, val failure: Exception?, val restoring: Boolean) : Event
+    private data class TransportState(val epoch: Long, val state: WireState) : Event
+    private data class TransportFrame(val epoch: Long, val frame: DownFrame) : Event
+    private data class Tree(val epoch: Long, val world: Long, val records: List<ChannelRecord>) : Event
+    private data class TreeDone(val epoch: Long, val world: Long, val records: List<ChannelRecord>?, val failure: String?) : Event
+    private data class Roster(val epoch: Long, val world: Long, val channel: String, val actors: List<ActorRecord>) : Event
+    private data class Controller(val epoch: Long, val world: Long, val id: String, val value: ChannelRuntimeState) : Event
+    private data class Navigate(val route: AppRoute, val push: Boolean) : Event
+    private data object Back : Event
+    private data class Tab(val value: ChannelTab) : Event
+    private data object Reconnect : Event
+    private data class Follow(val value: Boolean) : Event
+    private data object ScopeToggle : Event
+    private data class Filter(val id: String?) : Event
+    private data object Older : Event
+    private data object Jump : Event
+    private data class Foreground(val value: Boolean) : Event
+    private data object Logout : Event
+    private data class Expired(val epoch: Long) : Event
+    private data class Observed(val epoch: Long, val world: Long, val id: String, val meta: JsonObject?, val failure: String?) : Event
+    private data class Notice(val value: String?) : Event
+    private data object Tick : Event
+}
