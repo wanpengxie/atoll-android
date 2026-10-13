@@ -1,0 +1,31 @@
+package dev.atoll.app.ui.screens
+
+import androidx.compose.runtime.Immutable
+
+@Immutable
+data class LoginViewState(val server: String = "", val account: String = "", val password: String = "", val busy: Boolean = false, val error: String? = null)
+@Immutable
+data class ChannelViewState(val id: String, val name: String, val description: String = "", val unread: Int = 0, val running: Int = 0, val updated: String = "")
+@Immutable
+data class AgentViewState(val id: String, val name: String, val active: Boolean = false)
+enum class MessageStatus(val label: String) { Processing("处理中"), Queued("排队中"), Failed("失败") }
+@Immutable
+data class MessageViewState(val id: String, val sender: String, val text: String, val time: String,
+    val agent: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
+    val progress: String? = null, val recipient: String? = null)
+sealed interface TimelineEntry {
+    val key: String
+    data class Message(val value: MessageViewState) : TimelineEntry { override val key get() = value.id }
+    data class Day(override val key: String, val text: String) : TimelineEntry
+    data class Notice(override val key: String, val text: String) : TimelineEntry
+}
+@Immutable
+data class TaskViewState(val id: String, val title: String, val kind: String, val assignee: String, val state: String)
+@Immutable
+data class ConversationViewState(val channel: ChannelViewState, val agents: List<AgentViewState> = emptyList(),
+    val entries: List<TimelineEntry> = emptyList(), val tasks: List<TaskViewState> = emptyList(),
+    val mineOnly: Boolean = true, val actorFilter: String? = null, val loadingOlder: Boolean = false,
+    val hasOlder: Boolean = true, val connection: String = "已连接", val waitingCount: Int = 0)
+@Immutable
+data class ComposerViewState(val text: String = "", val agent: String = "", val model: String = "", val effort: String = "", val sending: Boolean = false)
+enum class ChannelTab { Conversation, Tasks }
