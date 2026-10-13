@@ -2,8 +2,9 @@ package dev.atoll.app.ui.screens
 
 import androidx.compose.runtime.Immutable
 
+enum class AuthMode { Login, Register }
 @Immutable
-data class LoginViewState(val server: String = "", val account: String = "", val password: String = "", val busy: Boolean = false, val error: String? = null)
+data class LoginViewState(val server: String = "", val account: String = "", val password: String = "", val busy: Boolean = false, val error: String? = null, val mode: AuthMode = AuthMode.Login, val displayName: String = "")
 @Immutable
 data class ChannelViewState(val id: String, val name: String, val description: String = "", val unread: Int = 0, val running: Int = 0, val updated: String = "",
     val access: ChannelAccess = ChannelAccess.MemberActive, val unreadPhase: UnreadPhase = UnreadPhase.Ready,

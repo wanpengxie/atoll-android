@@ -29,7 +29,7 @@ fun DemoApp(initialScreen: String = "login") {
         RichContentHost {
             when (screen) {
                 "content", "math", "mermaid", "code", "images", "json", "fold" -> ContentGallery(screen, { screen = "channel" })
-                "login" -> LoginScreen(login, { login = it }, { screen = "channels" }, { menu = "注册账号" })
+                "login" -> LoginScreen(login, { login = it }, { screen = "channels" })
                 else -> ChannelScreen(ConversationViewState(selected, DemoData.agents, DemoData.entries, DemoData.tasks, mine, actorFilters, waitingCount = 2),
                     ComposerViewState(draft, "sol-4", "6.1 Sol", "high"), tab,
                     { drawer = true }, { tab = it }, { mine = !mine }, { id -> actorFilters = if (id in actorFilters) actorFilters - id else actorFilters + id }, { draft = it }, { draft = "" },
