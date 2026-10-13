@@ -204,7 +204,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         fileState.devices.map { TerminalDevice(it.id, it.name, it.online) }, features.terminalPreferences,
                                         visible = lifecycle.isAtLeast(Lifecycle.State.STARTED), onClose = { graph.terminal(false) })
                                 })
-                                files != null -> ({ FilesScreen(files, onClose = { graph.files(false) }) })
+                                state.route?.tab in setOf("files", "resources") && services != null && features != null -> ({
+                                    val self = services!!.selfIds[state.route!!.channel].orEmpty()
+                                    FilesResourcesSurface(services!!, state.route!!.channel, files, state.route?.tab == "resources",
+                                        composerWritable(conversation.channel.access, self), onFiles = { graph.files(true) }, onResources = graph::resources,
+                                        onClose = { graph.files(false) }, onAttach = { reference ->
+                                            features.composer.addAttachments(listOf(reference)); graph.files(false)
+                                        })
+                                })
                                 else -> null
                             }
                             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
@@ -215,6 +222,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 onText = {}, onSend = {}, composerVisible = false,
                                 onMenu = { action -> when (action) {
                                     Item.OpenFiles -> graph.files(true)
+                                    Item.Resources -> graph.resources()
                                     Item.CloseFiles -> graph.files(false)
                                     Item.Recent -> recentOpen = true
                                     Item.OpenTerminal -> graph.terminal(true)
