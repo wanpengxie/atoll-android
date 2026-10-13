@@ -18,6 +18,16 @@ class TaskFactsTest {
     })
     private fun add(replica: ChannelReplica, seq: Long, env: Envelope) { replica.apply(RowBatch(channel,listOf(Row(channel,seq,env)),Origin.LIVE)) }
     private fun pending(id: String, state: SendState = SendState.UNCERTAIN, frame: JsonObject = json("""{"msg_type":"agent.ask","audience":["agent"]}""")) = LocalSubmission(id,channel,frame,"重要提交","Agent",state,1,2)
+    @Test fun selfAddressedHumanMessageMatchesWebAgentRunWhileItsListTitleIsOneLine() {
+        val replica=ChannelReplica(channel,"me")
+        val text="### Diagram\n```mermaid\ngraph TD\nA-->B\n```"
+        add(replica,7,envelope("self-note","human.message",buildJsonObject { put("text",text) },audience=listOf("me")))
+        val fact=selectTaskFacts(replica.snapshot(),selfId="me").single()
+        // selectFeatureTaskFacts with this same input also returns agent_run.
+        assertEquals("agent_run",fact.kind);assertEquals(text,fact.title)
+        assertEquals("### Diagram ```mermaid graph TD A-->B ```",compactWorkTitle(fact.title))
+        assertEquals(text,fact.turn!!.request.body.text("text"))
+    }
     @Test fun tc1495CombinesLedgerTasksApprovalsRunsRecoveryAndLocalTimersWithNativeIdentity() {
         val replica = ChannelReplica(channel,"me")
         add(replica,1,envelope("approval","human.approve",json("""{"title":"发布生产","impact":"线上流量"}"""),audience=listOf("me"),sender="agent",expires=9999))
