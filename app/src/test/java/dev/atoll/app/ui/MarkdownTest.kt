@@ -2,10 +2,34 @@ package dev.atoll.app.ui
 
 import dev.atoll.app.ui.components.*
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.CancellationException
 import org.junit.Assert.*
 import org.junit.Test
 
 class MarkdownTest {
+    @Test fun failedParseIsCachedLocallyAndAnEditRetriesIt() = runTest {
+        var calls = 0
+        val cache = MarkdownCache(parseDocument = { source ->
+            calls++
+            if (source == "broken") throw IllegalArgumentException("Malformed document")
+            MarkdownParser().parse(source)
+        })
+        val fallback = cache.get("bad", "broken")
+        assertEquals(listOf(MarkdownBlock.Error), fallback)
+        assertSame(fallback, cache.peek("bad", "broken"))
+        assertSame(fallback, cache.get("bad", "broken"))
+        assertEquals(1, calls)
+        assertTrue(cache.get("neighbor", "readable").single() is MarkdownBlock.Paragraph)
+        assertTrue(cache.get("bad", "fixed").single() is MarkdownBlock.Paragraph)
+        assertEquals(3, calls)
+        assertNull(cache.peek("bad", "broken"))
+    }
+    @Test fun cancelledParseIsNotTreatedAsBadContentOrCached() = runTest {
+        val cache = MarkdownCache(parseDocument = { throw CancellationException("Cancelled") })
+        try { cache.get("a", "content"); fail("Cancellation must escape the parser boundary") }
+        catch (_: CancellationException) { /* coroutine lifecycle remains intact */ }
+        assertNull(cache.peek("a", "content"))
+    }
     @Test fun taskMarkersBelongToTheirOwnItemAndPreserveRichText() {
         val list = MarkdownParser().parse("- [x] **done**\n- [ ] pending\n- normal\n  - [X] nested\n  - [ ] child").single() as MarkdownBlock.ListBlock
         assertEquals(listOf(true, false, null), list.checks)
