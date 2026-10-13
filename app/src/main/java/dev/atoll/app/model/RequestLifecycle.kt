@@ -36,7 +36,11 @@ object RequestLifecycle {
     fun lostReason(turn: Turn, restarts: Map<String, Long> = emptyMap(), now: Long = System.currentTimeMillis()): String =
         if (of(turn, restarts, now) != Lifecycle.LOST) "" else if ((restarts[turn.request.audience.firstOrNull()] ?: 0) > lastFrameSeq(turn)) "restart" else "expired"
     fun passedInQueue(turns: List<Turn>): (Turn) -> Boolean {
-        val starts = turns.filter { it.request.senderKind == "human" && it.provisional.any { frame -> frame.envelope.status == "processing" } }.groupBy { it.request.audience.firstOrNull().orEmpty() }
-        return { turn -> (starts[turn.request.audience.firstOrNull().orEmpty()] ?: emptyList()).count { it.requestSeq > turn.requestSeq } >= QUEUE_PASSED_AFTER }
+        val index = QueueProgressIndex()
+        turns.forEach(index::note)
+        return passedInQueue(index.snapshot())
+    }
+    fun passedInQueue(boundaries: Map<String, Long>): (Turn) -> Boolean = { turn ->
+        boundaries[turn.request.audience.firstOrNull().orEmpty()]?.let { turn.requestSeq < it } == true
     }
 }

@@ -13,7 +13,7 @@ class TimelinePresentation {
     fun project(state: TimelineSource, options: TimelineOptions = TimelineOptions(), epoch: String = "", facts: ProjectionFacts? = null, changedEntries: List<TimelineEntry>? = null): TimelineSnapshot {
         val nextView = listOf(state.channelId, options.scope, options.selfId, options.actorFilter.sorted(), options.showNarration, options.newerUnloaded, epoch).joinToString("\u0000")
         val old = previous.takeIf { view == nextView }
-        if (old != null && changedEntries != null && facts != null) {
+        if (old != null && changedEntries != null && facts?.queueBoundaries != null) {
             projectContent(state, options, facts, changedEntries, old)?.let { previous = it; return it }
         }
         val raw = ConversationPresentation.project(state, options, facts)
@@ -97,8 +97,9 @@ class TimelinePresentation {
                 updated.add(entry.id)
             }
         }
-        val waiting = old.waitingTurns.filter { it.requestId !in changedTurns }.toMutableList()
-        waiting.addAll(changedTurns.values.filter { turn -> turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, facts.restarts, options.now) in setOf(Lifecycle.WAITING, Lifecycle.PENDING) })
+        val passed = RequestLifecycle.passedInQueue(facts.queueBoundaries.orEmpty())
+        val waiting = old.waitingTurns.filter { it.requestId !in changedTurns && ConversationPresentation.waiting(it, facts.restarts, options, passed) }.toMutableList()
+        waiting.addAll(changedTurns.values.filter { ConversationPresentation.waiting(it, facts.restarts, options, passed) })
         waiting.sortBy { it.requestSeq }
         val rendered = items?.let(::frozen) ?: old.items
         val current = old.currentEntryCandidate?.let { candidate -> indexes[candidate.id]?.let { index -> candidate.copy(seqHigh = rendered[index].seqHigh) } ?: candidate }

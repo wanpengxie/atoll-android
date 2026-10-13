@@ -37,6 +37,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
     private var restartsDirty = true
     private val deadlines = TreeMap<Long, MutableSet<String>>()
     private val requestDeadlines = mutableMapOf<String, Long>()
+    private val queueProgress = QueueProgressIndex()
     /** The UI can schedule its next expiry refresh at this instant; null means none. */
     var nextTimelineExpiryAt: Long? = null
         private set
@@ -179,6 +180,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
         val turn = Turn(request.envelope, request.seq, frozen(provisional), terminal?.envelope, terminal?.seq ?: 0,
             maxOf(request.seq, ordered.maxOfOrNull { it.seq } ?: 0), proof != null && terminal === proof)
         noteDeadline(turn)
+        queueProgress.note(turn)
         return TimelineEntry("turn", request.seq, turn = turn)
     }
 
@@ -262,6 +264,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
     private fun refold() {
         byId.clear(); requests.clear(); responses.clear(); pointers.clear(); roots.clear(); entries.clear(); children.clear(); timeline.clear(); narration.clear()
         deadlines.clear(); requestDeadlines.clear(); taskRows.clear(); parentReferences.clear()
+        queueProgress.clear()
         val changed = mutableSetOf<String>()
         for (row in rows.values) {
             val envelope = row.envelope
@@ -303,7 +306,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
             cachedRunningTasks = BackgroundTasks.runningBackgroundTasks(object : TimelineSource by source { override val rows: Collection<Row> get() = taskRows.values })
             tasksDirty = false
         }
-        val facts = ProjectionFacts(if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relation!!.ids else null, cachedRestarts, cachedTaskSteps, cachedRunningTasks)
+        val facts = ProjectionFacts(if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relation!!.ids else null, cachedRestarts, cachedTaskSteps, cachedRunningTasks, queueProgress.snapshot())
         val contentOnly = !pendingStructure && cachedOptions == key && !expiryChanged
         val changedEntries = pendingChangedIds.mapNotNull { id -> entries[id]?.seq?.let { timeline[it] } }
         val result = presentation.project(source, options, facts = facts, changedEntries = if (contentOnly && changedEntries.size == pendingChangedIds.size) changedEntries else null)

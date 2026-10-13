@@ -15,6 +15,7 @@ data class ComposerUiState(
     val writable: Boolean = false, val online: Boolean = false, val sending: Boolean = false,
     val uploading: Boolean = false, val error: String = "", val submissions: List<LocalSubmission> = emptyList(),
     val definitions: List<SlashDefinition> = SlashCommands.static, val parameters: AgentParameters? = null,
+    val editorCommand: EditorCommand = EditorCommand(),
 ) {
     val targetAgent: ComposerActor? get() = delivery.recipients.filter { it.kind == "agent" }.singleOrNull()
     val canSend get() = writable && !sending && !uploading && (draft.text.isNotBlank() || draft.attachments.isNotEmpty()) && (draft.text.trim().startsWith('/') && !draft.text.trim().startsWith("//") || delivery.valid)
@@ -64,7 +65,10 @@ class ComposerViewModel(
         if (previous.channelId.isNotEmpty()) drafts[previous.channelId] = previous.draft
         this.agentFilter = agentFilter.toSet(); this.recentAgentId = recentAgentId
         mutable.value = previous.copy(channelId = channelId, selfId = selfId, roster = roster.toList(), writable = writable, sending = if (previous.channelId == channelId) previous.sending else false, error = "", submissions = submissions.value.filter { it.channelId == channelId })
-        rebuild(drafts[channelId] ?: ComposerDraft()); probeAgents(); refreshTarget()
+        val draft = drafts[channelId] ?: ComposerDraft()
+        rebuild(draft)
+        if (previous.channelId != channelId) commandEditor(draft.text)
+        probeAgents(); refreshTarget()
     }
     /** Host validates all restored channels from current membership/access facts. */
     fun setChannelWritable(channelId: String, writable: Boolean) {
@@ -73,10 +77,19 @@ class ComposerViewModel(
         scope.launch { try { engine.refresh() } catch (error: Exception) { report(error) } }
     }
     fun updateText(text: String) { changed(mutable.value.draft.copy(text = text), persist = false) }
+    /** Echo from the native writer; never reset its text, selection or composing spans. */
+    fun onEditorText(text: String) { changed(mutable.value.draft.copy(text = text), persist = false, external = false) }
+    fun replaceEditorText(text: String, selectionStart: Int = text.length, selectionEnd: Int = selectionStart) {
+        changed(mutable.value.draft.copy(text = text), persist = false, external = false)
+        commandEditor(text, selectionStart, selectionEnd)
+    }
+    private fun commandEditor(text: String, start: Int = text.length, end: Int = start) {
+        mutable.value = mutable.value.copy(editorCommand = EditorCommand(mutable.value.editorCommand.version + 1, text, start, end))
+    }
     fun addMention(actor: ComposerActor, query: MentionQuery? = null) {
         val draft = mutable.value.draft
         changed(draft.copy(text = if (query != null) draft.text.removeRange(query.start.coerceAtMost(draft.text.length), query.end.coerceAtMost(draft.text.length)) else draft.text,
-            recipients = (draft.recipients + actor).distinctBy { it.id }))
+            recipients = (draft.recipients + actor).distinctBy { it.id }), selection = query?.start)
         refreshTarget()
     }
     fun removeMention(id: String) { changed(mutable.value.draft.copy(recipients = mutable.value.draft.recipients.filter { it.id != id })); refreshTarget() }
@@ -85,10 +98,12 @@ class ComposerViewModel(
     fun addAttachments(files: List<ComposerAttachment>) { if (files.any { it.channelId != mutable.value.channelId }) { mutable.value = mutable.value.copy(error = "文件属于另一个频道"); return }; changed(mutable.value.draft.copy(attachments = (mutable.value.draft.attachments + files).distinctBy { it.resourceId })) }
     fun removeAttachment(id: String) { changed(mutable.value.draft.copy(attachments = mutable.value.draft.attachments.filter { it.resourceId != id })) }
     fun clearError() { mutable.value = mutable.value.copy(error = "") }
-    private fun changed(draft: ComposerDraft, persist: Boolean = true) {
+    private fun changed(draft: ComposerDraft, persist: Boolean = true, external: Boolean = true, selection: Int? = null) {
         val channel = mutable.value.channelId
         if (draft == mutable.value.draft) return
+        val textChanged = draft.text != mutable.value.draft.text
         modifiedDrafts.add(channel); drafts[channel] = draft; rebuild(draft)
+        if (external && textChanged) commandEditor(draft.text, selection ?: draft.text.length)
         if (persist && channel.isNotEmpty()) scope.launch { try { draftWrites.withLock { outbox.putDraft(channel, draft) } } catch (error: Exception) { report(error) } }
     }
     private fun rebuild(draft: ComposerDraft) {
@@ -112,13 +127,33 @@ class ComposerViewModel(
                 }
                 val frames = if (command is ParsedCommand.Command) listOf(SlashCommands.frame(current.channelId, UUID.randomUUID().toString(), command, draft, current.targetAgent, current.online, manifests["${current.channelId}\u0000${current.targetAgent?.id.orEmpty()}"])) else
                     ComposerDelivery.messageFrames(current.channelId, draft, current.delivery, { UUID.randomUUID().toString() }, now() + 24 * 60 * 60 * 1000)
-                val accepted = frames.map { frame -> LocalSubmission(frame.text("id"), current.channelId, frame, (frame["payload"] as? JsonObject)?.text("text").orEmpty(), current.delivery.label, createdAt = now()) }
+                val accepted = frames.map { frame -> prepareSubmission(frame, (frame["payload"] as? JsonObject)?.text("text").orEmpty(), current.delivery.label) }
                 engine.accept(accepted)
                 if (mutable.value.channelId == current.channelId && mutable.value.draft == current.draft) changed(ComposerDraft(manualAgentId = draft.manualAgentId))
                 if (current.delivery.recipients.size == 1 && current.targetAgent != null) recentAgentId = current.targetAgent!!.id
             } catch (error: Exception) { if (mutable.value.channelId == current.channelId) report(error) }
             finally { if (mutable.value.channelId == current.channelId) mutable.value = mutable.value.copy(sending = false) }
         }
+    }
+    /** Tasks and other request UIs use the same durable journal, without touching the draft. */
+    suspend fun submitFrame(frame: JsonObject, text: String, targetLabel: String): String {
+        val submission = prepareSubmission(frame, text, targetLabel)
+        engine.accept(listOf(submission))
+        return submission.messageId
+    }
+    private fun prepareSubmission(frame: JsonObject, text: String, targetLabel: String): LocalSubmission {
+        val channel = frame.text("channel_id")
+        if (channel.isEmpty() || writeAccess.value[channel] != true) throw ComposerFailure("composer_channel_readonly", "当前频道不可写")
+        val attached = wire.state.value as? WireState.Attached
+        if (serverBoot.isNotEmpty() && attached != null && attached.receipt.text("boot") != serverBoot) throw ComposerFailure("composer_world_changed", "节点已重置，请重新打开频道")
+        require(frame.text("kind") == "request" && frame.text("msg_type").isNotEmpty()) { "提交必须是带类型的请求" }
+        val created = now()
+        val expires = if ("expires_at_ms" in frame) (frame["expires_at_ms"] as? JsonPrimitive)?.longOrNull
+            ?: throw ComposerFailure("composer_expiry_invalid", "请求过期时间无效") else created + 24 * 60 * 60 * 1000
+        if (expires <= created) throw ComposerFailure("composer_expired", "请求已过期")
+        val id = frame.text("id").ifEmpty { UUID.randomUUID().toString() }
+        val normalized = JsonObject(frame + ("id" to JsonPrimitive(id)) + ("expires_at_ms" to JsonPrimitive(expires)))
+        return LocalSubmission(id, channel, normalized, text, targetLabel, createdAt = created)
     }
     fun retry(id: String) { scope.launch { try { engine.retry(id) } catch (error: Exception) { report(error) } } }
     fun cancel(id: String) { scope.launch { try { engine.cancel(id) } catch (error: Exception) { report(error) } } }

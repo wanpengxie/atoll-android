@@ -26,6 +26,8 @@ fun ContentGallery(page: String, onBack: () -> Unit) {
                 "math" -> item { Markdown("demo-math", ContentDemoData.math) }
                 "mermaid" -> {
                     item { Markdown("demo-mermaid", "```mermaid\nflowchart LR\n A[本地缓存] --> B[后台同步]\n B --> C[频道时间线]\n```") }
+                    item { Markdown("demo-mermaid-second", "```mermaid\nflowchart LR\n A[请求] --> B[进度]\n B --> C[回复]\n```") }
+                    item { Markdown("demo-mermaid-tall", "```mermaid\nflowchart TD\n" + (1..12).joinToString("\n") { " N$it[阶段 $it] --> N${it + 1}[阶段 ${it + 1}]" } + "\n```") }
                     item { Markdown("demo-invalid-mermaid", "```mermaid\nthis is not a valid diagram !!!\n```") }
                 }
                 "code" -> item { Markdown("demo-code", ContentDemoData.code) }
@@ -46,7 +48,7 @@ fun ContentGallery(page: String, onBack: () -> Unit) {
                 else -> {
                     item { ProgressTrail(ContentDemoData.trail, {}) }
                     item { SubTaskTree(ContentDemoData.subtasks, onOpen = {}) }
-                    item { Markdown("demo-combined", ContentDemoData.code + "\n\n" + ContentDemoData.math) }
+                    item { Markdown("demo-combined", ContentDemoData.code + "\n\n" + ContentDemoData.math + "\n\n```mermaid\nflowchart LR\n A[公式与图表] --> B[共享运行时]\n```") }
                 }
             }
         }
@@ -80,6 +82,6 @@ object ContentDemoData {
     )
     val stars = listOf(StarredMessageViewState("m1", "root", "10/13 16:40", "开发完整的原生客户端。"), StarredMessageViewState("missing", "claude", "10/12 14:12", "历史记录尚未加载。"))
     val code = "```kotlin\npackage dev.atoll.app\n\n// 主线程只负责显示\nfun greet(name: String): String {\n    val attempts = 3\n    return \"Hello, \" + name\n}\n```"
-    val math = "行内公式：\\(E = mc^2\\)，以及 $" + "x^2 + y^2$。\n\n\\[\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^{\\infty} e^{-x^2/2} dx = 1\\]\n\n$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}$$"
+    val math = "行内公式：\\(E = mc^2\\)，以及 $" + "x^2 + y^2$。\n\n\\[\\frac{1}{\\sqrt{2\\pi}}\\int_{-\\infty}^{\\infty} e^{-x^2/2} dx = 1\\]\n\n$$\\sum_{n=1}^{\\infty} \\frac{1}{n^2} = \\frac{\\pi^2}{6}$$\n\n行内分式：\\(\\frac{a+b}{\\sqrt{c}}\\)，跟随公式的实际高度。"
     val longText = (1..32).joinToString("\n") { "第 $it 行：所有内容在后台准备，时间线按消息缓存。" }
 }

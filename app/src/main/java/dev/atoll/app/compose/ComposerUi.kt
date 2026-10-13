@@ -37,13 +37,14 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var focused by remember { mutableStateOf(false) }
-    var editor by remember(state.channelId) { mutableStateOf(TextFieldValue(state.draft.text)) }
+    var editor by remember(viewModel, state.channelId) { mutableStateOf(TextFieldValue(state.draft.text)) }
     var dismissed by remember(state.channelId) { mutableStateOf(false) }
     var active by remember(state.channelId) { mutableIntStateOf(0) }
     var showSelector by remember { mutableStateOf(false) }
     var dragging by remember { mutableStateOf(false) }
-    LaunchedEffect(state.draft.text, state.channelId) {
-        if (editor.text != state.draft.text) editor = TextFieldValue(state.draft.text, TextRange(state.draft.text.length))
+    LaunchedEffect(state.editorCommand, state.channelId) {
+        val command = state.editorCommand
+        editor = TextFieldValue(command.text, TextRange(command.selectionStart.coerceIn(0, command.text.length), command.selectionEnd.coerceIn(0, command.text.length)))
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         scope.launch { viewModel.upload(uploadFiles(context, uris)) }
@@ -54,7 +55,10 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
     val slash = if (!dismissed) Regex("(?:^|\n)/([^\\s/]*)$").find(before)?.groupValues?.get(1) else null
     val commandRows = if (slash != null) state.definitions.filter { it.name.contains(slash, true) }.take(8) else emptyList()
     val count = mention?.candidates?.size?.takeIf { it > 0 } ?: commandRows.size
-    fun update(value: TextFieldValue) { editor = value; dismissed = false; active = 0; viewModel.updateText(value.text) }
+    fun update(value: TextFieldValue, external: Boolean = false) {
+        editor = value; dismissed = false; active = 0
+        if (external) viewModel.replaceEditorText(value.text, value.selection.start, value.selection.end) else viewModel.onEditorText(value.text)
+    }
     fun pick(index: Int) {
         val actor = mention?.candidates?.getOrNull(index)
         if (actor != null) {
@@ -63,13 +67,13 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
         } else commandRows.getOrNull(index)?.let { command ->
             val start = before.lastIndexOf('/')
             val next = editor.text.replaceRange(start, editor.selection.end, "/${command.name} ")
-            update(TextFieldValue(next, TextRange(start + command.name.length + 2)))
+            update(TextFieldValue(next, TextRange(start + command.name.length + 2)), external = true)
         }
         dismissed = false; active = 0
     }
     fun newline() {
         val next = editor.text.replaceRange(editor.selection.min, editor.selection.max, "\n")
-        update(TextFieldValue(next, TextRange(editor.selection.min + 1)))
+        update(TextFieldValue(next, TextRange(editor.selection.min + 1)), external = true)
     }
     Column(modifier.background(if (dragging) AtollColors.Selected else AtollColors.Input).padding(horizontal = 10.dp, vertical = 5.dp)) {
         if (dragging) Text("松开以上传到当前频道", color = AtollColors.Agent, fontSize = 12.sp)
@@ -110,8 +114,8 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
             }
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            NativeComposerEditor(editor, Modifier.weight(1f), state.writable, if (resting) 1 else 6,
-                onValue = ::update, onFocus = { focused = it }, onSend = { if (state.canSend) viewModel.send(editor.text) },
+            key(viewModel) { NativeComposerEditor(state.editorCommand, Modifier.weight(1f), state.writable, if (resting) 1 else 6,
+                onValue = { update(it) }, onFocus = { focused = it }, onSend = { if (state.canSend) viewModel.send(editor.text) },
                 onFiles = { uris -> scope.launch { viewModel.upload(uploadFiles(context, uris)) } }, onDrag = { dragging = it },
                 onKey = { key, shift, composing, repeated ->
                     if (key == "Enter" && repeated) true else when (ComposerEditor.key(key, shift, composing, editor.selection.collapsed && editor.selection.start == 0, state.draft.recipients.isNotEmpty(), state.draft.reply != null, count)) {
@@ -125,7 +129,7 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
                         EditorAction.PICK -> { pick(active % count); true }
                         else -> false
                     }
-                })
+                }) }
             IconButton(onClick = { viewModel.send(editor.text) }, enabled = state.canSend, modifier = Modifier.size(44.dp)) { if (state.sending) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp) else Icon(Icons.Outlined.ArrowUpward, "发送") }
         }
         if (!resting) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
