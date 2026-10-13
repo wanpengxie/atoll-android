@@ -48,6 +48,7 @@ import dev.atoll.app.ui.components.LocalMarkdownCache
 import dev.atoll.app.ui.components.MarkdownCache
 import dev.atoll.app.ui.components.RichContentHost
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
 import dev.atoll.app.compose.LocalSubmission
@@ -429,11 +430,29 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         val source = state.timelineSource
                         val detached = state.newerUnloaded
                         val panel by produceState<ProcessPanelViewState?>(null, target, source, detached) {
-                            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                                processPanelUpdates(target, source, detached).collect { value = it }
-                            }
+                            processPanelUpdates(target, source, detached)
+                                .flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
                         }
-                        panel?.let { ProcessPanel(it, graph::closeFocus) }
+                        panel?.let { presentation -> ProcessPanel(presentation, graph::closeFocus, actions = if (features == null) null else ({
+                            val control = remember(target) { processActionTarget(target) }
+                            val self = services?.selfIds?.get(state.route!!.channel).orEmpty()
+                            val message = remember(control, self, state.roster) { processActionMessage(control, self, state.roster) }
+                            val lost = remember(target, source, presentation.status) { processLostReason(target, source) }
+                            val taskSource = remember(control, state.route?.channel) { timelineTaskSource(state.route!!.channel, control) }
+                            TimelineMessageActions(message, control.envelope, control.turn, self, actionRoster,
+                                writable = state.conversation?.channel?.access?.let { composerWritable(it, self) } == true,
+                                online = state.navigation.connection == ConnectionPhase.OPEN, newerUnloaded = detached,
+                                safeEditActors = waitingState?.safeEditActors.orEmpty().takeIf { lost.isEmpty() }.orEmpty(),
+                                editingTargetId = waitingState?.edit?.session?.targetId.orEmpty(),
+                                onReply = { graph.closeFocus(); features.composer.setReply(it) },
+                                onEdit = { graph.closeFocus(); waiting?.requestEdit(it) },
+                                onCreateTask = if (taskState?.creationReady == true && tasks != null && taskSource != null)
+                                    ({ _, _ -> graph.closeFocus(); tasks.beginCreation(taskSource) }) else null,
+                                onStop = waiting?.takeIf { lost.isEmpty() }?.let { owner -> { id -> owner.stop(id) } },
+                                busyActors = waitingState?.busyActors.orEmpty(),
+                                starred = starredState.isStarred(state.route!!.channel, control.envelope.id),
+                                onToggleStar = stars?.let { it::toggle }, content = {})
+                        })) }
                     } else ContentPanel("过程", graph::closeFocus) {
                         Text("目标消息尚未加载，请加载更早历史后重试。", Modifier.padding(16.dp))
                         TextButton(graph::older, enabled = state.conversation?.hasOlder == true && state.conversation?.loadingOlder != true) { Text("加载更早") }
