@@ -8,7 +8,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.screens.*
@@ -36,13 +39,15 @@ fun WeakNotice(text: String) {
 fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
     onAttachment: MessageAttachmentHandler? = null, onRelatedCall: ((String) -> Unit)? = null, onMore: () -> Unit = {}) {
     if (message.self) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 10.dp), horizontalAlignment = Alignment.End) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.fillMaxWidth().padding(start = 7.dp, end = 7.dp,
+            top = if (message.continuation) 4.dp else 10.dp, bottom = if (message.continuation) 8.dp else 10.dp),
+            horizontalAlignment = Alignment.End) {
+            if (!message.continuation) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(message.sender, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 Text(message.time, fontSize = 10.sp, color = AtollColors.Muted)
                 message.recipient?.let { Text("发送给 $it", fontSize = 10.sp, color = AtollColors.Muted) }
             }
-            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+            Row(Modifier.padding(top = if (message.continuation) 0.dp else 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
                 Spacer(Modifier.weight(.1f))
                 Surface(Modifier.weight(.9f), shape = RoundedCornerShape(12.dp), color = AtollColors.MutedSurface,
                     border = BorderStroke(1.dp, AtollColors.ControlLine)) {
@@ -50,15 +55,17 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                         MessageContent(message, onLink, onAttachment, onRelatedCall, onMore)
                     }
                 }
-                Box(Modifier.size(30.dp).background(AtollColors.Selected, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                if (message.continuation) ContinuationTime(message) else Box(Modifier.size(30.dp).background(AtollColors.Selected, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                     Text(message.sender.take(1).uppercase(), fontSize = 12.sp, color = AtollColors.Muted)
                 }
             }
         }
         return
     }
-    Row(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = if (message.continuation) 2.dp else 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        if (message.continuation) Spacer(Modifier.width(30.dp)) else {
+    Row(Modifier.fillMaxWidth().padding(start = 7.dp, end = 7.dp,
+        top = if (message.continuation) 4.dp else 10.dp, bottom = if (message.continuation) 8.dp else 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (message.continuation) ContinuationTime(message) else {
             Box(Modifier.size(30.dp).background((if (message.agent) AtollColors.Agent else AtollColors.Accent).copy(alpha = .09f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                 Text(if (message.agent) "✦" else message.sender.take(1).uppercase(), color = if (message.agent) AtollColors.Agent else AtollColors.Accent, fontSize = 15.sp)
             }
@@ -74,6 +81,14 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
             MessageContent(message, onLink, onAttachment, onRelatedCall, onMore)
         }
     }
+}
+
+/** Like the web avatar-slot timestamp; touch screens can read it without a hover gesture. */
+@Composable
+private fun ContinuationTime(message: MessageViewState) {
+    Text(message.time, Modifier.width(30.dp).padding(top = 2.dp).semantics {
+        contentDescription = "${message.sender}，${message.time}"
+    }, fontSize = 8.sp, lineHeight = 12.sp, maxLines = 1, color = AtollColors.Muted, textAlign = TextAlign.End)
 }
 
 /** Both directions render the same content; only the surrounding bubble changes. */
