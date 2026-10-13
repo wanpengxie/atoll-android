@@ -16,6 +16,12 @@ class UiFormsTest {
         val initial=initialFormValues(form.fields,obj("""{"name":"pre","mode":"1","enabled":true,"settings":{"a":1}}"""))
         assertEquals(JsonPrimitive("\"1\""),initial["mode"]);assertEquals(JsonPrimitive(true),initial["enabled"]);assertEquals(JsonPrimitive("{\"a\":1}"),initial["settings"])
     }
+    @Test fun secretInitialValueNeverUsesPrefillOrSchemaDefault() {
+        val fields=schemaFields(obj("""{"properties":{"key":{"type":"string","default":"old-dummy"},"name":{"type":"string","default":"Name"}}}"""),setOf("key"))
+        assertEquals(JsonPrimitive(""),initialFormValues(fields,obj("""{"key":"prefilled-dummy"}"""))["key"])
+        assertEquals(JsonPrimitive(""),initialFormValues(fields)["key"])
+        assertEquals(JsonPrimitive("Name"),initialFormValues(fields)["name"])
+    }
     @Test fun validationRestoresNumbersBooleansJsonAndPreservesSecretWhitespace() {
         val form=form();val validation=validateFormValues(form.fields,mapOf("name" to JsonPrimitive(" name "),"count" to JsonPrimitive("3"),"mode" to JsonPrimitive("1"),"enabled" to JsonPrimitive(false),"settings" to JsonPrimitive("{\"a\":1}"),"key" to JsonPrimitive(" secret ")))
         assertTrue(validation.valid);assertEquals(JsonPrimitive("name"),validation.values["name"]);assertEquals(JsonPrimitive(3),validation.values["count"])

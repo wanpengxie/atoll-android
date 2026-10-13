@@ -14,7 +14,7 @@ class UiFormControllerTest {
         put("id",id);put("channel_id","c");put("kind","request");put("type","ui.form");put("audience",JsonArray(listOf(JsonPrimitive("me"))));put("sender",buildJsonObject { put("id","agent") })
         put("payload",buildJsonObject { put("body",obj("""{"session":"$session","schema":{"properties":{"name":{"type":"string"},"key":{"type":"string"}}},"secret":{"key":"global/test"}}""")) })
     })
-    @Test fun sessionAddressingQueuesOnceReadsExistingSecretAndWritesBeforeMaskedResolve()=runBlocking<Unit> {
+    @Test fun sessionAddressingChecksExistenceWithoutReadingSecretAndWritesBeforeMaskedResolve()=runBlocking<Unit> {
         newSingleThreadContext("form-test").use { dispatcher -> withContext(dispatcher) {
             val wire=TaskTestWire();wire.handle={ type,payload ->
                 if (type==Up.RESOURCE) when (payload.text("op")) { "read" -> obj("""{"value":"old-dummy"}""");"stat" -> obj("""{"exists":true}""");else -> obj("{}") } else obj("{}")
@@ -25,10 +25,10 @@ class UiFormControllerTest {
                 assertTrue(controller.state.value.forms.isEmpty())
                 val envelope=request();wire.frames.emit(DownFrame.Feed("",Row("c",2,envelope)));wire.frames.emit(DownFrame.Feed("",Row("c",2,envelope)))
                 withTimeout(5000) { controller.state.first { it.existing["key"]?.exists==true } }
-                assertEquals(1,controller.state.value.forms.size);assertEquals("old-dummy",controller.state.value.existing["key"]!!.value)
+                assertEquals(1,controller.state.value.forms.size);assertFalse(controller.state.value.toString().contains("old-dummy"))
                 controller.submit(controller.state.value.current!!,obj("""{"name":"Name","key":"new-dummy-1234"}"""))
                 assertTrue(controller.state.value.forms.isEmpty())
-                assertEquals(listOf("read","stat","write"),wire.requests.filter { it.first==Up.RESOURCE }.map { it.second.text("op") })
+                assertEquals(listOf("stat","stat","write"),wire.requests.filter { it.first==Up.RESOURCE }.map { it.second.text("op") })
                 val resolved=wire.requests.last().second
                 assertEquals(Up.RESOLVE,wire.requests.last().first);assertFalse(resolved.toString().contains("new-dummy-1234"));assertEquals("****1234",resolved.objectAt("result").objectAt("secret").objectAt("key").text("masked"))
             } finally { controller.close() }
