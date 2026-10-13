@@ -86,6 +86,7 @@ class AppGraph(private val context: Context) {
     private var notice: String? = null
     private var upgrade: NodeUpdateValue? = null
     private var exporting = false
+    private val networkMonitor = NetworkRecoveryMonitor(context) { post(NetworkAvailable) }
 
     init {
         telemetry.event("app.boot")
@@ -244,6 +245,10 @@ class AppGraph(private val context: Context) {
                 foreground = event.value
                 controllers[route?.channel]?.foreground(event.value)
                 if (resumed) runtime?.wire?.reconnectNow()
+            }
+            NetworkAvailable -> if (mutableState.value.phase == WorkspacePhase.Workspace) {
+                telemetry.event("wire.network_available")
+                runtime?.wire?.reconnectNow()
             }
             Logout -> {
                 val old = runtime
@@ -643,6 +648,7 @@ class AppGraph(private val context: Context) {
     private data object Older : Event
     private data object Jump : Event
     private data class Foreground(val value: Boolean) : Event
+    private data object NetworkAvailable : Event
     private data object Logout : Event
     private data class LoggedOut(val epoch: Long, val failure: String?) : Event
     private data class Expired(val epoch: Long) : Event
