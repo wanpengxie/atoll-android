@@ -596,8 +596,8 @@ class AppGraph(private val context: Context) {
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true,
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
-            activityInputs = channels.filter { it.id in memberships }.map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
-            activityRuns = channelStates.filterKeys { it in memberships }.values.flatMap { it.agentRuns },
+            activityInputs = visibleActivityChannels(channels,memberships.keys).map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
+            activityRuns = visibleActivityChannels(channels,memberships.keys).flatMap { channelStates[it.id]?.agentRuns.orEmpty() },
             rosterCurrent = (rt.gate.state.value as? WireState.Attached)?.generation?.let { rosterGenerations[route?.channel] == it } == true)
     }
 
