@@ -36,7 +36,7 @@ class WorkspaceMappingContentTest {
         val failed=answer("""{"status":"failed","error_code":"receiver_unavailable","reason":"dead","detail":"process exited","data":{"request":"q"},"closed_by":"system"}""")
         assertEquals("",failed.text);assertEquals("receiver_unavailable",failed.result!!.errorCode)
         assertEquals("process exited",failed.result!!.detail);assertEquals(json("""{"data":{"request":"q"}}"""),failed.result!!.errorData)
-        assertEquals("cancelled",answer("""{"status":"failed","cancelled":true,"reason":"interrupted"}""").result!!.errorCode)
+        assertEquals("cancelled",answer("""{"status":"failed","cancelled":true,"reason":"cancelled"}""").result!!.errorCode)
     }
     @Test fun emptyTextAndBareAcknowledgementsStayDistinctFromReadableContentBlocks() {
         assertTrue(answer("""{"status":"completed","text":""}""").result!!.emptyText)
@@ -44,4 +44,53 @@ class WorkspaceMappingContentTest {
         val content=answer("""{"status":"completed","content":[{"type":"text","text":"hello"},{"type":"resource_link","uri":"file:test","name":"test"}]}""")
         assertEquals("hello",content.text);assertNull(content.result)
     }
+    @Test fun completedTurnsKeepStreamingTextAndRemoveOnlyTheFinalEcho() {
+        fun stage(seq: Long,text: String)=row(seq,"p$seq","response",buildJsonObject { put("status","processing");put("process",buildJsonObject { put("kind","stage");put("stage","text");put("text",text) }) },parent="q")
+        val request=row(1,"q","request",json("""{"text":"question"}"""))
+        val result=mapped(request,stage(2,"First explanation"),stage(3,"Final…[truncated]"),
+            row(4,"a","response",json("""{"status":"completed","text":"Final answer"}"""),parent="q")).last()
+        assertEquals("First explanation\n\nFinal answer",result.text)
+        assertNull(result.status)
+    }
+    @Test fun supersededEmptyAnswersDisappearButProducedStreamingTextSurvives() {
+        for (field in listOf("merged_into","preempted_by")) {
+            val request=row(1,"q","request",json("""{"text":"question"}"""))
+            val terminal=row(3,"a","response",buildJsonObject { put("status","completed");put(field,"successor") },parent="q")
+            assertEquals(1,mapped(request,terminal).size)
+            val stage=row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"keep this"}}"""),parent="q")
+            val answer=mapped(request,stage,terminal).last()
+            assertEquals("keep this",answer.text);assertNull(answer.result);assertNull(answer.status)
+        }
+    }
+    @Test fun interruptedTurnKeepsAlreadyProducedTextWithoutAnErrorAckBubble() {
+        val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"partial answer"}}"""),parent="q"),
+            row(3,"a","response",json("""{"status":"failed","reason":"interrupted"}"""),parent="q")).last()
+        assertEquals("partial answer\n\n✗ 已停止 · 发消息即继续",answer.text);assertNull(answer.result)
+    }
+
+    @Test fun newestTurnDoesNotFoldAndAppendReusesOlderMappedResults() {
+        val replica=ChannelReplica("c","human:self")
+        fun pair(start: Long,id: String)=listOf(row(start,id,"request",json("""{"text":"question"}""")),
+            row(start+1,"a$id","response",json("""{"status":"completed","text":"answer"}"""),parent=id))
+        replica.apply(RowBatch("c",pair(1,"one")+pair(3,"two"),Origin.LIVE))
+        val mapper=TimelineMapper();val options=TimelineOptions(scope=ConversationScope.ALL,selfId="human:self")
+        fun project()=mapper.map(replica.timeline(options),"human:self",emptyList()).filterIsInstance<UiEntry.Message>().map { it.value }
+        val first=project();assertEquals(listOf(false,false,true,true),first.map { it.latest })
+        replica.apply(RowBatch("c",pair(5,"three"),Origin.LIVE));val next=project()
+        assertSame(first.first(),next.first());assertSame(first[1],next[1])
+        assertEquals(listOf(false,false,false,false,true,true),next.map { it.latest })
+        assertSame(next.first(),project().first())
+    }
+    @Test fun cacheTracksHistoryAvailabilityAndEffectiveSelfIdentity() {
+        val replica=ChannelReplica("c","human:self")
+        replica.apply(RowBatch("c",listOf(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"thinking"}}"""),parent="q")),Origin.LIVE))
+        val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self"))
+        val mapper=TimelineMapper()
+        assertTrue(mapper.map(snapshot,"human:self",emptyList()).filterIsInstance<UiEntry.Message>().any { it.value.status!=null })
+        assertTrue(mapper.map(snapshot,"human:self",emptyList(),true).filterIsInstance<UiEntry.Message>().all { it.value.status==null })
+        assertFalse(mapper.map(snapshot,"someone-else",emptyList()).filterIsInstance<UiEntry.Message>().first().value.self)
+    }
+
 }

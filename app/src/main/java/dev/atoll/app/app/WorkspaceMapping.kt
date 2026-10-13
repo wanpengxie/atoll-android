@@ -42,22 +42,26 @@ fun sortedChannels(records: Collection<ChannelRecord>): List<Pair<ChannelRecord,
 
 class TimelineMapper {
     private val clock = DateTimeFormatter.ofPattern("HH:mm")
-    private data class Cached(val revision: String, val continuation: Boolean, val value: List<UiEntry>)
+    private data class Cached(val revision: String, val continuation: Boolean, val newerUnloaded: Boolean, val latest: Boolean, val value: List<UiEntry>)
     private val cache = mutableMapOf<String, Cached>()
-    private var rosterKey: Int = 0
+    private var roster = emptyList<ActorRecord>()
+    private var selfKey = ""
 
     fun map(snapshot: TimelineSnapshot, selfId: String, actors: List<ActorRecord>, newerUnloaded: Boolean = false): List<UiEntry> {
         val names = actors.associate { it.id to it.name }
-        if (actors.hashCode() != rosterKey) { cache.clear(); rosterKey = actors.hashCode() }
+        if (actors != roster || selfKey != selfId) { cache.clear(); roster = actors.toList(); selfKey = selfId }
         val entries = mutableListOf<UiEntry>()
         var day = ""
         val retained = mutableSetOf<String>()
         for (item in snapshot.items) {
             if (item.dayKey.isNotEmpty() && item.dayKey != day) { day = item.dayKey; entries += UiEntry.Day("day:$day:${item.key}", day) }
             retained += item.key
+            val latest = item.entry.id == snapshot.currentEntryCandidate?.id
             val previous = cache[item.key]
-            val value = if (previous?.revision == item.contentRevision && previous.continuation == item.continuation) previous.value
-            else render(item, selfId, names, newerUnloaded).also { cache[item.key] = Cached(item.contentRevision, item.continuation, it) }
+            val value = if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest) previous.value
+            else render(item, selfId, names, newerUnloaded).map { entry ->
+                if (entry is UiEntry.Message) UiEntry.Message(entry.value.copy(latest=latest)) else entry
+            }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, it) }
             entries += value
         }
         cache.keys.retainAll(retained)
@@ -81,20 +85,35 @@ class TimelineMapper {
             }
             message(turn.request, "$key:request", continuation = continuation)
             val terminal = turn.terminal
+            val streamed = turn.provisional.mapNotNull { row ->
+                (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
+                    ?.get("text").string().takeIf(String::isNotBlank)
+            }
+            val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
             if (terminal != null) {
-                val answer = if (turn.terminalClosureOnly) MappedResult("终态详情不可用，请刷新或重新进入频道") else terminalResult(terminal, turn.request.type)
-                message(terminal, "$key:answer", answer.text, if (terminal.status == "failed") MessageStatus.Failed else null, resultState = answer.result)
+                val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
+                val answer = when {
+                    turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
+                    interrupted -> MappedResult("✗ 已停止 · 发消息即继续")
+                    superseded -> MappedResult()
+                    else -> terminalResult(terminal, turn.request.type)
+                }
+                val finalText = terminal.body["text"].string().trim()
+                val tail = streamed.lastOrNull()?.trim()?.removeSuffix("…[truncated]").orEmpty()
+                val visible = if (!superseded && !interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
+                val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
+                if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
+                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 if (latest != null) {
-                    val textStages = turn.provisional.mapNotNull { (it.envelope.body["process"] as? JsonObject)?.takeIf { p -> p["kind"].string() == "stage" && p["stage"].string() == "text" }?.get("text").string().takeIf(String::isNotBlank) }
                     val process = latest.body["process"] as? JsonObject
-                    message(latest, "$key:answer", textStages.joinToString("\n\n"),
+                    message(latest, "$key:answer", streamed.joinToString("\n\n"),
                         if (turn.latestCoreStatus == "processing") MessageStatus.Processing else MessageStatus.Queued,
                         process?.get("text").string().takeIf { it.isNotBlank() } ?: process?.get("stage").string().takeIf { it.isNotBlank() })
                 }
             }
-            entry.thread.forEach { turn(it, "$key:${it.id}", false) }
+            if (!superseded) entry.thread.forEach { turn(it, "$key:${it.id}", false) }
         }
         turn(item.entry, item.key, item.continuation)
         return result
