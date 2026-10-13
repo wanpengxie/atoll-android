@@ -82,6 +82,10 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    // Composition tracing for the benchmark build only (perfetto); never in release.
+    "benchmarkImplementation"("androidx.compose.runtime:runtime-tracing")
+    "benchmarkImplementation"("androidx.tracing:tracing-perfetto:1.0.0")
+    "benchmarkImplementation"("androidx.tracing:tracing-perfetto-binary:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
