@@ -16,7 +16,8 @@ import dev.atoll.app.ui.theme.AtollColors
 
 @Composable
 fun StatusChip(status: MessageStatus) {
-    val color = when (status) { MessageStatus.Processing -> AtollColors.Agent; MessageStatus.Queued -> AtollColors.Warning; MessageStatus.Failed -> AtollColors.Accent }
+    val color = when (status) { MessageStatus.Processing -> AtollColors.Agent; MessageStatus.Queued -> AtollColors.Warning;
+        MessageStatus.Failed -> AtollColors.Accent; MessageStatus.Completed -> AtollColors.Online }
     Text(status.label, Modifier.background(color.copy(alpha = .08f), RoundedCornerShape(4.dp)).padding(horizontal = 6.dp, vertical = 3.dp), color = color, fontSize = 11.sp)
 }
 @Composable

@@ -16,13 +16,18 @@ data class MessageAttachmentViewState(val resourceId: String, val name: String, 
     val size: Long? = null, val uri: String = "")
 enum class MessageAttachmentAction { Preview, Download }
 typealias MessageAttachmentHandler = (MessageAttachmentViewState, MessageAttachmentAction) -> Unit
-enum class MessageStatus(val label: String) { Processing("处理中"), Queued("排队中"), Failed("失败") }
+enum class MessageStatus(val label: String) { Processing("处理中"), Queued("排队中"), Failed("失败"), Completed("已完成") }
+@Immutable
+data class RelatedCallViewState(val id: String, val title: String, val sender: String, val recipients: List<String>,
+    val time: String, val status: MessageStatus, val depth: Int = 1, val text: String = "",
+    val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null,
+    val attachments: List<MessageAttachmentViewState> = emptyList(), val conversation: Boolean = false)
 @Immutable
 data class MessageViewState(val id: String, val sender: String, val text: String, val time: String,
     val agent: Boolean = false, val self: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
     val progress: String? = null, val recipient: String? = null, val latest: Boolean = false,
     val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null, val subTasks: List<SubTaskViewState> = emptyList(),
-    val attachments: List<MessageAttachmentViewState> = emptyList())
+    val attachments: List<MessageAttachmentViewState> = emptyList(), val relatedCalls: List<RelatedCallViewState> = emptyList())
 sealed interface TimelineEntry {
     val key: String
     data class Message(val value: MessageViewState) : TimelineEntry { override val key get() = value.id }
