@@ -4,6 +4,9 @@ import dev.atoll.app.core.*
 import dev.atoll.app.store.*
 import dev.atoll.app.sync.SyncHub
 import dev.atoll.app.ui.screens.TimelineEntry
+import dev.atoll.app.compose.LocalSubmission
+import dev.atoll.app.compose.localEnvelope
+import dev.atoll.app.compose.localTimelineEntry
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
@@ -83,6 +86,35 @@ class ChannelControllerTest {
             fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
             fixture.await { it.conversation != null }
             assertEquals(6L, fixture.store.channel("c").meta.readPosition)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun localEchoesAreViewOnlyAndTheCanonicalRowTakesOverWithoutDuplicatingOrMarkingThemRead() = runBlocking {
+        val fixture = Fixture(head = 1, rows = listOf(row(1)))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            fixture.await { it.conversation != null }
+            val submission = LocalSubmission("local:opaque", "c", buildJsonObject {
+                put("kind", "request"); put("msg_type", "agent.ask")
+                put("audience", buildJsonArray { add("agent:a") })
+                put("payload", buildJsonObject { put("text", "local message") })
+            }, "local message", "agent:a", createdAt = 1)
+            fixture.controller.localPlacement(listOf(submission.localTimelineEntry("human:self")), setOf(submission.messageId))
+            val projected = fixture.await { it.timeline?.items?.any { item -> item.entry.id == submission.messageId && item.entry.local } == true }
+            assertEquals(1, projected.timelineSource!!.rows.size)
+            assertEquals(1, fixture.memory.rows("c").size)
+            fixture.controller.visibleRows(setOf("${submission.messageId}:request"))
+            fixture.controller.localPlacement(emptyList(), emptySet())
+            fixture.await { it.timeline?.items?.none { item -> item.entry.id == submission.messageId } == true }
+            assertEquals(0L, fixture.memory.channel("c").meta.readPosition)
+            fixture.controller.localPlacement(listOf(submission.localTimelineEntry("human:self")), setOf(submission.messageId))
+            val canonical = Row("c", 2, Envelope(JsonObject(submission.localEnvelope("human:self").json.filterKeys { it != "local_submission_state" })))
+            fixture.wire.frames.emit(DownFrame.Feed("", canonical, 1))
+            fixture.controller.receive(canonical)
+            val landed = fixture.await { state -> state.timelineSource?.rows?.size == 2 && state.timeline?.items?.any { it.entry.id == submission.messageId && !it.entry.local } == true }
+            assertEquals(1, landed.timeline!!.items.count { it.entry.id == submission.messageId })
+            fixture.controller.visibleRows(setOf("${submission.messageId}:request"))
+            withTimeout(10_000) { while (fixture.memory.channel("c").meta.readPosition != 2L) yield() }
         } finally { fixture.stop() }
     }
 

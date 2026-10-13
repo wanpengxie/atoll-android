@@ -54,6 +54,8 @@ class ChannelController(
     private var conversation: ConversationViewState? = null
     private var timeline: TimelineSnapshot? = null
     private var rowSequences = emptyMap<String, Long>()
+    private var localEchoes = emptyList<dev.atoll.app.model.TimelineEntry>()
+    private var timelinePlaced = emptySet<String>()
     private var timelineSource: TimelineSource? = null
     private var taskFacts: List<TaskFact> = emptyList()
     private var taskFactsDirty = true
@@ -106,12 +108,13 @@ class ChannelController(
     suspend fun loadOlder() { commands.send(LoadOlder) }
     suspend fun jumpToBottom() { commands.send(Jump) }
     suspend fun visibleRows(keys: Set<String>) { commands.send(VisibleRows(keys)) }
+    suspend fun localPlacement(echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { commands.send(LocalPlacement(echoes, placed)) }
     suspend fun stop() { job.cancelAndJoin() }
 
     private suspend fun handle(command: Command) {
         when (command) {
             is Open -> { record = command.record; loadTail() }
-            CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; timelineSource = null; firstOrigin = null }
+            CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; timelineSource = null; firstOrigin = null; rowSequences = emptyMap(); localEchoes = emptyList(); timelinePlaced = emptySet() }
             is Batch -> if (command.epoch == readerEpoch) apply(command.batch)
             is Sync -> {
                 if (syncState.generation != command.value.generation) activity.clear()
@@ -146,6 +149,10 @@ class ChannelController(
             is Follow -> { following = command.value }
             is Foreground -> { foreground = command.value }
             is VisibleRows -> markSeen(command.keys)
+            is LocalPlacement -> if (command.echoes != localEchoes || command.placed != timelinePlaced) {
+                localEchoes = command.echoes; timelinePlaced = command.placed
+                project()
+            }
             ChangeScope -> { options = options.copy(mineOnly = !options.mineOnly); preferences.saveOptions(namespace, id, options); project() }
             is Filter -> { options = options.copy(actorFilters = if (command.actor == null) emptySet() else
                 if (command.actor in options.actorFilters) options.actorFilters - command.actor else options.actorFilters + command.actor)
@@ -218,7 +225,8 @@ class ChannelController(
         timelineSource = model.snapshot()
         if (!newerUnloaded) updateActivityFacts(timelineSource!!)
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded))
+            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded,
+            localEchoes = if (newerUnloaded) emptyList() else localEchoes, timelinePlaced = timelinePlaced))
         timeline = snapshot
         rowSequences = timelineRowSequences(snapshot)
         val previous = conversation
@@ -292,6 +300,7 @@ class ChannelController(
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command
     private data object Jump : Command
     private data class VisibleRows(val keys: Set<String>) : Command
+    private data class LocalPlacement(val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Command
     private data object RefreshUnread : Command
     private data object ActivityExpiry : Command
 }
