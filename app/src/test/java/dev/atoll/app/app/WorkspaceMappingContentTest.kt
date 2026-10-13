@@ -23,6 +23,17 @@ class WorkspaceMappingContentTest {
         return TimelineMapper().map(replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self")),"human:self",emptyList())
             .filterIsInstance<UiEntry.Message>().map { it.value }
     }
+    @Test fun completionLabelsMatchWebTerminalAndInterruptionRules() {
+        val completed=dev.atoll.app.ui.screens.MessageStatus.Completed
+        assertEquals(completed,answer("""{"status":"completed","text":"Done"}""").status)
+        assertEquals(completed,answer("""{"status":"completed","value":{"count":1}}""").status)
+        assertEquals(completed,answer("""{"status":"completed"}""").status)
+        assertEquals(dev.atoll.app.ui.screens.MessageStatus.Failed,answer("""{"status":"failed","error_code":"receiver_unavailable"}""").status)
+        assertNull(answer("""{"status":"failed","reason":"interrupted"}""").status)
+        val pending=mapped(row(1,"q","request",json("""{"text":"Question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"Working"}}"""),parent="q")).last()
+        assertEquals(dev.atoll.app.ui.screens.MessageStatus.Processing,pending.status)
+    }
     @Test fun attachmentsCombineListedFilesAndResourceLinksWithoutDuplicateCards() {
         val body=json("""{"attachments":[{"resource_id":"daemon://d/c/a.pdf","name":"Chosen PDF","mime":"application/pdf","size":42}],"files":[{"id":"ignored"}],"content":[{"type":"resource_link","uri":"daemon://d/c/a.pdf","name":"duplicate"},{"type":"resource_link","uri":" oss://s/c/image.png ","mimeType":"image/png","size":-1},{"type":"resource_link","uri":"  "}]}""")
         val cards=messageAttachments(body)
@@ -96,7 +107,7 @@ class WorkspaceMappingContentTest {
         val result=mapped(request,stage(2,"First explanation"),stage(3,"Final…[truncated]"),
             row(4,"a","response",json("""{"status":"completed","text":"Final answer"}"""),parent="q")).last()
         assertEquals("First explanation\n\nFinal answer",result.text)
-        assertNull(result.status)
+        assertEquals(dev.atoll.app.ui.screens.MessageStatus.Completed,result.status)
     }
     @Test fun supersededEmptyAnswersDisappearButProducedStreamingTextSurvives() {
         for (field in listOf("merged_into","preempted_by")) {
@@ -105,7 +116,7 @@ class WorkspaceMappingContentTest {
             assertEquals(1,mapped(request,terminal).size)
             val stage=row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"keep this"}}"""),parent="q")
             val answer=mapped(request,stage,terminal).last()
-            assertEquals("keep this",answer.text);assertNull(answer.result);assertNull(answer.status)
+            assertEquals("keep this",answer.text);assertNull(answer.result);assertEquals(dev.atoll.app.ui.screens.MessageStatus.Completed,answer.status)
         }
     }
     @Test fun interruptedTurnKeepsAlreadyProducedTextWithoutAnErrorAckBubble() {
