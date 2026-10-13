@@ -11,7 +11,7 @@ class TimelinePresentation {
     private val excludedCurrent = setOf("human.ask", "human.approve", "agent.select", "agent.new", "agent.hold", "agent.hold_expired", "agent.unhold", "agent.interrupt", "agent.context", "agent.options", "agent.fork", "actor.describe", "storage.get_url")
 
     fun project(state: TimelineSource, options: TimelineOptions = TimelineOptions(), epoch: String = "", facts: ProjectionFacts? = null, changedEntries: List<TimelineEntry>? = null): TimelineSnapshot {
-        val nextView = listOf(state.channelId, options.scope, options.selfId, options.actorFilter.sorted(), options.showNarration, epoch).joinToString("\u0000")
+        val nextView = listOf(state.channelId, options.scope, options.selfId, options.actorFilter.sorted(), options.showNarration, options.newerUnloaded, epoch).joinToString("\u0000")
         val old = previous.takeIf { view == nextView }
         if (old != null && changedEntries != null && facts != null) {
             projectContent(state, options, facts, changedEntries, old)?.let { previous = it; return it }
@@ -78,6 +78,7 @@ class TimelinePresentation {
         return result
     }
     private fun projectContent(state: TimelineSource, options: TimelineOptions, facts: ProjectionFacts, changed: List<TimelineEntry>, old: TimelineSnapshot): TimelineSnapshot? {
+        if (options.newerUnloaded) return null
         var items: MutableList<PresentationItem>? = null
         val updated = mutableListOf<String>()
         val changedTurns = mutableMapOf<String, Turn>()
