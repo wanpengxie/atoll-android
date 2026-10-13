@@ -102,7 +102,11 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 } else message(envelope, "$key:message", continuation = continuation)
                 return
             }
-            message(turn.request, "$key:request", continuation = continuation)
+            val approval = turn.request.type in setOf("human.ask","human.approve") && self in turn.request.audience
+            val requestText = if(approval) listOf(turn.request.body["title"].string().ifEmpty { prose(turn.request.body) },
+                turn.request.body["detail"].string(),turn.request.body["impact"].string().takeIf(String::isNotEmpty)?.let { "影响：$it" }.orEmpty())
+                .filter(String::isNotBlank).joinToString("\n\n") else messageText(turn.request)
+            message(turn.request, "$key:request", text=requestText, continuation = continuation)
             val terminal = turn.terminal
             val ownedTasks = tasksByRequest[turn.requestId].orEmpty()
             val streamed = turn.provisional.mapNotNull { row ->
@@ -125,7 +129,8 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val finalText = terminal.body["text"].string().trim()
                 val tail = streamed.lastOrNull()?.trim()?.removeSuffix("…[truncated]").orEmpty()
                 val visible = if (!superseded && !interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
-                val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
+                val receipt = if(approval) "已回执 · 处理者："+(names[terminal.senderId] ?: terminal.senderId)+terminal.body["decision"].string().takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty() else ""
+                val text = (listOf(receipt) + visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
                     message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks)
             } else if (!newerUnloaded) {

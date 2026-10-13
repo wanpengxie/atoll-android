@@ -201,4 +201,20 @@ class WorkspaceMappingContentTest {
         assertEquals(dev.atoll.app.ui.screens.SubTaskPhase.Completed,message.subTasks.single().phase)
     }
 
+    @Test fun settledApprovalsShowTheResolverAndStructuredReceipt() {
+        val request=row(1,"q","request",json("""{"title":"Release","detail":"Review","impact":"Production"}"""),"human.approve",sender="agent:a")
+        val addressed=request.copy(envelope=Envelope(JsonObject(request.envelope.json+("audience" to buildJsonArray { add("human:self") }))))
+        val messages=mapped(addressed,row(2,"a","response",json("""{"status":"completed","decision":"approve","note":"Reviewed"}"""),"human.approve","q","human:self"))
+        assertEquals("Release\n\nReview\n\n影响：Production",messages.first().text)
+        assertEquals("已回执 · 处理者：human:self · approve",messages.last().text)
+        assertEquals(json("""{"decision":"approve","note":"Reviewed"}"""),messages.last().result!!.value)
+        assertTrue(messages.last().self)
+    }
+    @Test fun settledHumanAskKeepsTheTextAnswerAlongsideTheReceiptLabel() {
+        val request=row(1,"q","request",json("""{"text":"Question"}"""),"human.ask",sender="agent:a")
+        val addressed=request.copy(envelope=Envelope(JsonObject(request.envelope.json+("audience" to buildJsonArray { add("human:self") }))))
+        val answer=mapped(addressed,row(2,"a","response",json("""{"status":"completed","text":"Answer"}"""),"human.ask","q","human:self")).last()
+        assertEquals("已回执 · 处理者：human:self\n\nAnswer",answer.text);assertNull(answer.result)
+    }
+
 }
