@@ -70,6 +70,7 @@ class IsolatedNodeSmokeTest {
             preferences.forgetBootstrap(config.url, "root")
             preferences.put(accountNamespace(config.url, "root"), "last-channel", "")
             preferences.put(accountNamespace(config.url, "root"), "${config.channel}.surface", "")
+            preferences.put(accountNamespace(config.url, "root"), "${config.channel}.browse", "")
             preferences.saveOptions(accountNamespace(config.url, "root"), config.channel, ChannelViewOptions())
             context.getSharedPreferences("identity_${accountNamespace(config.url, "root")}", Context.MODE_PRIVATE).edit().clear().commit()
         }
