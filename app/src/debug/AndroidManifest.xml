@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Debug-only demo entry points for feature work before integration. Not in release builds. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name="dev.atoll.app.app.SettingsDemoActivity"
             android:exported="true"

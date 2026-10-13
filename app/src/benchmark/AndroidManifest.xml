@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Benchmark builds are profileable from the shell (gfxinfo, perfetto). -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application>
+    <application android:networkSecurityConfig="@xml/network_security_config">
         <profileable android:shell="true" />
         <!-- Plain-text list for the emulator's own frame-time floor. -->
         <activity
