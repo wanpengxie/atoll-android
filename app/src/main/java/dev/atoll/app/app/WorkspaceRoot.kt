@@ -23,6 +23,7 @@ import dev.atoll.app.files.FilesScreen
 import dev.atoll.app.files.FilePaths
 import dev.atoll.app.core.Origin
 import dev.atoll.app.ui.screens.*
+import dev.atoll.app.ui.screens.ChannelMenuAction.Item
 import dev.atoll.app.ui.theme.AtollTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.gestures.scrollBy
@@ -131,11 +132,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 onBack = { drawer = true }, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter,
                                 onText = {}, onSend = {}, composerVisible = false,
                                 onMenu = { action -> when (action) {
-                                    "打开文件" -> graph.files(true)
-                                    "关闭文件" -> graph.files(false)
-                                    "最近阅读" -> recentOpen = true
-                                    "打开终端" -> graph.terminal(true)
-                                    "关闭终端" -> graph.terminal(false)
+                                    Item.OpenFiles -> graph.files(true)
+                                    Item.CloseFiles -> graph.files(false)
+                                    Item.Recent -> recentOpen = true
+                                    Item.OpenTerminal -> graph.terminal(true)
+                                    Item.CloseTerminal -> graph.terminal(false)
+                                    else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
                                     else if (FilePaths.fromLink(state.route!!.channel, link) != null && features != null) {
