@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug-only demo entry points for feature work before integration. Not in release builds. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="dev.atoll.app.files.FilesDemoActivity"
+            android:exported="true"
+            android:label="Files demo" />
+    </application>
+</manifest>
