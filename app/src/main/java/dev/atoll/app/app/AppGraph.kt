@@ -634,7 +634,9 @@ class AppGraph(private val context: Context) {
         val channelState = channelStates[route?.channel]
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.MemberUnavailable, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
-        val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
+        val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel,
+            identityReady = mutableState.value.identityConfirmed && !mutableServices.value?.selfIds?.get(route?.channel).isNullOrBlank(),
+            filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         val channelError = channelState?.error ?: channelNotices[route?.channel]
         val errorDismissed = route?.channel?.let { errorNotices.visible(it, channelError) == null && channelError != null } == true
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, canForward = history.canForward, canBack = history.canBack, conversation = conversation,
