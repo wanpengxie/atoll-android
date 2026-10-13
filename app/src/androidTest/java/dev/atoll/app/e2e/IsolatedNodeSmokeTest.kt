@@ -13,6 +13,7 @@ import dev.atoll.app.MainActivity
 import dev.atoll.app.app.*
 import dev.atoll.app.core.DownFrame
 import dev.atoll.app.files.FileRepository
+import dev.atoll.app.files.FileReference
 import dev.atoll.app.terminal.PtyStatus
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
@@ -21,6 +22,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.*
 import okhttp3.Request
 import org.junit.Rule
+import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.rules.ExternalResource
 import org.junit.rules.RuleChain
@@ -55,6 +58,8 @@ class IsolatedNodeSmokeTest {
     private val filename = "android-e2e-$runId.txt"
     private val child = "e2e-$runId"
     private val records = mutableListOf<JsonObject>()
+    private var fixtureRepository: FileRepository? = null
+    private var fixture: FileReference? = null
     private val output by lazy {
         val path = InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output"
@@ -163,7 +168,7 @@ class IsolatedNodeSmokeTest {
         } finally { summary() }
     }
 
-    @Test fun allSeventeenStepsOnOurNode() {
+    @Before fun loginAndClearOldFixtures() {
         step("login") {
             waitFor(hasText("进入 Atoll"))
             replace("服务器地址", config.url); replace("账号", "root"); replace("密码", config.password, private = true)
@@ -174,7 +179,31 @@ class IsolatedNodeSmokeTest {
             click("进入 Atoll")
             compose.waitUntil(40_000) { graph.services.value?.server == TEST_URL && graph.state.value.identityConfirmed &&
                 graph.state.value.navigation.connection == dev.atoll.app.ui.screens.ConnectionPhase.OPEN }
+            // The real UI session is established before any authenticated fixture cleanup.
+            val s = services()
+            runBlocking { withTimeout(40_000) {
+                val repo = FileRepository(config.channel, s.wire, s.httpClient, s.server, context.cacheDir)
+                val device = repo.initialize().first { it.id == "local-device" }
+                fixtureRepository = repo
+                val stale = mutableListOf<FileReference>()
+                var cursor = ""
+                do {
+                    val page = repo.list(device, "", cursor)
+                    stale += page.entries.filter { it.directory == null && it.reference.name.matches(Regex("android-e2e-[a-f0-9]{10}\\.txt")) }.map { it.reference }
+                    cursor = page.next
+                } while (cursor.isNotEmpty())
+                stale.forEach { repo.delete(it) }
+            } }
         }
+    }
+    private fun removeFixture() {
+        val file = fixture ?: return
+        runBlocking { withTimeout(30_000) { fixtureRepository!!.delete(file) } }
+        fixture = null
+    }
+    @After fun clearThisRunsFixture() { removeFixture() }
+
+    @Test fun allSeventeenStepsOnOurNode() {
         step("channel-list") { waitFor(hasText("OPEN")); waitFor(hasText("android-test", substring = true)) }
         step("open-channel") {
             waitFor(hasText("android-test", substring = true) and hasClickAction()).performClick()
@@ -221,11 +250,17 @@ class IsolatedNodeSmokeTest {
                 val repo = FileRepository(config.channel, s.wire, s.httpClient, s.server, context.cacheDir)
                 val device = repo.initialize().first { it.id == "local-device" }
                 val bytes = "${marker}_PREVIEW\n".toByteArray()
-                repo.upload(device, "", filename, emptyList(), { ByteArrayInputStream(bytes) }, bytes.size.toLong(), "text/plain")
+                fixture = repo.upload(device, "", filename, emptyList(), { ByteArrayInputStream(bytes) }, bytes.size.toLong(), "text/plain")
+                fixtureRepository = repo
             } }
             menu("打开文件"); waitFor(hasContentDescription("关闭文件"))
-            // The unique fixture is alphabetically near the top; use the browser's semantic scroll.
-            runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText(filename)) }
+            // Scroll only the vertical lazy file list, not any horizontal toolbar.
+            val list = hasScrollToIndexAction()
+            waitFor(list)
+            compose.waitUntil(40_000) { nodes(SemanticsMatcher("file list loading") {
+                it.config.contains(SemanticsProperties.ProgressBarRangeInfo)
+            } and hasAnyAncestor(list)).isEmpty() }
+            compose.onNode(list).performScrollToNode(hasText(filename))
             waitFor(hasText(filename))
         }
         step("preview") {
@@ -280,6 +315,7 @@ class IsolatedNodeSmokeTest {
             File(output, "retire-observer.json").writeText(buildJsonObject { put("channel_id", retiredId); put("absent", true) }.toString())
         }
         step("logout") {
+            removeFixture() // Still authenticated; @After covers a failure before reaching logout.
             // Retirement already returned us to the channel list; keep the Activity
             // owned by the Compose rule instead of launching an unnecessary deep link.
             click("退出"); waitFor(hasText("进入 Atoll"))

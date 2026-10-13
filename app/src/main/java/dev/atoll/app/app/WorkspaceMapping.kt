@@ -83,7 +83,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList()) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body)))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
@@ -165,7 +165,7 @@ fun messageText(envelope: Envelope): String {
     val content = body.objects("content").filter { it["type"].string() == "text" }.map { it["text"].string() }.filter(String::isNotBlank)
     if (content.isNotEmpty()) return content.joinToString("\n\n")
     if (envelope.status == "failed") return body["detail"].string().ifEmpty { body["reason"].string().ifEmpty { body["error_code"].string() } }
-    val result = JsonObject(body.filterKeys { it !in ConversationVisibility.terminalTransportFields })
+    val result = messageBusiness(body)
     return if (result.isEmpty()) "" else "```json\n$result\n```"
 }
 
@@ -174,10 +174,35 @@ internal fun JsonObject.longValue(key: String) = (this[key] as? JsonPrimitive)?.
 
 private data class MappedResult(val text: String = "", val result: ResultViewState? = null)
 
+/** Listed attachments take precedence over files, then append non-duplicate resource links. */
+internal fun messageAttachments(body: JsonObject): List<MessageAttachmentViewState> {
+    fun attachment(item: JsonObject, linked: Boolean = false): MessageAttachmentViewState {
+        val uri = item["uri"].string().trim()
+        val id = if (linked) uri else item["resource_id"].string().ifEmpty { item["id"].string() }
+        val name = item["name"].string().ifEmpty { item["title"].string() }
+            .ifEmpty { (uri.ifEmpty { id }).trimEnd('/').substringAfterLast('/').ifEmpty { "附件" } }
+        val mime = listOf("mime", "mimeType", "mime_type", "media_type", "mediaType")
+            .firstNotNullOfOrNull { item[it].string().takeIf(String::isNotEmpty) }.orEmpty()
+        val size = (item["size"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 }
+        return MessageAttachmentViewState(id, name, mime, size, uri.ifEmpty { id })
+    }
+    val listed = (body["attachments"] as? JsonArray ?: body["files"] as? JsonArray)
+        .orEmpty().filterIsInstance<JsonObject>().map { attachment(it) }
+    val listedIds = listed.map { it.resourceId }.toHashSet()
+    val linked = body.objects("content").filter { it["type"].string() == "resource_link" && it["uri"].string().isNotBlank() }
+        .map { attachment(it, true) }.filter { it.resourceId !in listedIds }
+    return listed + linked
+}
+
+private fun messageBusiness(body: JsonObject): JsonObject = JsonObject(body.filterKeys {
+    it !in ConversationVisibility.terminalTransportFields && it !in setOf("attachments", "files")
+        && !(it == "content" && body.objects("content").any { block -> block["type"].string() in setOf("text", "resource_link") })
+})
+
 /** Match web StructuredResult; protocol bookkeeping never becomes business JSON. */
 private fun terminalResult(envelope: Envelope, requestType: String): MappedResult {
     val body = envelope.body
-    val business = JsonObject(body.filterKeys { it !in ConversationVisibility.terminalTransportFields })
+    val business = messageBusiness(body)
     if (envelope.status == "failed") {
         val code = if (body["cancelled"] == JsonPrimitive(true)) "cancelled" else body["error_code"].string().ifEmpty { body["reason"].string() }
         return MappedResult(result = ResultViewState(errorCode = code, detail = body["detail"].string(),
@@ -185,7 +210,7 @@ private fun terminalResult(envelope: Envelope, requestType: String): MappedResul
     }
     if ("text" in body) {
         val text = body["text"].string()
-        if (text.isEmpty()) return MappedResult(result = ResultViewState(emptyText = true))
+        if (text.isEmpty()) return if (messageAttachments(body).isNotEmpty()) MappedResult() else MappedResult(result = ResultViewState(emptyText = true))
         val parsed = if (text.trimStart().firstOrNull() in listOf('{', '[')) runCatching { Json.parseToJsonElement(text) }.getOrNull() else null
         return if (parsed is JsonObject || parsed is JsonArray) MappedResult(result = ResultViewState(parsed, "JSON 结果")) else MappedResult(text)
     }
@@ -196,7 +221,7 @@ private fun terminalResult(envelope: Envelope, requestType: String): MappedResul
             body["class"].string().takeIf(String::isNotEmpty)?.let { "$it 的能力" } ?: "Actor 能力" else "结构化结果"
         return MappedResult(result = ResultViewState(business, title))
     }
-    return MappedResult(result = ResultViewState(acknowledgement = true))
+    return if (messageAttachments(body).isNotEmpty()) MappedResult() else MappedResult(result = ResultViewState(acknowledgement = true))
 }
 
 private fun prose(body: JsonObject): String {
