@@ -54,7 +54,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     } }
                     if (state.route == null) {
-                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout)
+                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade)
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
                                 withFrameNanos { }
@@ -172,7 +172,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             } }
                         } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
-                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout)
+                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade)
             }
         }
     }
