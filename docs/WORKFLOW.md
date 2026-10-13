@@ -54,6 +54,9 @@
   Never commit it. Anything may be tested there,
   writes and logout included; if you break it, `reset`. Debug and benchmark
   builds allow cleartext to 100.99.232.10 only.
+  The login screen pre-fills the user's node when nothing is saved: any UI
+  login in a test must type the test node URL into the server field and
+  read it back before submitting.
 - Report a commit only after `git rev-parse HEAD` printed it; never a guessed or placeholder hash.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions

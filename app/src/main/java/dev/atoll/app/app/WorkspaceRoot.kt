@@ -128,6 +128,33 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 } finally { autoScrolling = false }
                             }
                             LaunchedEffect(state.route?.tab) { graph.follow(state.route?.tab == "conversation" && following) }
+                            val latestRevision by rememberUpdatedState(state.timeline?.revision)
+                            LaunchedEffect(listState, state.route?.tab) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
+                                val channel = state.route!!.channel
+                                snapshotFlow {
+                                    latestRevision to if (!initialized) emptySet() else listState.layoutInfo.let { layout ->
+                                        layout.visibleItemsInfo.filter { it.offset < layout.viewportEndOffset && it.offset + it.size > layout.viewportStartOffset }
+                                            .mapNotNull { it.key as? String }.toSet()
+                                    }
+                                }.distinctUntilChanged().collect { (_, keys) -> graph.visibleRows(channel, keys) }
+                            }
+                            val latestConversation by rememberUpdatedState(conversation)
+                            LaunchedEffect(listState, state.route?.tab) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
+                                var requestedBoundary: String? = null
+                                snapshotFlow {
+                                    val current = latestConversation
+                                    val nearStart = initialized && !autoScrolling && listState.isScrollInProgress &&
+                                        listState.firstVisibleItemIndex <= 12 && current.hasOlder && !current.loadingOlder
+                                    current.entries.firstOrNull()?.key.takeIf { nearStart }
+                                }.distinctUntilChanged().collect { boundary ->
+                                    if (boundary != null && boundary != requestedBoundary) {
+                                        requestedBoundary = boundary
+                                        graph.older()
+                                    }
+                                }
+                            }
                             LaunchedEffect(state.route?.tab, conversation.entries.lastOrNull()?.key, conversation.entries.size) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (!initialized || following) {

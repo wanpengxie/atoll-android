@@ -32,6 +32,7 @@ class ChannelControllerTest {
             assertEquals(0, historical.conversation.waitingCount)
             fixture.controller.foreground(true)
             fixture.controller.follow(true)
+            fixture.controller.visibleRows(setOf("q4500:request"))
             withTimeout(10_000) { while (fixture.store.channel("c").meta.readPosition != 4500L) yield() }
             assertEquals(4500L, fixture.store.channel("c").meta.readPosition)
             val live = row(5101)
@@ -59,6 +60,29 @@ class ChannelControllerTest {
             val state = fixture.await { it.unread.count == 100 && !it.unread.pending }
             assertNull(state.conversation)
             assertTrue("Rows lookups=${fixture.lookups.get()}", fixture.lookups.get() <= 2)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun onlyVisibleRowsAdvanceReadPositionAndBackgroundOrClosedViewsCannotMarkRead() = runBlocking {
+        val fixture = Fixture(head = 10, rows = (1L..10).map(::row))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            fixture.await { it.conversation != null }
+            assertEquals(0L, fixture.store.channel("c").meta.readPosition)
+            fixture.controller.visibleRows(setOf("q3:request", "day:unknown"))
+            withTimeout(10_000) { while (fixture.store.channel("c").meta.readPosition != 3L) yield() }
+            fixture.controller.foreground(false)
+            fixture.controller.visibleRows(setOf("q9:request"))
+            fixture.controller.foreground(true)
+            fixture.controller.follow(false)
+            fixture.controller.visibleRows(setOf("q6:request"))
+            withTimeout(10_000) { while (fixture.store.channel("c").meta.readPosition != 6L) yield() }
+            fixture.controller.closeView()
+            fixture.await { it.conversation == null }
+            fixture.controller.visibleRows(setOf("q10:request"))
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            fixture.await { it.conversation != null }
+            assertEquals(6L, fixture.store.channel("c").meta.readPosition)
         } finally { fixture.stop() }
     }
 

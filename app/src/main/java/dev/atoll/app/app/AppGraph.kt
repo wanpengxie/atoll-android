@@ -116,6 +116,7 @@ class AppGraph(private val context: Context) {
     fun terminal(open: Boolean) { post(Terminal(open)) }
     fun back() { post(Back) }
     fun follow(value: Boolean) { post(Follow(value)) }
+    fun visibleRows(channel: String, keys: Set<String>) { post(VisibleRows(channel, keys)) }
     fun scopeToggle() { post(ScopeToggle) }
     fun filter(actor: String) { post(Filter(actor)) }
     fun older() { post(Older) }
@@ -236,6 +237,7 @@ class AppGraph(private val context: Context) {
                 } else rt?.wire?.reconnectNow()
             }
             is Follow -> controllers[route?.channel]?.follow(event.value && route?.tab == "conversation")
+            is VisibleRows -> if (event.channel == route?.channel && route?.tab == "conversation") controllers[event.channel]?.visibleRows(event.keys)
             ScopeToggle -> controllers[route?.channel]?.toggleScope()
             is Filter -> controllers[route?.channel]?.filter(event.id)
             Older -> controllers[route?.channel]?.loadOlder()
@@ -643,6 +645,7 @@ class AppGraph(private val context: Context) {
     private data class Exported(val epoch: Long, val world: Long, val name: String?, val error: String?) : Event
     private data class Update(val epoch: Long, val value: NodeUpdateValue) : Event
     private data class Follow(val value: Boolean) : Event
+    private data class VisibleRows(val channel: String, val keys: Set<String>) : Event
     private data object ScopeToggle : Event
     private data class Filter(val id: String?) : Event
     private data object Older : Event

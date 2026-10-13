@@ -27,5 +27,11 @@ class TimelineMessageTargetTest {
         assertTrue(targets.any { it?.envelope?.id == "progress:x" && it.turn?.requestId == "opaque:request:answer" })
         assertTrue(targets.any { it?.envelope?.id == "nested:answer" && it.turn?.requestId == "nested:request" })
         assertNull(timelineMessageTarget(snapshot, "wrong:request"))
+        val sequences = timelineRowSequences(snapshot)
+        entries.forEach { entry ->
+            val target = timelineMessageTarget(snapshot, entry.key)!!
+            val expected = mapOf("opaque:request:answer" to 1L, "progress:x" to 2L, "nested:request" to 3L, "nested:answer" to 4L)
+            assertEquals(expected[target.envelope.id], sequences[entry.key])
+        }
     }
 }

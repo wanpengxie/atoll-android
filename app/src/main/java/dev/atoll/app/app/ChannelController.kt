@@ -53,6 +53,7 @@ class ChannelController(
     private var mapper = TimelineMapper()
     private var conversation: ConversationViewState? = null
     private var timeline: TimelineSnapshot? = null
+    private var rowSequences = emptyMap<String, Long>()
     private var timelineSource: TimelineSource? = null
     private var taskFacts: List<TaskFact> = emptyList()
     private var taskFactsDirty = true
@@ -104,6 +105,7 @@ class ChannelController(
     suspend fun filter(actor: String?) { commands.send(Filter(actor)) }
     suspend fun loadOlder() { commands.send(LoadOlder) }
     suspend fun jumpToBottom() { commands.send(Jump) }
+    suspend fun visibleRows(keys: Set<String>) { commands.send(VisibleRows(keys)) }
     suspend fun stop() { job.cancelAndJoin() }
 
     private suspend fun handle(command: Command) {
@@ -141,8 +143,9 @@ class ChannelController(
                 updateBadges()
             }
             is Roster -> { actors = command.actors; activity.replaceAll { _, value -> value.copy(name = name(value.id)) }; project() }
-            is Follow -> { following = command.value; if (following) markSeen() }
-            is Foreground -> { foreground = command.value; if (foreground) markSeen() }
+            is Follow -> { following = command.value }
+            is Foreground -> { foreground = command.value }
+            is VisibleRows -> markSeen(command.keys)
             ChangeScope -> { options = options.copy(mineOnly = !options.mineOnly); preferences.saveOptions(namespace, id, options); project() }
             is Filter -> { options = options.copy(actorFilters = if (command.actor == null) emptySet() else
                 if (command.actor in options.actorFilters) options.actorFilters - command.actor else options.actorFilters + command.actor)
@@ -166,7 +169,7 @@ class ChannelController(
                 conversation = conversation?.copy(loadingOlder = false, hasOlder = command.hasOlder)
                 error = command.error
             }
-            Jump -> { following = true; newRoots.clear(); if (newerUnloaded) loadTail() else { updateBadges(); markSeen() } }
+            Jump -> { following = true; if (newerUnloaded) loadTail() else updateBadges() }
             RefreshUnread -> { refresh = null; calculateUnread() }
             ActivityExpiry -> { activityExpiry = null; taskFactsDirty = true; calculateUnread() }
         }
@@ -181,6 +184,7 @@ class ChannelController(
         mapper = TimelineMapper()
         conversation = null
         timeline = null
+        rowSequences = emptyMap()
         timelineSource = null
         newerUnloaded = false
         windowHigh = Long.MAX_VALUE
@@ -206,7 +210,6 @@ class ChannelController(
             } else model.trim(4500, keepOpenTurns = false)
         }
         if ((change.accepted > 0 || conversation == null) && (model.rowCount > 0 || syncState.headSeq == 0L)) project()
-        if (following) markSeen()
         queueUnread()
     }
 
@@ -217,6 +220,7 @@ class ChannelController(
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
             selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded))
         timeline = snapshot
+        rowSequences = timelineRowSequences(snapshot)
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
             entries = mapper.map(snapshot, selfId, actors, newerUnloaded), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
@@ -232,13 +236,11 @@ class ChannelController(
             newMessages = newRoots.size)
     }
 
-    private suspend fun markSeen() {
-        if (!following || !foreground) return
-        val model = replica ?: return
-        val high = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded)).items.maxOfOrNull { it.seqHigh } ?: 0
+    private suspend fun markSeen(keys: Set<String>) {
+        if (!foreground || replica == null) return
+        val high = keys.maxOfOrNull { rowSequences[it] ?: 0 } ?: 0
         if (high > readPosition) { readPosition = high; sync.markRead(high); queueUnread() }
-        if (!newerUnloaded) { newRoots.clear(); updateBadges() }
+        if (following && !newerUnloaded && keys.isNotEmpty()) { newRoots.clear(); updateBadges() }
     }
 
     private fun queueUnread() {
@@ -289,6 +291,7 @@ class ChannelController(
     private data object LoadOlder : Command
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command
     private data object Jump : Command
+    private data class VisibleRows(val keys: Set<String>) : Command
     private data object RefreshUnread : Command
     private data object ActivityExpiry : Command
 }
