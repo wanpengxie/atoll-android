@@ -25,10 +25,12 @@ import androidx.core.view.ContentInfoCompat
 
 /** Native IME/span authority, plus keyboard/clipboard/drop file ingress. */
 @Composable
-internal fun NativeComposerEditor(value: TextFieldValue, modifier: Modifier, enabled: Boolean, maxLines: Int,
+internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, enabled: Boolean, maxLines: Int,
     onValue: (TextFieldValue) -> Unit, onKey: (String, Boolean, Boolean, Boolean) -> Boolean,
     onSend: () -> Unit, onFocus: (Boolean) -> Unit, onFiles: (List<android.net.Uri>) -> Unit, onDrag: (Boolean) -> Unit) {
     AndroidView(modifier = modifier, factory = { context -> NativeEditor(context).apply {
+        contentDescription = "消息输入框"
+        importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
         textSize = 16f
         hint = "输入消息；@ 选择成员，/ 使用命令"
         setHintTextColor(Color.rgb(111, 98, 82)); setTextColor(Color.rgb(46, 36, 25))
@@ -58,13 +60,17 @@ internal fun NativeComposerEditor(value: TextFieldValue, modifier: Modifier, ena
         editor.valueCallback = onValue; editor.keyCallback = onKey; editor.sendCallback = onSend
         editor.focusCallback = onFocus; editor.filesCallback = onFiles; editor.dragCallback = onDrag
         editor.isEnabled = enabled; editor.maxLines = maxLines
-        editor.suppress = true
-        if (editor.text.toString() != value.text) editor.setText(value.text)
-        if (editor.selectionStart != value.selection.start || editor.selectionEnd != value.selection.end) editor.setSelection(value.selection.start.coerceIn(0, editor.length()), value.selection.end.coerceIn(0, editor.length()))
-        editor.suppress = false
+        if (editor.writeAuthority.accept(command)) {
+            editor.suppress = true
+            try {
+                editor.setText(command.text)
+                editor.setSelection(command.selectionStart.coerceIn(0, editor.length()), command.selectionEnd.coerceIn(0, editor.length()))
+            } finally { editor.suppress = false }
+        }
     })
 }
 private class NativeEditor(context: Context) : EditText(context) {
+    val writeAuthority = EditorWriteAuthority()
     var valueCallback: ((TextFieldValue) -> Unit)? = null
     var keyCallback: ((String, Boolean, Boolean, Boolean) -> Boolean)? = null
     var sendCallback: (() -> Unit)? = null
