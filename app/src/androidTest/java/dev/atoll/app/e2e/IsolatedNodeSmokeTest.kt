@@ -86,7 +86,7 @@ class IsolatedNodeSmokeTest {
         compose.waitUntil(timeoutMillis = timeout) { nodes(matcher, unmerged).isNotEmpty() }
         return compose.onAllNodes(matcher, useUnmergedTree = unmerged).onFirst()
     }
-    private fun click(text: String) = waitFor(hasText(text) and hasClickAction()).performClick()
+    private fun click(text: String) = waitFor(hasText(text) and hasClickAction() and isEnabled()).performClick()
     private fun replace(label: String, value: String, private: Boolean = false) {
         val field = waitFor(hasSetTextAction() and hasText(label))
         try { field.performTextReplacement(value) } catch (failure: Throwable) {
@@ -106,24 +106,29 @@ class IsolatedNodeSmokeTest {
         waitFor(hasContentDescription("发送") and hasClickAction() and isEnabled()).performClick()
         compose.waitUntil(timeoutMillis = 20_000) { nodes(editor).singleOrNull()?.config?.getOrNull(SemanticsProperties.EditableText)?.text == "" }
     }
-    private fun holdQueue() {
-        val terminal = CompletableDeferred<dev.atoll.app.core.Envelope>()
+    private fun sendRunning(text: String) {
+        val processing = CompletableDeferred<Unit>()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            terminal.complete(services().wire.frames.filterIsInstance<DownFrame.Feed>().map { it.row.envelope }
-                .first { it.senderId == config.codex && it.type == "agent.hold" && it.isTerminal })
+            var requestId = ""
+            services().wire.frames.filterIsInstance<DownFrame.Feed>().map { it.row.envelope }.first { envelope ->
+                if (envelope.kind == "request" && envelope.type == "agent.ask" &&
+                    (envelope.body["text"] as? JsonPrimitive)?.content == text) requestId = envelope.id
+                requestId.isNotEmpty() && envelope.senderId == config.codex && envelope.status == "processing" &&
+                    (envelope.parentId == requestId || envelope.correlationId == requestId)
+            }
+            processing.complete(Unit)
         }
         try {
-            send("/hold {\"duration_ms\":180000}")
-            // A durable handoff is not the receiver's acceptance; admit the hold before sending asks.
-            check(runBlocking { withTimeout(30_000) { terminal.await() } }.status == "completed") { "UI hold command failed" }
+            send(text)
+            runBlocking { withTimeout(30_000) { processing.await() } }
         } finally { scope.cancel() }
     }
     private fun waitingRow(text: String): SemanticsMatcher = SemanticsMatcher("waiting row") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("atoll.waiting.") == true
     } and hasAnyDescendant(hasText(text, substring = true))
     private fun waitingAction(marker: String, action: String) = waitFor(
-        hasText(action) and hasClickAction() and hasAnyAncestor(waitingRow(marker))).performClick()
+        hasText(action) and hasClickAction() and isEnabled() and hasAnyAncestor(waitingRow(marker))).performClick()
     private fun answer(value: String) = waitFor(hasText(value), timeout = 180_000, unmerged = true).assertExists()
 
     private fun capture(name: String) {
@@ -179,11 +184,12 @@ class IsolatedNodeSmokeTest {
             answer("${marker}_REPLY")
         }
         step("waiting-queue") {
-            holdQueue()
-            send("Run the shell command sleep 30, then reply only ${marker}_SLOW. Do not change files.")
+            // New agent.ask admissions clear a hold (agentLoop.admitBufferedAt), so
+            // form a real FIFO queue behind a running turn instead of pre-holding it.
+            sendRunning("Run the shell command sleep 60, then reply only ${marker}_SLOW. Do not change files.")
             send("Ignore this extra isolated test instruction; keep your current reply. ${marker}_Q2")
             send("Discard this isolated UI test request. ${marker}_Q3")
-            waitFor(waitingRow("${marker}_SLOW")); waitFor(waitingRow("${marker}_Q2")); waitFor(waitingRow("${marker}_Q3"))
+            waitFor(waitingRow("${marker}_Q2")); waitFor(waitingRow("${marker}_Q3"))
         }
         step("waiting-cancel") {
             waitingAction("${marker}_Q3", "取消")
@@ -191,7 +197,12 @@ class IsolatedNodeSmokeTest {
         }
         step("waiting-edit") {
             waitingAction("${marker}_Q2", "编辑")
-            waitFor(hasText("提交编辑") and hasClickAction() and isEnabled())
+            // A running shell command can trigger the documented background-task warning.
+            val continueEditing = hasText("继续编辑") and hasClickAction()
+            val submitEditing = hasText("提交编辑") and hasClickAction() and isEnabled()
+            compose.waitUntil(40_000) { nodes(continueEditing).isNotEmpty() || nodes(submitEditing).isNotEmpty() }
+            if (nodes(continueEditing).isNotEmpty()) click("继续编辑")
+            waitFor(submitEditing)
             waitFor(editor).performTextReplacement("Ignore this extra isolated test instruction; keep your current reply. ${marker}_EDITED")
             click("提交编辑"); waitFor(hasText("编辑已提交")); waitFor(waitingRow("${marker}_EDITED"))
         }
