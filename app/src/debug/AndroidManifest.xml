@@ -10,5 +10,9 @@
             android:name="dev.atoll.app.compose.ComposerDemoActivity"
             android:exported="true"
             android:label="Composer demo" />
+        <activity
+            android:name="dev.atoll.app.terminal.TerminalDemoActivity"
+            android:exported="true"
+            android:label="Terminal demo" />
     </application>
 </manifest>
