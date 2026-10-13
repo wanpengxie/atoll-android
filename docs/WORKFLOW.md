@@ -57,6 +57,12 @@
   The login screen pre-fills the user's node when nothing is saved: any UI
   login in a test must type the test node URL into the server field and
   read it back before submitting.
+- End-to-end UI suite (17 steps on the test node, Compose instrumented):
+  `python3 scripts/e2e/instrumented.py --owner <worker>` (takes the emulator
+  queue, injects the test node URL/credentials as instrumentation arguments,
+  collects screenshots and summary.json). Run it before reporting a change
+  to app/** or anything that touches login, timeline, composer, waiting,
+  files, terminal, tasks, roster or governance.
 - Report a commit only after `git rev-parse HEAD` printed it; never a guessed or placeholder hash.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions

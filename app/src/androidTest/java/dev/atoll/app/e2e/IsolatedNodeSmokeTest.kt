@@ -1,9 +1,7 @@
 package dev.atoll.app.e2e
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -274,14 +272,11 @@ class IsolatedNodeSmokeTest {
                 while (channelRecords(s.obs.spaceChannels(config.channel)).any { it.id == retiredId }) delay(250)
             } }
             File(output, "retire-observer.json").writeText(buildJsonObject { put("channel_id", retiredId); put("absent", true) }.toString())
-            compose.runOnUiThread { compose.activity.startActivity(Intent(context, MainActivity::class.java)
-                .setData(Uri.parse("atoll://channels/${config.channel}")).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
-            if (nodes(hasText("关闭") and hasClickAction()).isNotEmpty()) click("关闭")
-            compose.waitUntil(40_000) { graph.state.value.route?.channel == config.channel }
-            waitFor(hasContentDescription("频道菜单"))
         }
         step("logout") {
-            click("‹"); click("退出"); waitFor(hasText("进入 Atoll"))
+            // Retirement already returned us to the channel list; keep the Activity
+            // owned by the Compose rule instead of launching an unnecessary deep link.
+            click("退出"); waitFor(hasText("进入 Atoll"))
             compose.waitUntil(20_000) { graph.services.value == null }
             if (config.token.isNotEmpty()) {
                 // Assert our new cookie session's logout did not revoke the shared node token.

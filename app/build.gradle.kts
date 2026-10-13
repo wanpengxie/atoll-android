@@ -8,6 +8,8 @@ plugins {
 
 android {
     namespace = "dev.atoll.app"
+    // Instrumented e2e runs on debug by default; -PatollTestBuildType=benchmark runs it on R8 code.
+    testBuildType = providers.gradleProperty("atollTestBuildType").getOrElse("debug").also { require(it in setOf("debug", "benchmark")) }
     compileSdk = 35
 
     defaultConfig {
@@ -73,6 +75,7 @@ dependencies {
     implementation("org.commonmark:commonmark-ext-gfm-tables:0.24.0")
     implementation("org.commonmark:commonmark-ext-gfm-strikethrough:0.24.0")
     implementation("org.commonmark:commonmark-ext-autolink:0.24.0")
+    implementation("org.commonmark:commonmark-ext-task-list-items:0.24.0")
     implementation("io.coil-kt.coil3:coil-compose:3.0.4")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.0.4")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
