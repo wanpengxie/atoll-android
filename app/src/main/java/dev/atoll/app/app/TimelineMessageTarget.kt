@@ -18,3 +18,18 @@ fun timelineMessageTarget(snapshot: TimelineSnapshot, key: String): TimelineMess
     }
     return snapshot.items.firstNotNullOfOrNull { visit(it.entry, it.key) }
 }
+
+fun timelineMessageTargets(snapshot: TimelineSnapshot): Map<String, TimelineMessageTarget> {
+    val targets = linkedMapOf<String, TimelineMessageTarget>()
+    fun visit(entry: TimelineEntry, prefix: String) {
+        val turn = entry.turn
+        if (turn == null) entry.envelope?.let { targets["$prefix:message"] = TimelineMessageTarget(it, null) }
+        else {
+            targets["$prefix:request"] = TimelineMessageTarget(turn.request, turn)
+            (turn.terminal ?: turn.provisional.lastOrNull()?.envelope)?.let { targets["$prefix:answer"] = TimelineMessageTarget(it, turn) }
+            entry.thread.forEach { visit(it, "$prefix:${it.id}") }
+        }
+    }
+    snapshot.items.forEach { visit(it.entry, it.key) }
+    return targets
+}

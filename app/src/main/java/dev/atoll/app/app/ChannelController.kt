@@ -19,6 +19,7 @@ data class ChannelRuntimeState(
     val firstOrigin: Origin? = null,
     val error: String? = null,
     val timeline: TimelineSnapshot? = null,
+    val timelineSource: TimelineSource? = null,
 )
 
 /** A light serial owner per membership. Only the selected owner's replica is retained. */
@@ -48,6 +49,7 @@ class ChannelController(
     private var mapper = TimelineMapper()
     private var conversation: ConversationViewState? = null
     private var timeline: TimelineSnapshot? = null
+    private var timelineSource: TimelineSource? = null
     private var following = true
     private var foreground = true
     private var newerUnloaded = false
@@ -99,7 +101,7 @@ class ChannelController(
     private suspend fun handle(command: Command) {
         when (command) {
             is Open -> { record = command.record; loadTail() }
-            CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; firstOrigin = null }
+            CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; timelineSource = null; firstOrigin = null }
             is Batch -> if (command.epoch == readerEpoch) apply(command.batch)
             is Sync -> {
                 if (syncState.generation != command.value.generation) activity.clear()
@@ -167,6 +169,7 @@ class ChannelController(
         mapper = TimelineMapper()
         conversation = null
         timeline = null
+        timelineSource = null
         newerUnloaded = false
         windowHigh = Long.MAX_VALUE
         newRoots.clear()
@@ -197,6 +200,7 @@ class ChannelController(
 
     private fun project() {
         val model = replica ?: return
+        timelineSource = model.snapshot()
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
             selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded))
         timeline = snapshot
@@ -241,7 +245,7 @@ class ChannelController(
 
     private fun publish() {
         mutableState.value = ChannelRuntimeState(syncState, unread, if (syncState.connected) activity.values.toList() else emptyList(),
-            conversation, newerUnloaded, firstOrigin, error ?: syncState.error, timeline)
+            conversation, newerUnloaded, firstOrigin, error ?: syncState.error, timeline, timelineSource)
     }
     private fun name(id: String) = actors.firstOrNull { it.id == id }?.name ?: id
     private fun candidate(envelope: Envelope) = envelope.kind == "request" || envelope.isTerminal || envelope.kind == "event" && envelope.type == "agent.provider.run"
