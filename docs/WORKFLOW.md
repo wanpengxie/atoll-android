@@ -28,7 +28,11 @@
   `nohup ~/Library/Android/sdk/emulator/emulator -avd ash-browser -no-window -no-snapshot-load -no-snapshot-save -gpu host -dns-server 100.100.100.100,223.5.5.5 > ~/atoll-build/emulator.log 2>&1 &`.
   Never work around DNS in app code.
   Wait for the lock by retrying, not by messaging its holder:
-  `until mkdir ~/atoll-build/emulator.lock 2>/dev/null; do sleep 15; done; echo $W > ~/atoll-build/emulator.lock/owner`.
+  in turn, first come first served (`~/atoll-build/emulator.queue`, one
+  name per line):
+  `grep -qx $W ~/atoll-build/emulator.queue || echo $W >> ~/atoll-build/emulator.queue;`
+  `until [ "$(head -1 ~/atoll-build/emulator.queue)" = $W ] && mkdir ~/atoll-build/emulator.lock 2>/dev/null; do sleep 15; done; echo $W > ~/atoll-build/emulator.lock/owner`.
+  Release: `rm -rf ~/atoll-build/emulator.lock; sed -i '' "/^$W\$/d" ~/atoll-build/emulator.queue`.
   A `workspace.bash` answer of "still running" means you do not have it yet.
   Start every emulator command with
   `[ "$(cat ~/atoll-build/emulator.lock/owner)" = $W ] || exit 1`.
