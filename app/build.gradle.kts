@@ -36,8 +36,11 @@ android {
         // app's external files dir, which adb can write without run-as.
         create("benchmark") {
             initWith(getByName("release"))
-            // androidx.test's runner (in the test APK) calls androidx.tracing.Trace from the app APK.
-            proguardFile("proguard-benchmark-rules.pro")
+            // Only an instrumented run links a test APK against this one; those keep rules
+            // grow the DEX ~9x, so perf measurements (no test APK) build without them.
+            if (providers.gradleProperty("atollTestBuildType").orNull == "benchmark") {
+                proguardFile("proguard-benchmark-rules.pro")
+            }
             // Rules for the minified instrumented test APK only.
             testProguardFiles("proguard-test-rules.pro")
             matchingFallbacks += "release"
