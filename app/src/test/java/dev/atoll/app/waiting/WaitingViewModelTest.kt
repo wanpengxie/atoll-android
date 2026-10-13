@@ -38,6 +38,7 @@ class WaitingViewModelTest {
             }
         }
         override suspend fun cancel(targetId: String) { calls += "wire.cancel" to payload("target" to targetId); if (failCancel) error("test cancellation failure") }
+        override suspend fun cancelLocal(targetId: String) { calls += "outbox.cancel" to payload("target" to targetId) }
         override suspend fun submit(frame: JsonObject, text: String, targetLabel: String): String {
             submitted = frame
             if (signalBeforeAccept) signal("queued")
@@ -58,6 +59,24 @@ class WaitingViewModelTest {
         it.updateAccess(true, "self", mapOf("agent:a" to "A"))
     }
     private suspend fun WaitingViewModel.editing() { requestEdit("target"); withTimeout(2_000) { state.first { it.edit.phase == EditPhase.EDITING } } }
+
+    @Test fun pureLocalQueueCanBeCancelledOfflineWithoutWireCancel() = runBlocking<Unit> {
+        val wire = Wire(); val port = Port(wire); val viewModel = vm(wire, port, snapshot(emptyList()))
+        try {
+            viewModel.updateSnapshot(snapshot(emptyList()), busyActorIds = setOf("agent:a"))
+            wire.state.value = WireState.Disconnected("offline", 0)
+            val row = LocalSubmission("local-only", "c", buildJsonObject { put("msg_type", "agent.ask"); put("audience", buildJsonArray { add("agent:a") }); put("payload", payload("text" to "offline text")) }, "offline text", "A", createdAt = 1)
+            viewModel.updateSubmissions(listOf(row))
+            assertEquals("等待连接后发出", viewModel.state.value.groups.single().rows.single().labels.first())
+            assertEquals("local-only", viewModel.state.value.groups.single().rows.single().localSubmission!!.messageId)
+            viewModel.cancel("local-only")
+            assertEquals(1, port.calls.count { it.first == "outbox.cancel" })
+            assertEquals(0, port.calls.count { it.first == "wire.cancel" })
+            viewModel.updateSnapshot(snapshot(emptyList()), newerUnloaded = true)
+            assertTrue(viewModel.state.value.groups.isEmpty())
+            assertTrue(viewModel.state.value.localEchoes.isEmpty())
+        } finally { viewModel.close() }
+    }
 
     @Test fun timelineStopUsesDeclaredActorRequestAndDetachedWindowCannotStop() = runBlocking<Unit> {
         val wire = Wire(); val port = Port(wire)
