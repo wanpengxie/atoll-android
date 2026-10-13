@@ -10,7 +10,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -80,7 +79,7 @@ fun TimedActionsDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
             item { TextButton(onClick={ perform { cancelTimer(cancelId.trim());"已确认取消 ${cancelId.trim()}" } },enabled=!busy && state.writable && cancelId.isNotBlank()) { Text("取消定时动作") } }
             items(state.timers,key={ it.timerId }) { timer ->
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    Text(compactWorkTitle(timer.payload.text("text").ifEmpty { timer.msgType }),style=MaterialTheme.typography.titleSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    WorkTitle(timer.payload.text("text").ifEmpty { timer.msgType })
                     Text("${when (timer.state) { "scheduled" -> "已安排";"fired" -> "已触发";else -> "已取消" }} · ${taskDate(timer.dueAt.toString())}",style=MaterialTheme.typography.bodySmall)
                     Text(timer.timerId,style=MaterialTheme.typography.bodySmall)
                     if (timer.state=="scheduled") TextButton(onClick={ perform { cancelTimer(timer.timerId);"已确认取消 ${timer.timerId}" } },enabled=!busy && state.writable) { Text("取消") }
