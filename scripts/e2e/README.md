@@ -1,5 +1,29 @@
 # Isolated-node Android smoke test
 
+Preferred runner: Compose instrumented UI in the app's `androidTest` source set.
+It uses `createAndroidComposeRule<MainActivity>`, `performTextReplacement`,
+semantic actions and `waitUntil`; no adb keyboard or coordinate input.
+
+```sh
+python3 scripts/e2e/instrumented.py --dry-run
+python3 scripts/e2e/instrumented.py --owner sol-2
+```
+
+The second command runs `./gradlew connectedDebugAndroidTest` with the five
+instrumentation parameters listed by dry-run. The wrapper obtains the test
+credentials through SSH, captures/redacts Gradle output, owns the emulator
+queue/lock and pulls the per-step screenshots and JSON summary. No plaintext
+credentials belong in a manually pasted command. JAVA_HOME should point to
+Android Studio's JBR, as in WORKFLOW.md.
+
+Inside the test, the exact isolated URL is required **before Activity startup**;
+only the isolated account's saved cookie/bootstrap is cleared. Login/logout
+use a new UI session. The terminal page is opened through UI, then its public
+PTY interface executes `ls` and checks the fixture file plus a standalone
+completion marker. This verifies the real PTY without simulating native keys.
+
+The older adb runner below is retained until the instrumented suite passes.
+
 Run on mbp. Python 3 standard library, adb, and uiautomator are enough. The
 runner accepts **only** `http://100.99.232.10:18080`; it rejects other hosts,
 ports, schemes, query strings and redirects before reading credentials or

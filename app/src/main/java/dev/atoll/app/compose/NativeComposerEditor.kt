@@ -13,8 +13,18 @@ import android.view.inputmethod.BaseInputConnection
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.widget.EditText
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.editableText
+import androidx.compose.ui.semantics.focused
+import androidx.compose.ui.semantics.requestFocus
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.insertTextAtCursor
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setText
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.viewinterop.AndroidView
@@ -28,7 +38,32 @@ import androidx.core.view.ContentInfoCompat
 internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, enabled: Boolean, maxLines: Int,
     onValue: (TextFieldValue) -> Unit, onKey: (String, Boolean, Boolean, Boolean) -> Boolean,
     onSend: () -> Unit, onFocus: (Boolean) -> Unit, onFiles: (List<android.net.Uri>) -> Unit, onDrag: (Boolean) -> Unit) {
-    AndroidView(modifier = modifier, factory = { context -> NativeEditor(context).apply {
+    var native by remember { mutableStateOf<NativeEditor?>(null) }
+    var semanticText by remember { mutableStateOf("") }
+    var semanticFocus by remember { mutableStateOf(false) }
+    AndroidView(modifier = modifier.testTag("atoll.composer.editor").semantics {
+        editableText = AnnotatedString(semanticText)
+        this[SemanticsProperties.IsEditable] = enabled
+        if (!enabled) disabled()
+        focused = semanticFocus
+        requestFocus { enabled && native?.requestFocus() == true }
+        insertTextAtCursor { value ->
+            val writer = native
+            if (!enabled || writer == null) false else {
+                val start = minOf(writer.selectionStart, writer.selectionEnd).coerceIn(0, writer.length())
+                val end = maxOf(writer.selectionStart, writer.selectionEnd).coerceIn(start, writer.length())
+                writer.text.replace(start, end, value.text)
+                writer.setSelection(start + value.length); true
+            }
+        }
+        setText { value ->
+            val writer = native
+            if (!enabled || writer == null) false else {
+                writer.setText(value.text); writer.setSelection(writer.length()); true
+            }
+        }
+    }, factory = { context -> NativeEditor(context).apply {
+        native = this
         contentDescription = "消息输入框"
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
         textSize = 16f
@@ -57,14 +92,15 @@ internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, en
             if (uris.isEmpty()) payload else { filesCallback?.invoke(uris); payload.partition { it.uri == null }.first }
         }
     } }, update = { editor ->
-        editor.valueCallback = onValue; editor.keyCallback = onKey; editor.sendCallback = onSend
-        editor.focusCallback = onFocus; editor.filesCallback = onFiles; editor.dragCallback = onDrag
+        editor.valueCallback = { value -> semanticText = value.text; onValue(value) }; editor.keyCallback = onKey; editor.sendCallback = onSend
+        editor.focusCallback = { value -> semanticFocus = value; onFocus(value) }; editor.filesCallback = onFiles; editor.dragCallback = onDrag
         editor.isEnabled = enabled; editor.maxLines = maxLines
         if (editor.writeAuthority.accept(command)) {
             editor.suppress = true
             try {
                 editor.setText(command.text)
                 editor.setSelection(command.selectionStart.coerceIn(0, editor.length()), command.selectionEnd.coerceIn(0, editor.length()))
+                semanticText = command.text
             } finally { editor.suppress = false }
         }
     })

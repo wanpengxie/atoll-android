@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import run
+import instrumented
 from ui import Adb, Failure, Selector as S, Tree
 
 
@@ -28,6 +29,17 @@ XML = '''<hierarchy><node package="dev.atoll.app" bounds="[0,0][1000,1000]">
 
 
 class DriverTest(unittest.TestCase):
+    def test_instrumented_dry_run_has_no_credentials_or_external_calls(self):
+        with patch('instrumented.ssh', side_effect=AssertionError('no secrets')), patch('instrumented.load_node', side_effect=AssertionError('no metadata')):
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(0, instrumented.main(['--dry-run']))
+            self.assertIn('connectedDebugAndroidTest', output.getvalue())
+            self.assertIn('atollPassword', output.getvalue())  # Argument name only.
+
+    def test_instrumented_wrong_origin_rejects_before_loading_credentials(self):
+        with patch('instrumented.load_node', side_effect=AssertionError('no metadata')), self.assertRaises(Failure):
+            instrumented.main(['--url', 'https://tardis.tail6bc2a1.ts.net'])
+
     def test_login_waits_for_authenticated_ui_instead_of_shared_title(self):
         with tempfile.TemporaryDirectory() as tmp:
             from unittest.mock import Mock
