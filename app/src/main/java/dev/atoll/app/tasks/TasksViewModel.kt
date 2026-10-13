@@ -1,6 +1,5 @@
 package dev.atoll.app.tasks
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import dev.atoll.app.app.WorkspaceServices
 import dev.atoll.app.compose.LocalSubmission
@@ -12,7 +11,6 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import java.util.UUID
 
@@ -38,7 +36,7 @@ class TasksViewModel(
     val services: WorkspaceServices,
     val channelId: String,
     snapshot: TimelineSnapshot? = null,
-    private val store: KeyValueStore,
+    private val automation: AutomationSession = AutomationSession(services.boot),
     private val submissionOwner: TaskSubmissionOwner? = null,
     private val now: ()->Long = System::currentTimeMillis,
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
@@ -47,18 +45,17 @@ class TasksViewModel(
     private val inputs=MutableStateFlow(TaskInputs(snapshot,null,services.selfIds[channelId].orEmpty(),emptyList(),false))
     private val mutable=MutableStateFlow(TasksState())
     val state: StateFlow<TasksState> = mutable.asStateFlow()
-    private val timerKey="tasks.timers:${services.server}:${services.principalId}:$channelId"
-    private val timers=MutableStateFlow(runCatching { store.get(timerKey)?.let { Json.decodeFromString<List<AutomationRecord>>(it) } }.getOrNull().orEmpty())
+    private val timers=automation.records
     private val pending=submissionOwner?.submissions ?: MutableStateFlow(emptyList())
     private val manifests=MutableStateFlow<Map<String,Set<String>>>(emptyMap())
     private val probing=mutableSetOf<String>()
     private val probes=Semaphore(4)
     private val clock=MutableStateFlow(now())
     private var expiry: Job? = null
-    private val firings=linkedMapOf<String,Envelope>()
     init {
-        scope.launch { combine(inputs,pending,timers,manifests,services.wire.state) { input,local,automation,capabilities,connection ->
-            ProjectionInput(input,local,automation,capabilities,connection is WireState.Attached,clock.value)
+        scope.launch(start=CoroutineStart.UNDISPATCHED) { services.wire.state.collect { automation.observe(it) } }
+        scope.launch { combine(inputs,pending,timers,manifests,services.wire.state) { input,local,records,capabilities,connection ->
+            ProjectionInput(input,local,records.filter { it.channelId==channelId },capabilities,connection is WireState.Attached,clock.value)
         }.combine(clock) { value,time -> value.copy(time=time) }.mapLatest { value -> withContext(Dispatchers.Default) { project(value) } }.collect { projection ->
             mutable.value=mutable.value.copy(items=projection.items,waiting=projection.waiting,providers=projection.providers,actorNames=projection.names,selfId=projection.selfId,writable=projection.writable,connected=projection.connected,
                 creationReady=projection.writable && submissionOwner!=null && projection.providers.isNotEmpty(),timers=projection.timers)
@@ -120,31 +117,21 @@ class TasksViewModel(
             finally { probing.remove(actor.id) }
         } }
     }
-    private fun persistTimers() { store.put(timerKey,Json.encodeToString(timers.value));clock.value=now() }
-    private fun observeFiring(envelope: Envelope) {
-        if (envelope.kind!="event") return
-        val canonical=envelope.id.startsWith("timer:") && envelope.parentId.isEmpty() && envelope.correlationId==envelope.id &&
-            envelope.senderKind in setOf("agent","human") && envelope.senderId.isNotEmpty() && envelope.audience==listOf(envelope.senderId)
-        if (!canonical || envelope.senderId!=inputs.value.selfId) return
-        firings[envelope.id]=envelope
-        if (firings.size>128) firings.remove(firings.keys.first())
-        val next=timers.value.map { row ->
-            val current = canonical && envelope.id=="timer:${row.timerId}" && envelope.senderId==inputs.value.selfId
-            if (row.state=="scheduled" && current) row.copy(state="fired",firedAt=envelope.ts.takeIf { it>0 } ?: now()) else row
-        }
-        if (next!=timers.value) { timers.value=next;persistTimers() }
-    }
+    private fun timersChanged() { clock.value=now() }
+    private fun observeFiring(envelope: Envelope) { automation.observeFiring(Row(channelId,0,envelope),inputs.value.selfId) }
     suspend fun schedule(durationMs: Long, msgType: String, payload: JsonObject): String {
         requireWritable();require(durationMs>0) { "延迟必须是正整数毫秒" };require(msgType.isNotBlank()) { "消息类型不能为空" }
+        val generation=automation.generation
         val receipt=services.wire.request(Up.AFTER,buildJsonObject { put("channel_id",channelId);put("duration_ms",durationMs);put("msg_type",msgType.trim());put("payload",payload) })
         val id=receipt.text("timer_id").ifEmpty { receipt.text("timerId") };require(id.isNotEmpty()) { "服务端没有返回 timer_id" }
-        timers.value=timers.value.filterNot { it.timerId==id }+AutomationRecord(id,channelId,durationMs,msgType.trim(),payload,now())
-        firings["timer:$id"]?.let(::observeFiring);persistTimers();return id
+        check(generation==automation.generation) { "会话已变化，定时动作记录不可跨会话恢复" }
+        automation.add(AutomationRecord(id,channelId,durationMs,msgType.trim(),payload,now()))
+        timersChanged();return id
     }
     suspend fun cancelTimer(id: String) {
         requireWritable();require(id.isNotBlank()) { "timer_id 不能为空" }
         services.wire.request(Up.CANCEL_TIMER,buildJsonObject { put("channel_id",channelId);put("timer_id",id) })
-        timers.value=timers.value.map { if (it.timerId==id && it.state=="scheduled") it.copy(state="cancelled",cancelledAt=now()) else it };persistTimers()
+        automation.update(channelId) { if (it.timerId==id && it.state=="scheduled") it.copy(state="cancelled",cancelledAt=now()) else it };timersChanged()
     }
     suspend fun createTask(provider: String,title: String,description: String="",dueAt: String="",source: JsonObject?=mutable.value.source): String {
         requireWritable();check(submissionOwner!=null) { "持久提交队列尚未接入" }
@@ -205,5 +192,5 @@ fun approvalResolvePayload(item: TaskFact,decision: String,note: String="",text:
         else -> throw IllegalArgumentException("此请求不是可回答的 human.ask/human.approve")
     }
 }
-fun createTasksViewModel(context: Context,services: WorkspaceServices,channelId: String,snapshot: TimelineSnapshot?=null,owner: TaskSubmissionOwner?=null): TasksViewModel =
-    TasksViewModel(services,channelId,snapshot,AndroidKeyValueStore(context.getSharedPreferences("tasks",Context.MODE_PRIVATE)),owner)
+fun createTasksViewModel(services: WorkspaceServices,channelId: String,snapshot: TimelineSnapshot?=null,owner: TaskSubmissionOwner?=null,automation: AutomationSession): TasksViewModel =
+    TasksViewModel(services,channelId,snapshot,automation,owner)

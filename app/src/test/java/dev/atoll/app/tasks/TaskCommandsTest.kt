@@ -19,9 +19,9 @@ class TaskCommandsTest {
     private fun event(id: String,type: String="agent.ask",sender: String="me",channel: String="c")=Envelope(buildJsonObject {
         put("id","timer:$id");put("correlation_id","timer:$id");put("audience",JsonArray(listOf(JsonPrimitive(sender))));put("channel_id",channel);put("kind","event");put("type",type);put("ts",10);put("sender",buildJsonObject { put("id",sender);put("kind",if (sender=="me") "human" else sender) });put("payload",buildJsonObject { put("body",buildJsonObject {}) })
     })
-    @Test fun timersFollowExactFeedIdentityNotElapsedTimeAndPersistOnlyThisDeviceRecords()=runBlocking<Unit> {
+    @Test fun timersFollowExactFeedIdentityAndSurviveChannelModelsOnlyInTheSameSession()=runBlocking<Unit> {
         newSingleThreadContext("timer-test").use { dispatcher -> withContext(dispatcher) {
-            val wire=TaskTestWire();val store=MemoryKeyValueStore();val vm=TasksViewModel(services(wire),"c",store=store,now={100},dispatcher=dispatcher)
+            val wire=TaskTestWire();val session=AutomationSession("");val vm=TasksViewModel(services(wire),"c",automation=session,now={100},dispatcher=dispatcher)
             vm.update(ChannelReplica("c").snapshot(),selfId="me",writable=true)
             try {
                 val id=vm.schedule(5,"agent.ask",obj("""{"text":"timer"}"""));assertEquals("uuid-1",id)
@@ -36,7 +36,7 @@ class TaskCommandsTest {
                 vm.cancelTimer(id);yield();assertEquals("fired",vm.state.value.timers.single().state)
                 assertEquals(Up.AFTER,wire.requests.first().first);assertEquals(JsonPrimitive(5),wire.requests.first().second["duration_ms"])
                 vm.close()
-                val restored=TasksViewModel(services(wire),"c",store=store,dispatcher=dispatcher)
+                val restored=TasksViewModel(services(wire),"c",automation=session,dispatcher=dispatcher)
                 try { withTimeout(5000) { restored.state.first { it.timers.isNotEmpty() } };assertEquals("fired",restored.state.value.timers.single().state) } finally { restored.close() }
             } finally { vm.close() }
         } }
@@ -44,7 +44,7 @@ class TaskCommandsTest {
     @Test fun immediateTimerFeedBeforeAfterReceiptIsJoinedAndDisconnectBlocksScheduling()=runBlocking<Unit> {
         newSingleThreadContext("timer-race-test").use { dispatcher -> withContext(dispatcher) {
             val wire=TaskTestWire();wire.handle={ type,_ -> if (type==Up.AFTER) wire.frames.emit(DownFrame.Feed("",Row("c",1,event("early"))));obj("""{"timer_id":"early"}""") }
-            val vm=TasksViewModel(services(wire),"c",store=MemoryKeyValueStore(),dispatcher=dispatcher)
+            val vm=TasksViewModel(services(wire),"c",dispatcher=dispatcher)
             try {
                 vm.update(ChannelReplica("c").snapshot(),selfId="me",writable=true)
                 vm.schedule(1,"agent.ask",Envelope.EMPTY)
@@ -58,7 +58,7 @@ class TaskCommandsTest {
     @Test fun currentNodeHumanTimerFireUsesTimerPrefixAndSelfAuthorship()=runBlocking<Unit> {
         newSingleThreadContext("timer-contract-test").use { dispatcher -> withContext(dispatcher) {
             val wire=TaskTestWire();wire.handle={ _,_ -> obj("""{"timer_id":"uuid-1"}""") }
-            val vm=TasksViewModel(services(wire),"c",store=MemoryKeyValueStore(),dispatcher=dispatcher)
+            val vm=TasksViewModel(services(wire),"c",dispatcher=dispatcher)
             try {
                 vm.update(ChannelReplica("c").snapshot(),selfId="me",writable=true)
                 vm.schedule(100,"human.note",Envelope.EMPTY)
@@ -80,7 +80,7 @@ class TaskCommandsTest {
                 override fun retry(id: String)=Unit
                 override fun cancel(id: String) { cancelled.add(id) }
             }
-            val vm=TasksViewModel(services(wire),"c",store=MemoryKeyValueStore(),submissionOwner=owner,dispatcher=dispatcher)
+            val vm=TasksViewModel(services(wire),"c",submissionOwner=owner,dispatcher=dispatcher)
             try {
                 vm.update(ChannelReplica("c").snapshot(),selfId="me",writable=false)
                 val fact=withTimeout(5000) { vm.state.first { it.items.isNotEmpty() }.items.single() }
@@ -97,7 +97,7 @@ class TaskCommandsTest {
                 override suspend fun submitFrame(frame: JsonObject,text: String,targetLabel: String): String { submitted.add(frame);assertEquals("标题",text);assertEquals("Executor",targetLabel);return "stable-id" }
                 override fun retry(id: String)=Unit;override fun cancel(id: String)=Unit
             }
-            val vm=TasksViewModel(services(wire),"c",store=MemoryKeyValueStore(),submissionOwner=owner,dispatcher=dispatcher)
+            val vm=TasksViewModel(services(wire),"c",submissionOwner=owner,dispatcher=dispatcher)
             try {
                 vm.update(ChannelReplica("c").snapshot(),selfId="me",roster=listOf(TaskActor("agent","Executor")),writable=true)
                 withTimeout(5000) { vm.state.first { it.creationReady } }
@@ -105,7 +105,7 @@ class TaskCommandsTest {
                 assertEquals("task.create",submitted.single().text("msg_type"));assertEquals("request",submitted.single().text("kind"));assertFalse(submitted.single().containsKey("id"))
                 assertEquals("标题",submitted.single().objectAt("payload").text("title"))
             } finally { vm.close() }
-            val missing=TasksViewModel(services(wire),"c",store=MemoryKeyValueStore(),dispatcher=dispatcher)
+            val missing=TasksViewModel(services(wire),"c",dispatcher=dispatcher)
             try { missing.update(ChannelReplica("c").snapshot(),selfId="me",writable=true);try { missing.createTask("agent","标题");fail("must use owner") } catch (_:IllegalStateException) { } } finally { missing.close() }
         } }
     }

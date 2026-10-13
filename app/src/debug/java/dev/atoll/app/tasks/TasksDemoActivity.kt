@@ -61,7 +61,7 @@ private class TasksDemoModel: ViewModel() {
         override fun cancel(id: String) { local.value=local.value.filterNot { it.messageId==id };notice="已取消 $id" }
     }
     private val services=WorkspaceServices("http://offline.invalid","demo",mapOf("demo" to "me"),wire,ObsClient("http://offline.invalid",OkHttpClient()),OkHttpClient())
-    val tasks=TasksViewModel(services,"demo",store=MemoryKeyValueStore(),submissionOwner=owner)
+    val tasks=TasksViewModel(services,"demo",submissionOwner=owner)
     val forms=UiFormController(wire,{ "me" })
     var mode by mutableStateOf("tasks");private set
     var notice by mutableStateOf("")
