@@ -64,6 +64,11 @@ class IsolatedNodeSmokeTest {
     private val compose = createAndroidComposeRule<MainActivity>()
     private val prepare = object : ExternalResource() {
         override fun before() = runBlocking<Unit> {
+            // Both development bootstrap locations must be empty: this suite logs in through UI.
+            listOfNotNull(context.filesDir, context.getExternalFilesDir(null)).forEach { directory ->
+                val bootstrap = File(directory, "integration-auth.json")
+                check(!bootstrap.exists() || bootstrap.delete()) { "Could not remove test bootstrap file" }
+            }
             // Only this node's preferences/cookie. Never launch with the user's default server.
             val preferences = AppPreferences(context)
             preferences.saveAccount(config.url, "root")
