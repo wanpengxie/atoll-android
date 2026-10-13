@@ -113,7 +113,8 @@ own Room database file (no edits to `store/`).
    /files, pick from channel files), model/agent selector (agent.options,
    agent.context, agent.select), send states and a durable outbox
    (retry, expiry), drafts. PARITY §4. Package `compose/`.
-3. **W2-files** — `net/FileTransfer` (`/files` GET/PUT/HEAD, inline,
+3. **W2-files** (sol-1) — `net/ObsClient` (all /obs endpoints, 401 ->
+   sign-out), `net/FileTransfer` (`/files` GET/PUT/HEAD, inline,
    ETag), files browser (devices, breadcrumbs, sort, mkdir, upload,
    download, delete, load more), preview (image, video, audio, PDF,
    Markdown, HTML, text with highlighting and line jump, sniffing,
@@ -128,8 +129,7 @@ own Room database file (no edits to `store/`).
    insert all/cancel all, labels) and the edit flow (hold -> replace /
    unhold, background-task warning). PARITY §4 edit, §5. Package
    `waiting/`.
-6. **W2-roster** — `net/ObsClient` (all /obs endpoints, 401 -> sign-out),
-   roster panel, actor detail (describe, invoke a word), member config
+6. **W2-roster** — roster panel, actor detail (describe, invoke a word), member config
    (get, placeholders, entry edit, config edit, merged values). PARITY §10.
    Package `roster/`.
 7. **W2-governance** — channel details (members, settings, devices, danger
