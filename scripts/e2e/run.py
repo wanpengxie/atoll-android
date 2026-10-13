@@ -177,13 +177,27 @@ p.write_text(data['text']+'\\n')
         self.ui.type(S(text="服务器地址"), URL)
         self.ui.type(S(text="账号"), "root")
         password = ssh("cat atoll-test/root-password").decode().strip()
-        if not password or not password.isascii():
+        if not re.fullmatch(r"[A-Za-z0-9]{32}", password):
             raise Failure("isolated test password unavailable")
         # The script's command text contains only a file read. Test-only transient adb argv is accepted.
         self.ui.type(S(text="密码"), password, private=True)
         password = ""
+        self.ui.hide_keyboard()
+        # Verify the actual editable node after all fields settle, immediately before submit.
+        # A cleared app can restore a default server asynchronously while we fill the form.
+        tree = self.ui.dump()
+        server_label = tree.find(S(text="服务器地址"))
+        if server_label is None or tree.target(server_label, editable=True).attrib.get("text") != URL:
+            raise Failure("login server field is not the isolated test node")
+        account_label = tree.find(S(text="账号"))
+        account_ok = account_label is not None and tree.target(account_label, editable=True).attrib.get("text") == "root"
+        password_label = tree.find(S(text="密码"))
+        password_length_ok = password_label is not None and len(tree.target(password_label, editable=True).attrib.get("text", "")) == 32
+        print("login readback: server=test-node, account=root: %s, password length=32: %s" % (account_ok, password_length_ok), flush=True)
+        if not account_ok or not password_length_ok:
+            raise Failure("login field readback failed")
         self.ui.click(S(text="进入 Atoll"))
-        self.ui.wait(S(text="ATOLL"), timeout=40)
+        self.ui.wait(S(text="OPEN"), timeout=40)
 
     def channel_list(self):
         self.ui.wait(S(text="OPEN"), timeout=40)
@@ -239,14 +253,14 @@ p.write_text(data['text']+'\\n')
         self.menu("打开终端")
         self.ui.wait(S(text="已连接"), timeout=30)
         self.ui.click(S(text="⌨"))
-        self.ui.input("ls; printf '%s' '" + self.prefix + "_TERMINAL'")
+        self.ui.input("ls; echo " + self.prefix + "_TERMINAL")
         self.adb.shell("input", "keyevent", "66")
         time.sleep(1)
         # Existing public shortcut opens selectable transcript; no test-only app hook.
         self.adb.shell("input", "keycombination", "113", "59", "31")  # Ctrl+Shift+C
         self.ui.wait(S(text="选择终端文本"))
         self.ui.wait(S(pattern=re.escape(self.file)))
-        self.ui.wait(S(pattern=self.prefix + "_TERMINAL"))
+        self.ui.wait(S(pattern=r"(?m)^" + self.prefix + r"_TERMINAL\r?$"))
         self.ui.capture("terminal-transcript")
         self.ui.click(S(text="关闭"))
         self.ui.hide_keyboard()
