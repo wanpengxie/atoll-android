@@ -156,6 +156,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             suspend fun scrollCentre(index: Int) {
                                 autoScrolling = true
                                 try {
+                                    withFrameNanos { } // Layout-observer callbacks must finish before forceRemeasure.
                                     listState.scrollToItem(index)
                                     withFrameNanos { }
                                     val layout = listState.layoutInfo
@@ -167,6 +168,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             suspend fun scrollEnd() {
                                 autoScrolling = true
                                 try {
+                                    withFrameNanos { } // snapshotFlow may resume during placement's snapshot apply.
                                     listState.scrollToItem(latestBottomIndex)
                                     withFrameNanos { }
                                     val last = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.index == latestBottomIndex }
@@ -226,7 +228,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         following = false; graph.follow(false)
                                     } else if (index >= 0) {
                                         autoScrolling = true
-                                        try { listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0, position!!.offset) }
+                                        try { withFrameNanos { }; listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0, position!!.offset) }
                                         finally { autoScrolling = false }
                                         following = false; graph.follow(false)
                                     } else { scrollEnd(); following = true; graph.follow(true) }
