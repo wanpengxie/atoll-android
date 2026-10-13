@@ -33,7 +33,11 @@ fun TerminalScreen(
     DisposableEffect(surface) { onDispose { surface.dispose() } }
     val latestAttached by rememberUpdatedState(onAttached)
     var handle by remember(surface) { mutableStateOf<PtyHandle?>(null) }
-    SideEffect { surface.setTheme(theme); surface.control(ctrl); surface.onControlConsumed = { ctrl = false } }
+    // Read state in this composition scope, not only inside the deferred
+    // side effect or button label; native state must update with its label.
+    val nativeTheme = theme
+    val nativeControl = ctrl
+    SideEffect { surface.setTheme(nativeTheme); surface.control(nativeControl); surface.onControlConsumed = { ctrl = false } }
     LaunchedEffect(client, channelId, device, generation, visible, surface) {
         if (!visible || device.isEmpty()) return@LaunchedEffect
         val stream = client.attach(channelId, device, surface.columns, surface.rows, surface::onReady, surface::onData)
@@ -68,10 +72,10 @@ fun TerminalScreen(
                     Text((status as PtyStatus.Ended).detail.ifEmpty { "终端已结束" }, Modifier.weight(1f).padding(12.dp), style = MaterialTheme.typography.bodySmall)
                     TextButton(onClick = { handle?.close(); generation++ }) { Text("重开") }
                 }
-                AndroidView(factory = { surface }, modifier = Modifier.weight(1f).fillMaxWidth())
+                key(surface) { AndroidView(factory = { surface }, modifier = Modifier.weight(1f).fillMaxWidth()) }
                 Row(Modifier.fillMaxWidth().height(44.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                     val keys = listOf("Esc" to KeyEvent.KEYCODE_ESCAPE, "Tab" to KeyEvent.KEYCODE_TAB, "↑" to KeyEvent.KEYCODE_DPAD_UP, "↓" to KeyEvent.KEYCODE_DPAD_DOWN, "←" to KeyEvent.KEYCODE_DPAD_LEFT, "→" to KeyEvent.KEYCODE_DPAD_RIGHT)
-                    TextButton(onClick = { ctrl = !ctrl }, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text(if (ctrl) "Ctrl●" else "Ctrl") }
+                    TextButton(onClick = { val next = !ctrl; surface.control(next); ctrl = next; surface.requestFocus() }, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text(if (ctrl) "Ctrl●" else "Ctrl") }
                     keys.forEach { (label, code) -> TextButton(onClick = { surface.special(code) }, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text(label) } }
                     TextButton(onClick = surface::pasteClipboard, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("贴") }
                     TextButton(onClick = surface::showKeyboard, contentPadding = PaddingValues(4.dp), modifier = Modifier.weight(1f)) { Text("⌨") }
