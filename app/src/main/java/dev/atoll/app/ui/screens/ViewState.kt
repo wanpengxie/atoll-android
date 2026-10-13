@@ -11,7 +11,7 @@ data class AgentViewState(val id: String, val name: String, val active: Boolean 
 enum class MessageStatus(val label: String) { Processing("处理中"), Queued("排队中"), Failed("失败") }
 @Immutable
 data class MessageViewState(val id: String, val sender: String, val text: String, val time: String,
-    val agent: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
+    val agent: Boolean = false, val self: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
     val progress: String? = null, val recipient: String? = null)
 sealed interface TimelineEntry {
     val key: String

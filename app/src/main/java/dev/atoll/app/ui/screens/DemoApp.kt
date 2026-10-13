@@ -47,7 +47,7 @@ object DemoData {
     val agents = listOf(AgentViewState("claude", "claude", true), AgentViewState("sol-4", "sol-4", true), AgentViewState("sol-1", "sol-1"))
     val entries = listOf(
         TimelineEntry.Day("day-1", "今天 · 10 月 13 日"),
-        TimelineEntry.Message(MessageViewState("m1", "root", "开发一个原生的 Android 前端吧，布局样式参考现在 web。", "12:38", recipient = "claude")),
+        TimelineEntry.Message(MessageViewState("m1", "root", "开发一个原生的 Android 前端吧，布局样式参考现在 web。", "12:38", recipient = "claude", self = true)),
         TimelineEntry.Message(MessageViewState("m2", "claude", "我会按照完整版本安排任务，先把核心通信、缓存和界面并行开发。\n\n- **协议**：一条 WebSocket\n- **缓存**：本地 SQLite，后台补齐历史\n- **界面**：Kotlin + Jetpack Compose", "12:39", agent = true)),
         TimelineEntry.Notice("notice-1", "sol-4 已加入频道"),
         TimelineEntry.Message(MessageViewState("m3", "sol-4", "已完成主题和时间线组件。Markdown 支持 `inline code`、~~删除线~~和[文件链接](/workspace/README.md:12)。", "12:42", agent = true, status = MessageStatus.Processing, progress = "正在编译界面")),

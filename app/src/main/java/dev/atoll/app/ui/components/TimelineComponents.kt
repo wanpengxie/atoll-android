@@ -1,6 +1,7 @@
 package dev.atoll.app.ui.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -32,6 +33,26 @@ fun WeakNotice(text: String) {
 }
 @Composable
 fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null, onMore: () -> Unit = {}) {
+    if (message.self) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = 10.dp), horizontalAlignment = Alignment.End) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(message.sender, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                Text(message.time, fontSize = 10.sp, color = AtollColors.Muted)
+                message.recipient?.let { Text("发送给 $it", fontSize = 10.sp, color = AtollColors.Muted) }
+            }
+            Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.Top) {
+                Spacer(Modifier.weight(.1f))
+                Surface(Modifier.weight(.9f), shape = RoundedCornerShape(12.dp), color = AtollColors.MutedSurface,
+                    border = BorderStroke(1.dp, AtollColors.ControlLine)) {
+                    Markdown(message.id, message.text, Modifier.padding(12.dp), onLink)
+                }
+                Box(Modifier.size(30.dp).background(AtollColors.Selected, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
+                    Text(message.sender.take(1).uppercase(), fontSize = 12.sp, color = AtollColors.Muted)
+                }
+            }
+        }
+        return
+    }
     Row(Modifier.fillMaxWidth().padding(horizontal = 7.dp, vertical = if (message.continuation) 2.dp else 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (message.continuation) Spacer(Modifier.width(30.dp)) else {
             Box(Modifier.size(30.dp).background((if (message.agent) AtollColors.Agent else AtollColors.Accent).copy(alpha = .09f), RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
