@@ -92,6 +92,51 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
+    @Test fun scopeAndEffectiveActorFiltersRestoreIndependentAnchorsAndRejectOldViewCallbacks() = runBlocking {
+        val fixture = Fixture(head = 10, rows = (1L..10).map(::row))
+        val mineKey = browseViewKey(true, emptySet())
+        val allKey = browseViewKey(false, emptySet())
+        val filteredKey = browseViewKey(true, setOf("human:other"))
+        val mine = BrowsePosition("q2:request", 2, 22, false)
+        val all = BrowsePosition("q8:request", 8, 80, false)
+        val filtered = BrowsePosition("q4:request", 4, 44, false)
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            fixture.await { it.conversation != null }
+            fixture.controller.browse(mineKey, mine.key, mine.offset, false)
+            fixture.await { it.browsePosition == mine }
+            fixture.controller.toggleScope()
+            assertNull(fixture.await { it.conversation?.mineOnly == false }.browsePosition)
+            fixture.controller.browse(mineKey, "q3:request", 30, false) // Delayed callback from the old view.
+            fixture.controller.browse(allKey, all.key, all.offset, false)
+            fixture.await { it.browsePosition == all }
+            assertEquals(mine, BrowsePosition.decode(fixture.preferences.get("ns", "c.browse.$mineKey")))
+            fixture.controller.filter("human:other") // ALL ignores actor filters, retaining the same anchor.
+            assertEquals(all, fixture.await { it.conversation?.actorFilters == setOf("human:other") }.browsePosition)
+            fixture.controller.toggleScope()
+            assertNull(fixture.await { it.conversation?.mineOnly == true }.browsePosition)
+            fixture.controller.browse(filteredKey, filtered.key, filtered.offset, false)
+            fixture.await { it.browsePosition == filtered }
+            fixture.controller.filter(null)
+            assertEquals(mine, fixture.await { it.conversation?.actorFilters == emptySet<String>() }.browsePosition)
+            fixture.controller.toggleScope()
+            assertEquals(all, fixture.await { it.conversation?.mineOnly == false }.browsePosition)
+            fixture.controller.toggleScope()
+            fixture.await { it.conversation?.mineOnly == true }
+            fixture.controller.filter("human:other")
+            assertEquals(filtered, fixture.await { it.conversation?.actorFilters == setOf("human:other") }.browsePosition)
+            assertEquals(filtered, BrowsePosition.decode(fixture.preferences.get("ns", "c.browse.$filteredKey")))
+        } finally { fixture.stop() }
+    }
+
+    @Test fun obsoleteSingleChannelBrowsePositionIsNotRead() = runBlocking {
+        val fixture = Fixture(head = 10, rows = (1L..10).map(::row), legacyBrowse = BrowsePosition("q2:request", 2, 50, false))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            assertNull(fixture.await { it.conversation != null }.browsePosition)
+        } finally { fixture.stop() }
+    }
+
     @Test fun historicalBrowsePositionRestoresOneBoundedCacheWindowAndJumpReturnsToTail() = runBlocking {
         val saved = BrowsePosition("q500:request", 500, 87, following = false)
         val fixture = Fixture(head = 6000, rows = (1L..6000).map(::row), browse = saved)
@@ -102,9 +147,9 @@ class ChannelControllerTest {
             assertEquals("q1:request", restored.conversation!!.entries.first().key)
             assertEquals("q700:request", restored.conversation.entries.last().key)
             assertEquals(0L, fixture.memory.channel("c").meta.readPosition)
-            fixture.controller.browse("q550:request", 22, false)
+            fixture.controller.browse(browseViewKey(true, emptySet()), "q550:request", 22, false)
             fixture.await { it.browsePosition?.seq == 550L }
-            assertEquals(BrowsePosition("q550:request", 550, 22, false), BrowsePosition.decode(fixture.preferences.get("ns", "c.browse")))
+            assertEquals(BrowsePosition("q550:request", 550, 22, false), BrowsePosition.decode(fixture.preferences.get("ns", "c.browse.${browseViewKey(true, emptySet())}")))
             fixture.controller.closeView()
             fixture.await { it.conversation == null }
             fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
@@ -271,7 +316,7 @@ class ChannelControllerTest {
     }
 
     private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true, browse: BrowsePosition? = null,
-        selfId: String = "human:self", options: ChannelViewOptions? = null) {
+        selfId: String = "human:self", options: ChannelViewOptions? = null, legacyBrowse: BrowsePosition? = null) {
         val memory = MemoryRowStore()
         val lookups = AtomicInteger()
         val failNextRead = AtomicBoolean()
@@ -290,8 +335,9 @@ class ChannelControllerTest {
         init {
             runBlocking {
                 memory.commit("c", rows, if (head > 0) listOf(CoverageRange(1, head)) else emptyList())
+                if (legacyBrowse != null) preferences.put("ns", "c.browse", legacyBrowse.encode())
                 if (options != null) preferences.saveOptions("ns", "c", options)
-                if (browse != null) preferences.put("ns", "c.browse", browse.encode())
+                if (browse != null) preferences.put("ns", "c.browse.${browseViewKey((options?.mineOnly ?: true) && selfId.isNotBlank(), options?.actorFilters.orEmpty())}", browse.encode())
                 if (baseline) preferences.put("ns", "c.baselined", "true")
                 hub = SyncHub(wire, store, scope)
                 controller = ChannelController("c", selfId, hub.channel("c"), store, preferences, "ns", head, scope)

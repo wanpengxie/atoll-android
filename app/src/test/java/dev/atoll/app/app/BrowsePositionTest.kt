@@ -8,6 +8,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class BrowsePositionTest {
+    @Test fun readingViewKeysSortEffectiveFiltersAndIgnoreFiltersInAllScope() {
+        assertEquals(browseViewKey(true, linkedSetOf("agent:b", "agent:a")), browseViewKey(true, linkedSetOf("agent:a", "agent:b")))
+        assertEquals(browseViewKey(false, setOf("agent:a")), browseViewKey(false, emptySet()))
+        assertNotEquals(browseViewKey(true, emptySet()), browseViewKey(false, emptySet()))
+        assertNotEquals(browseViewKey(true, setOf("agent:a,b")), browseViewKey(true, setOf("agent:a", "b")))
+    }
+
     @Test fun opaqueKeyAndPixelOffsetRoundTripAndInvalidValuesAreIgnored() {
         val position = BrowsePosition("opaque:id:answer", 2048, 135, false)
         assertEquals(position, BrowsePosition.decode(position.encode()))
