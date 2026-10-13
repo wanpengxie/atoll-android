@@ -113,6 +113,14 @@ UI actions --> net (submit/resolve/cancel/resource frames) --> node --> back as 
 - `store`: Room's own executors; batch inserts per page/burst.
 - `ui`: collect StateFlows with lifecycle; never block.
 
+- Compose: the order and number of composable calls never depends on
+  whether data is null yet. Collect a constant fallback flow instead of
+  `x?.flow?.collectAsStateWithLifecycle()`, or put the call in an explicit
+  `key(owner) { }`. A conditional collector shifts the slot table and crashes
+  when the data appears.
+- A text field is the only writer of its own text: state flows out on
+  change; outside writes (clear, insert, load) are explicit commands.
+
 ## Testing
 
 - `core`, `net` (frame codec), `model`, `sync` (with a fake Wire and an
