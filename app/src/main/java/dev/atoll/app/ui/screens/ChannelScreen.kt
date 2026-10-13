@@ -33,7 +33,8 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
     onMenu: (ChannelMenuAction) -> Unit = {}, onLink: ((String) -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
-    contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true) {
+    contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
+    messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Workspace).safeDrawingPadding().imePadding()) {
         BoxWithConstraints(Modifier.fillMaxWidth().height(44.dp)) {
@@ -81,7 +82,10 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                 items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
                     is TimelineEntry.Day -> DaySeparator(entry.text)
                     is TimelineEntry.Notice -> WeakNotice(entry.text)
-                    is TimelineEntry.Message -> MessageFrame(entry.value, onLink) { onMenu(ChannelMenuAction.Process(entry.value.id)) }
+                    is TimelineEntry.Message -> {
+                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
+                        if (messageContent != null) messageContent(entry.value, default) else default()
+                    }
                 } }
                 if (state.entries.isEmpty()) item("empty") { Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("开始一段对话", style = MaterialTheme.typography.titleMedium)
