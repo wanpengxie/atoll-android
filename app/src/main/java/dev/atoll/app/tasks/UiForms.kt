@@ -44,7 +44,7 @@ fun schemaFields(schema: JsonObject, secret: Set<String> = emptySet()): List<For
     }
 }
 fun initialFormValues(fields: List<FormField>, prefill: JsonObject = Envelope.EMPTY): Map<String,JsonElement> = fields.associate { field ->
-    val value = if (field.name in prefill) prefill[field.name] else field.default
+    val value = if (field.secret) null else if (field.name in prefill) prefill[field.name] else field.default
     field.name to when {
         value == null || value == JsonNull -> if (field.control == "checkbox") JsonPrimitive(false) else JsonPrimitive("")
         field.control == "checkbox" -> JsonPrimitive(value == JsonPrimitive(true))

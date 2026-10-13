@@ -6,7 +6,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.serialization.json.*
 
-data class ExistingSecret(val exists: Boolean = false, val value: String = "", val error: String = "")
+data class ExistingSecret(val exists: Boolean = false, val error: String = "")
 data class UiFormsState(val forms: List<UiForm> = emptyList(), val busy: String = "", val error: String = "", val existing: Map<String,ExistingSecret> = emptyMap(), val notice: String = "") { val current: UiForm? get() = forms.firstOrNull() }
 /** Host-owned for the authenticated screen, independent of which channel/tab is visible. */
 class UiFormController(
@@ -61,7 +61,7 @@ class UiFormController(
     private fun loadExisting(form: UiForm) {
         existing?.cancel();mutable.value=mutable.value.copy(existing=emptyMap())
         existing=scope.launch { supervisorScope { form.secret.forEach { (field,resource) -> launch {
-            val result=try { readGlobal(form.channelId,resource) } catch (e:CancellationException) { throw e } catch (e:Exception) { ExistingSecret(error=e.message.orEmpty()) }
+            val result=try { statGlobal(form.channelId,resource) } catch (e:CancellationException) { throw e } catch (e:Exception) { ExistingSecret(error=e.message.orEmpty()) }
             if (mutable.value.current?.id==form.id) mutable.value=mutable.value.copy(existing=mutable.value.existing+(field to result))
         } } } }
     }
@@ -70,9 +70,8 @@ class UiFormController(
         if (receipt.text("status")=="rejected") throw WireException(Up.RESOURCE,receipt.text("detail").ifEmpty { "rejected" },receipt.text("detail").ifEmpty { "资源操作被拒绝" })
         return receipt
     }
-    private suspend fun readGlobal(channel: String, id: String): ExistingSecret = try {
-        val value=resource(channel,"read",id)["value"]
-        ExistingSecret(true,(value as? JsonPrimitive)?.takeIf { it.isString }?.content ?: value?.toString().orEmpty())
+    private suspend fun statGlobal(channel: String, id: String): ExistingSecret = try {
+        ExistingSecret(exists=resource(channel,"stat",id)["exists"]==JsonPrimitive(true))
     } catch (e:WireException) { if (e.code=="resource_not_found") ExistingSecret() else throw e }
     private suspend fun writeGlobal(channel: String, id: String, value: String) {
         val exists=resource(channel,"stat",id)["exists"]==JsonPrimitive(true)

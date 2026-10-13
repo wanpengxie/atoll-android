@@ -129,8 +129,8 @@ fun UiFormDialog(form: UiForm,controller: UiFormController,requesterName: String
                 if (field.secret) {
                     Text("写入 ${form.secret[field.name]}，回复里只有掩码。",style=MaterialTheme.typography.bodySmall)
                     val existing=state.existing[field.name]
-                    if (existing?.exists==true) Text("已有值：${existing.value}；提交会覆盖。",style=MaterialTheme.typography.bodySmall)
-                    else if (existing?.error?.isNotEmpty()==true) Text("读不到现值：${existing.error}",style=MaterialTheme.typography.bodySmall)
+                    if (existing?.exists==true) Text("这个 key 已有值，提交会覆盖。",style=MaterialTheme.typography.bodySmall)
+                    else if (existing?.error?.isNotEmpty()==true) Text("无法确认这个 key 是否存在：${existing.error}",style=MaterialTheme.typography.bodySmall)
                     else if (existing!=null) Text("这个 key 现在还没有值。",style=MaterialTheme.typography.bodySmall)
                 }
             }
