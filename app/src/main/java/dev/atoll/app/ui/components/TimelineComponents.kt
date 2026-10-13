@@ -44,7 +44,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null, 
                 Spacer(Modifier.weight(.1f))
                 Surface(Modifier.weight(.9f), shape = RoundedCornerShape(12.dp), color = AtollColors.MutedSurface,
                     border = BorderStroke(1.dp, AtollColors.ControlLine)) {
-                    Markdown(message.id, message.text, Modifier.padding(12.dp), onLink)
+                    Box(Modifier.padding(12.dp)) { FoldableMarkdown(message.id, message.text, message.latest, onLink) }
                 }
                 Box(Modifier.size(30.dp).background(AtollColors.Selected, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
                     Text(message.sender.take(1).uppercase(), fontSize = 12.sp, color = AtollColors.Muted)
@@ -67,7 +67,10 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null, 
                 Spacer(Modifier.weight(1f))
                 Text(message.time, fontSize = 10.sp, color = AtollColors.Muted)
             }
-            Markdown(message.id, message.text, onLink = onLink)
+            if (message.text.isNotEmpty()) FoldableMarkdown(message.id, message.text, message.latest, onLink)
+            message.result?.let { StructuredResult(it) }
+            message.trail?.let { ProgressTrail(it) { onMore() } }
+            if (message.subTasks.isNotEmpty()) SubTaskTree(message.subTasks, onOpen = { onMore() })
             message.status?.let { status -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 StatusChip(status)
                 message.progress?.let { Text(it, fontSize = 11.sp, color = AtollColors.Muted) }

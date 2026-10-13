@@ -3,6 +3,7 @@ package dev.atoll.app.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import dev.atoll.app.ui.components.RichContentHost
 import dev.atoll.app.ui.components.LocalMarkdownCache
 import dev.atoll.app.ui.components.MarkdownCache
 import dev.atoll.app.ui.theme.AtollTheme
@@ -11,6 +12,9 @@ import dev.atoll.app.ui.theme.AtollTheme
 @Composable
 fun DemoApp(initialScreen: String = "login") {
     val cache = remember { MarkdownCache() }
+    var drawer by remember { mutableStateOf(initialScreen == "channels") }
+    var panel by remember { mutableStateOf<String?>(when (initialScreen) { "process", "running", "starred" -> initialScreen; else -> null }) }
+    var stars by remember { mutableStateOf(ContentDemoData.stars) }
     var screen by remember { mutableStateOf(initialScreen) }
     var login by remember { mutableStateOf(LoginViewState("https://tardis.tail6bc2a1.ts.net", "root")) }
     var tab by remember { mutableStateOf(if (initialScreen == "tasks") ChannelTab.Tasks else ChannelTab.Conversation) }
@@ -22,18 +26,30 @@ fun DemoApp(initialScreen: String = "login") {
     BackHandler(screen != "login") { screen = if (screen == "channels") "login" else "channels" }
     AtollTheme {
         CompositionLocalProvider(LocalMarkdownCache provides cache) {
+        RichContentHost {
             when (screen) {
+                "content", "math", "mermaid", "code", "images", "json", "fold" -> ContentGallery(screen, { screen = "channel" })
                 "login" -> LoginScreen(login, { login = it }, { screen = "channels" }, { menu = "注册账号" })
-                "channels" -> ChannelListScreen(DemoData.channels, "已连接 · tardis", {
-                    selected = DemoData.channels.first { channel -> channel.id == it }; screen = "channel"
-                }, { menu = "新建频道" }, { menu = "活动中心" }, { menu = "设置" })
                 else -> ChannelScreen(ConversationViewState(selected, DemoData.agents, DemoData.entries, DemoData.tasks, mine, actorFilters, waitingCount = 2),
                     ComposerViewState(draft, "sol-4", "6.1 Sol", "high"), tab,
-                    { screen = "channels" }, { tab = it }, { mine = !mine }, { id -> actorFilters = if (id in actorFilters) actorFilters - id else actorFilters + id }, { draft = it }, { draft = "" },
-                    { menu = "已加载到最早消息" }, { menu = it }, { menu = "文件预览：$it" })
+                    { drawer = true }, { tab = it }, { mine = !mine }, { id -> actorFilters = if (id in actorFilters) actorFilters - id else actorFilters + id }, { draft = it }, { draft = "" },
+                    { menu = "已到频道最早一条动态" }, { action -> when {
+                        action == "星标消息" -> panel = "starred"
+                        action.startsWith("后台任务") -> panel = "running"
+                        action == "过程" -> panel = "process"
+                        else -> menu = action
+                    } }, { menu = "文件预览：$it" })
+            }
+            if (drawer) ChannelDrawer(ContentDemoData.navigation(selected.id), { drawer = false }, { id -> selected = ContentDemoData.channels.first { it.id == id }; screen = "channel" },
+                { menu = "新建频道" }, { menu = "活动" }, { menu = "空间管理" }, { drawer = false; screen = "login" }, { menu = "升级已开始" })
+            when (panel) {
+                "process" -> ProcessPanel(ContentDemoData.process, { panel = null })
+                "running" -> RunningDrawer(ContentDemoData.subtasks, { it == "m1" }, { panel = null })
+                "starred" -> StarredDrawer(stars, { it == "m1" }, { id -> stars = stars.filterNot { it.id == id } }, { panel = null })
             }
             menu?.let { title -> AlertDialog(onDismissRequest = { menu = null }, title = { Text(title) },
                 text = { Text("界面预览；此操作将在接线阶段连接节点。") }, confirmButton = { TextButton({ menu = null }) { Text("关闭") } }) }
+        }
         }
     }
 }
