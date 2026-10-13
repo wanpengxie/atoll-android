@@ -7,12 +7,16 @@ package dev.atoll.app.model
 class TimelinePresentation {
     private var previous: TimelineSnapshot? = null
     private var view: String = ""
+    private var indexes: Map<String, Int> = emptyMap()
     private val excludedCurrent = setOf("human.ask", "human.approve", "agent.select", "agent.new", "agent.hold", "agent.hold_expired", "agent.unhold", "agent.interrupt", "agent.context", "agent.options", "agent.fork", "actor.describe", "storage.get_url")
 
-    fun project(state: ReplicaSnapshot, options: TimelineOptions = TimelineOptions(), epoch: String = ""): TimelineSnapshot {
+    fun project(state: TimelineSource, options: TimelineOptions = TimelineOptions(), epoch: String = "", facts: ProjectionFacts? = null, changedEntries: List<TimelineEntry>? = null): TimelineSnapshot {
         val nextView = listOf(state.channelId, options.scope, options.selfId, options.actorFilter.sorted(), options.showNarration, epoch).joinToString("\u0000")
         val old = previous.takeIf { view == nextView }
-        val raw = ConversationPresentation.project(state, options)
+        if (old != null && changedEntries != null && facts != null) {
+            projectContent(state, options, facts, changedEntries, old)?.let { previous = it; return it }
+        }
+        val raw = ConversationPresentation.project(state, options, facts)
         val previousItems = old?.items.orEmpty()
         val previousById = previousItems.associateBy { it.entry.id }
         val previousIds = previousItems.map { it.entry.id }
@@ -69,8 +73,36 @@ class TimelinePresentation {
         }?.let { CurrentEntryCandidate(it.entry.id, it.seqHigh, it.entry.local) }
         val result = raw.copy(items = frozen(items), changes = PresentationChanges(kind, frozen(front), frozen(back), frozen(inserted), frozen(updated), frozen(removed)), currentEntryCandidate = current)
         previous = result
+        indexes = result.items.withIndex().associate { it.value.entry.id to it.index }
         view = nextView
         return result
     }
-    fun reset() { previous = null; view = "" }
+    private fun projectContent(state: TimelineSource, options: TimelineOptions, facts: ProjectionFacts, changed: List<TimelineEntry>, old: TimelineSnapshot): TimelineSnapshot? {
+        var items: MutableList<PresentationItem>? = null
+        val updated = mutableListOf<String>()
+        val changedTurns = mutableMapOf<String, Turn>()
+        for (entry in changed) {
+            val subset = object : TimelineSource by state { override val timeline = listOf(entry) }
+            val selected = ConversationPresentation.selectTimelineItems(subset, options.copy(localEchoes = emptyList()), facts)
+            val index = indexes[entry.id]
+            if (index == null && selected.isNotEmpty() || index != null && (selected.size != 1 || selected.first().id != entry.id)) return null
+            (listOf(entry) + entry.thread).mapNotNull { it.turn }.forEach { changedTurns[it.requestId] = it }
+            if (index == null) continue
+            val before = old.items[index]
+            val candidate = ConversationPresentation.presentationItem(selected.single(), old.items.getOrNull(index - 1)?.entry, old.items.getOrNull(index + 1)?.entry, options).copy(key = before.key, continuation = before.continuation)
+            if (candidate.copy(entry = before.entry) != before) {
+                if (items == null) items = old.items.toMutableList()
+                items[index] = candidate
+                updated.add(entry.id)
+            }
+        }
+        val waiting = old.waitingTurns.filter { it.requestId !in changedTurns }.toMutableList()
+        waiting.addAll(changedTurns.values.filter { turn -> turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, facts.restarts, options.now) in setOf(Lifecycle.WAITING, Lifecycle.PENDING) })
+        waiting.sortBy { it.requestSeq }
+        val rendered = items?.let(::frozen) ?: old.items
+        val current = old.currentEntryCandidate?.let { candidate -> indexes[candidate.id]?.let { index -> candidate.copy(seqHigh = rendered[index].seqHigh) } ?: candidate }
+        return old.copy(revision = state.projectionVersion, items = rendered, waitingTurns = frozen(waiting), runningTasks = facts.runningTasks,
+            changes = PresentationChanges(if (updated.isEmpty()) "unchanged" else "revise", updated = frozen(updated)), currentEntryCandidate = current)
+    }
+    fun reset() { previous = null; view = ""; indexes = emptyMap() }
 }

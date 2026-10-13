@@ -6,7 +6,7 @@ enum class Lifecycle { CLOSED, LOST, WAITING, PROCESSING, PENDING }
 
 object RequestLifecycle {
     const val QUEUE_PASSED_AFTER = 10
-    fun memberRestarts(state: ReplicaSnapshot): Map<String, Long> {
+    fun memberRestarts(state: TimelineSource): Map<String, Long> {
         val restarts = mutableMapOf<String, Long>()
         fun note(id: String, seq: Long) { if (id.isNotEmpty() && seq > 0) restarts[id] = maxOf(restarts[id] ?: 0, seq) }
         fun visit(entry: TimelineEntry) {
