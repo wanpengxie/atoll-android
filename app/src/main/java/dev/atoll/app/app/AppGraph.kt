@@ -56,7 +56,7 @@ data class WorkspaceServices(val server: String, val principalId: String, val se
 
 /** Manual app wiring. The manager owns navigation/session facts; channel writers own folds. */
 class AppGraph(private val context: Context) {
-    val telemetry = AppTelemetry()
+    val telemetry = AppTelemetry(warningStore=AndroidKeyValueStore(context.getSharedPreferences("diagnostics",Context.MODE_PRIVATE)))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<Event>(256)
     private val mutableState = MutableStateFlow(WorkspaceState())
