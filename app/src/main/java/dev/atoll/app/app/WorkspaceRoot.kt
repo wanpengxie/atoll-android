@@ -34,10 +34,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val services by graph.services.collectAsStateWithLifecycle()
     val features = viewModel.session(services)
     var recentOpen by remember { mutableStateOf(false) }
+    var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
-    LaunchedEffect(state.phase, state.route) { graph.telemetry.screen.set(state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
+    LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
+    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; recentOpen = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     AtollTheme {
         when (state.phase) {
@@ -45,7 +47,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
             WorkspacePhase.Login -> LoginScreen(state.login, graph::changeLogin, { graph.login(state.login) })
             WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "刷新页面", graph::reconnect)
             WorkspacePhase.Workspace -> {
-                BackHandler(state.route != null || drawer) { if (drawer) drawer = false else graph.back() }
+                BackHandler(state.route != null || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
                 Column(Modifier.fillMaxSize()) {
                     state.notice?.let { text -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -54,7 +56,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     } }
                     if (state.route == null) {
-                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade)
+                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true })
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
                                 withFrameNanos { }
@@ -164,6 +166,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     }
                 }
+                if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
                 if (recentOpen && features != null) {
                     val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
                     AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },
@@ -175,7 +178,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             } }
                         } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
-                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade)
+                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true })
             }
         }
     }
