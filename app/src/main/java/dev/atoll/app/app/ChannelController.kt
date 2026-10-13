@@ -9,6 +9,8 @@ import dev.atoll.app.ui.screens.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import dev.atoll.app.tasks.TaskFact
+import dev.atoll.app.tasks.ActivityAgentRun
 
 data class ChannelRuntimeState(
     val sync: SyncState = SyncState(),
@@ -20,6 +22,8 @@ data class ChannelRuntimeState(
     val error: String? = null,
     val timeline: TimelineSnapshot? = null,
     val timelineSource: TimelineSource? = null,
+    val taskFacts: List<TaskFact> = emptyList(),
+    val agentRuns: List<ActivityAgentRun> = emptyList(),
 )
 
 /** A light serial owner per membership. Only the selected owner's replica is retained. */
@@ -50,6 +54,9 @@ class ChannelController(
     private var conversation: ConversationViewState? = null
     private var timeline: TimelineSnapshot? = null
     private var timelineSource: TimelineSource? = null
+    private var taskFacts: List<TaskFact> = emptyList()
+    private var taskFactsDirty = true
+    private var activityExpiry: Job? = null
     private var following = true
     private var foreground = true
     private var newerUnloaded = false
@@ -73,6 +80,7 @@ class ChannelController(
                     preferences.put(namespace, "$id.baselined", "true")
                 }
                 options = preferences.options(namespace, id)
+                queueUnread()
                 for (command in commands) {
                     try { handle(command) }
                     catch (failure: Exception) {
@@ -81,7 +89,7 @@ class ChannelController(
                         publish()
                     }
                 }
-            } finally { reader?.cancel(); refresh?.cancel(); older?.cancel(); commands.close() }
+            } finally { reader?.cancel(); refresh?.cancel(); older?.cancel(); activityExpiry?.cancel(); commands.close() }
         }
         scope.launch { sync.state.collect { commands.send(Sync(it)) } }
     }
@@ -107,14 +115,17 @@ class ChannelController(
                 if (syncState.generation != command.value.generation) activity.clear()
                 val recovered = !syncState.current && command.value.current
                 val advanced = syncState.headSeq != command.value.headSeq
+                if (advanced) taskFactsDirty = true
                 syncState = command.value
                 if (readPosition >= syncState.headSeq) unread = UnreadCount()
                 else if (!syncState.current) unread = unread.copy(pending = true)
-                if (recovered || advanced && notificationDirty) queueUnread()
+                if (recovered || advanced && (notificationDirty || taskFactsDirty)) queueUnread()
                 conversation = conversation?.copy(connection = if (syncState.connected) "已连接" else "离线缓存")
             }
             is Live -> {
                 val envelope = command.row.envelope
+                taskFactsDirty = true
+                queueUnread()
                 if (envelope.kind == "response" && envelope.senderKind == "agent" && envelope.parentId.isNotEmpty()) {
                     if (envelope.isTerminal) activity.remove(envelope.parentId)
                     else if (envelope.status == "processing") activity.putIfAbsent(envelope.parentId,
@@ -157,6 +168,7 @@ class ChannelController(
             }
             Jump -> { following = true; newRoots.clear(); if (newerUnloaded) loadTail() else { updateBadges(); markSeen() } }
             RefreshUnread -> { refresh = null; calculateUnread() }
+            ActivityExpiry -> { activityExpiry = null; taskFactsDirty = true; calculateUnread() }
         }
         publish()
     }
@@ -201,6 +213,7 @@ class ChannelController(
     private fun project() {
         val model = replica ?: return
         timelineSource = model.snapshot()
+        if (!newerUnloaded) updateActivityFacts(timelineSource!!)
         val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
             selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded))
         timeline = snapshot
@@ -234,18 +247,30 @@ class ChannelController(
 
     private suspend fun calculateUnread() {
         notificationDirty = false
-        if (readPosition >= syncState.headSeq) { unread = UnreadCount(); return }
+        if (readPosition >= syncState.headSeq && !taskFactsDirty) { unread = UnreadCount(); return }
         val metadata = store.channel(id)
         val model = if (replica != null && !newerUnloaded) replica!! else ChannelReplica(id, selfId).also { it.apply(RowBatch(id, store.rows(id, limit = 4500), Origin.CACHE)) }
-        val rows = model.snapshot().rows
-        unread = NotificationPolicy.unread(model.snapshot(), selfId, readPosition, syncState.current)
+        val source = model.snapshot()
+        updateActivityFacts(source)
+        val rows = source.rows
+        if (readPosition >= syncState.headSeq) { unread = UnreadCount(); return }
+        unread = NotificationPolicy.unread(source, selfId, readPosition, syncState.current)
         val covered = metadata.coverage.any { it.low <= readPosition + 1 && it.high >= syncState.headSeq }
         if (!covered || (rows.firstOrNull()?.seq ?: 0) > readPosition + 1) unread = unread.copy(unknown = true)
     }
 
     private fun publish() {
         mutableState.value = ChannelRuntimeState(syncState, unread, if (syncState.connected) activity.values.toList() else emptyList(),
-            conversation, newerUnloaded, firstOrigin, error ?: syncState.error, timeline, timelineSource)
+            conversation, newerUnloaded, firstOrigin, error ?: syncState.error, timeline, timelineSource, taskFacts,
+            if (syncState.connected) activity.map { (request, value) -> ActivityAgentRun(id, request, value.id, updatedAt = value.startedAtMillis) } else emptyList())
+    }
+    private fun updateActivityFacts(source: TimelineSource) {
+        val now = System.currentTimeMillis()
+        taskFacts = activityFacts(source, selfId, now); taskFactsDirty = false
+        activityExpiry?.cancel(); activityExpiry = null
+        val next = taskFacts.filter { it.kind == "approval" && it.state == "waiting" }.mapNotNull { it.dueAt.toLongOrNull() }
+            .filter { it > now }.minOrNull() ?: return
+        activityExpiry = scope.launch { delay((next - now).coerceAtLeast(1)); commands.send(ActivityExpiry) }
     }
     private fun name(id: String) = actors.firstOrNull { it.id == id }?.name ?: id
     private fun candidate(envelope: Envelope) = envelope.kind == "request" || envelope.isTerminal || envelope.kind == "event" && envelope.type == "agent.provider.run"
@@ -265,4 +290,5 @@ class ChannelController(
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command
     private data object Jump : Command
     private data object RefreshUnread : Command
+    private data object ActivityExpiry : Command
 }

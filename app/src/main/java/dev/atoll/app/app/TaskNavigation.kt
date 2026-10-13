@@ -20,6 +20,7 @@ fun taskSourceLink(source: JsonObject): String? {
         taskKey.isNotEmpty() -> taskKey
         kind == "work_item" -> objectId
         tab == "files" -> source["resourceId"].string().ifEmpty { objectId }
+        kind == "channel" -> ""
         else -> source["requestId"].string().ifEmpty { source["messageId"].string().ifEmpty { objectId } }.takeIf { it.isNotEmpty() }?.let { "turn:$it" }.orEmpty()
     }
     fun encode(value: String) = URLEncoder.encode(value, "UTF-8").replace("+", "%20")

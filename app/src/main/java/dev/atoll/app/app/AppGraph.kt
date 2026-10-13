@@ -9,6 +9,8 @@ import dev.atoll.app.core.*
 import dev.atoll.app.model.UnreadCount
 import dev.atoll.app.model.TimelineSnapshot
 import dev.atoll.app.model.TimelineSource
+import dev.atoll.app.tasks.ChannelActivityInput
+import dev.atoll.app.tasks.ActivityAgentRun
 import dev.atoll.app.net.*
 import dev.atoll.app.store.*
 import dev.atoll.app.terminal.PtyClient
@@ -44,6 +46,8 @@ data class WorkspaceState(
     val newerUnloaded: Boolean = false,
     val rosterCurrent: Boolean = false,
     val timelineSource: TimelineSource? = null,
+    val activityInputs: List<ChannelActivityInput> = emptyList(),
+    val activityRuns: List<ActivityAgentRun> = emptyList(),
 )
 
 /** Feature packages share authentication/transport without reaching into the manager's state. */
@@ -571,6 +575,8 @@ class AppGraph(private val context: Context) {
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true,
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
+            activityInputs = channels.filter { it.id in memberships }.map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
+            activityRuns = channelStates.filterKeys { it in memberships }.values.flatMap { it.agentRuns },
             rosterCurrent = (rt.gate.state.value as? WireState.Attached)?.generation?.let { rosterGenerations[route?.channel] == it } == true)
     }
 

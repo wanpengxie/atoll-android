@@ -6,6 +6,7 @@ import dev.atoll.app.model.TimelineEntry
 import dev.atoll.app.model.Turn
 
 data class TimelineMessageTarget(val envelope: Envelope, val turn: Turn?)
+data class MessageTargetIndex(val channelId: String = "", val targets: Map<String, TimelineMessageTarget> = emptyMap())
 
 /** Resolve the rendered key structurally; actor/message IDs may themselves contain colons. */
 fun timelineMessageTarget(snapshot: TimelineSnapshot, key: String): TimelineMessageTarget? {

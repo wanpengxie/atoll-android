@@ -23,6 +23,8 @@ import dev.atoll.app.tasks.TasksViewModel
 import dev.atoll.app.tasks.TaskSubmissionOwner
 import dev.atoll.app.tasks.UiFormController
 import dev.atoll.app.tasks.createTasksViewModel
+import dev.atoll.app.governance.GovernanceViewModel
+import dev.atoll.app.governance.GovernanceRepository
 
 /** Feature models survive channel switches and rotation, and end with the checked server world. */
 class SessionFeatures(private val context: Context, val services: WorkspaceServices) : ViewModelStoreOwner {
@@ -38,6 +40,7 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
     private var selfIds = services.selfIds
     fun updateServices(value: WorkspaceServices) { selfIds = value.selfIds }
     val forms = UiFormController(services.wire, { selfIds[it].orEmpty() })
+    val governance = GovernanceViewModel(GovernanceRepository(services.wire, services.obs), services.principalId, services.wire.frames)
     private val taskOwner = object : TaskSubmissionOwner {
         override val submissions = composer.submissions
         override suspend fun submitFrame(frame: kotlinx.serialization.json.JsonObject, text: String, targetLabel: String) = composer.submitFrame(frame, text, targetLabel)
@@ -78,5 +81,5 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         override fun <T : ViewModel> create(modelClass: Class<T>): T = FilesViewModel(services.wire, services.httpClient,
             services.server, channel, context.cacheDir, fileHistory) as T
     })["files:$channel", FilesViewModel::class.java]
-    fun clear() { forms.close(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
+    fun clear() { governance.close(); forms.close(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
 }
