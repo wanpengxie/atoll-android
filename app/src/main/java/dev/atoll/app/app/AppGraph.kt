@@ -86,6 +86,8 @@ class AppGraph(private val context: Context) {
     private var notice: String? = null
     private var upgrade: NodeUpdateValue? = null
     private var exporting = false
+    private var treeGeneration = 0L
+    private var treeJob: Job? = null
     private val networkMonitor = NetworkRecoveryMonitor(context) { post(NetworkAvailable) }
 
     init {
@@ -110,6 +112,7 @@ class AppGraph(private val context: Context) {
     fun changeLogin(form: LoginViewState) { post(Form(form)) }
     fun logout() { post(Logout) }
     fun openChannel(id: String) { post(Navigate(AppRoute(id), push = true, restoreSurface = true)) }
+    fun channelCreated(id: String, parent: String, name: String, boot: String, enter: Boolean = false) { post(CreatedChannel(id, parent, name, boot, enter)) }
     fun route(value: String?) { AppRoute.parse(value)?.let { post(Navigate(it, push = true)) } }
     fun tab(value: ChannelTab) { post(Tab(value)) }
     fun files(open: Boolean) { post(Files(open)) }
@@ -169,8 +172,8 @@ class AppGraph(private val context: Context) {
             }
             is TransportState -> if (event.epoch == epoch) transport(event.state)
             is TransportFrame -> if (event.epoch == epoch) incoming(event.frame)
-            is Tree -> if (event.epoch == epoch && event.world == runtime?.world) { event.records.forEach { records[it.id] = it }; publish(); maybeRequestedRoute() }
-            is TreeDone -> if (event.epoch == epoch && event.world == runtime?.world) {
+            is Tree -> if (event.epoch == epoch && event.world == runtime?.world && event.generation == treeGeneration) { event.records.forEach { records[it.id] = it }; publish(); maybeRequestedRoute() }
+            is TreeDone -> if (event.epoch == epoch && event.world == runtime?.world && event.generation == treeGeneration) {
                 event.records?.let { complete -> records.keys.retainAll(complete.map { it.id }.toSet()); complete.forEach { records[it.id] = it } }
                 preferences.put(runtime!!.namespace, "channels", cachedTree(records.values).toString())
                 saveBootstrap()
@@ -191,6 +194,12 @@ class AppGraph(private val context: Context) {
             is Navigate -> {
                 if (runtime == null || mutableState.value.phase != WorkspacePhase.Workspace || runtime!!.gate.state.value !is WireState.Attached) { requestedRoute = event.route; requestedRestoreSurface = event.restoreSurface }
                 else navigate(event.route, event.push, restoreSurface = event.restoreSurface)
+            }
+            is CreatedChannel -> if (runtime != null && event.boot == mutableServices.value?.boot && event.id.isNotEmpty() && event.name.isNotEmpty()) {
+                val added = event.id !in records
+                records.putIfAbsent(event.id, createdChannelRecord(event.id, event.parent, event.name, records[event.parent]))
+                if (added || event.enter) loadTree(epoch)
+                if (event.enter) navigate(AppRoute(event.id), true, restoreSurface = true) else publish()
             }
             Back -> if (backStack.isNotEmpty()) navigate(backStack.removeLast(), false) else navigate(null, false)
             is Tab -> route?.let { current ->
@@ -518,18 +527,20 @@ class AppGraph(private val context: Context) {
     private fun loadTree(requestEpoch: Long) {
         val rt = runtime ?: return
         val requestWorld = rt.world
-        rt.scope.launch {
+        val generation = ++treeGeneration
+        treeJob?.cancel()
+        treeJob = rt.scope.launch {
             try {
                 val semaphore = Semaphore(6)
                 suspend fun walk(parent: String): List<ChannelRecord> {
                     val records = semaphore.withPermit { channelRecords(rt.obs.spaceChannels(parent)) }
-                    commands.send(Tree(requestEpoch, requestWorld, records))
+                    commands.send(Tree(requestEpoch, requestWorld, generation, records))
                     val children = coroutineScope { records.filter { it.type != "actor" }.map { async { walk(it.id) } }.awaitAll().flatten() }
                     return records + children
                 }
                 val complete = walk("")
-                commands.send(TreeDone(requestEpoch, requestWorld, complete, null))
-            } catch (failure: Exception) { if (failure !is CancellationException) commands.send(TreeDone(requestEpoch, requestWorld, null, failure.message)) }
+                commands.send(TreeDone(requestEpoch, requestWorld, generation, complete, null))
+            } catch (failure: Exception) { if (failure !is CancellationException) commands.send(TreeDone(requestEpoch, requestWorld, generation, null, failure.message)) }
         }
     }
 
@@ -630,8 +641,9 @@ class AppGraph(private val context: Context) {
     private data class Authenticated(val epoch: Long, val auth: Auth?, val failure: Exception?, val restoring: Boolean) : Event
     private data class TransportState(val epoch: Long, val state: WireState) : Event
     private data class TransportFrame(val epoch: Long, val frame: DownFrame) : Event
-    private data class Tree(val epoch: Long, val world: Long, val records: List<ChannelRecord>) : Event
-    private data class TreeDone(val epoch: Long, val world: Long, val records: List<ChannelRecord>?, val failure: String?) : Event
+    private data class Tree(val epoch: Long, val world: Long, val generation: Long, val records: List<ChannelRecord>) : Event
+    private data class TreeDone(val epoch: Long, val world: Long, val generation: Long, val records: List<ChannelRecord>?, val failure: String?) : Event
+    private data class CreatedChannel(val id: String, val parent: String, val name: String, val boot: String, val enter: Boolean) : Event
     private data class Roster(val epoch: Long, val world: Long, val channel: String, val actors: List<ActorRecord>, val generation: Long, val success: Boolean = true) : Event
     private data class Controller(val epoch: Long, val world: Long, val id: String, val value: ChannelRuntimeState) : Event
     private data class Navigate(val route: AppRoute, val push: Boolean, val restoreSurface: Boolean = false) : Event
