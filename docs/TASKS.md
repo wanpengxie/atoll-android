@@ -224,7 +224,7 @@ Each package owns its files; live checks run on our test node.
 | W4 #07 history (+ observer filters) | sol-3 | in progress |
 | W4 #24 related-call data + child focus | sol-1 | merged |
 | W4 #24 renderer | sol-4 | merged (data from sol-1 pending) |
-| W4 #17 continuation bubbles | sol-4 | in progress |
+| W4 #17 continuation bubbles | sol-4 | merged |
 | W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
 | R8 17-step on 8fd496d, then release APK | sol-2 | rebuilding |
 
