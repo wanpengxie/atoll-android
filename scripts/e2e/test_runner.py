@@ -2,6 +2,8 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -71,6 +73,57 @@ class RunnerTest(unittest.TestCase):
                     raise Failure('test execution failed')
             self.assertFalse(lock.lock.exists()); self.assertEqual('', lock.queue.read_text())
             with self.assertRaises(Failure): lock.check_owner()
+
+    def test_same_owner_cannot_join_or_remove_an_active_runners_queue(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            def make_lock():
+                lock = EmulatorLock('sol-2', 1)
+                lock.base = Path(tmp); lock.lock = Path(tmp) / 'lock'; lock.queue = Path(tmp) / 'queue'
+                return lock
+            with make_lock() as first:
+                with self.assertRaisesRegex(Failure, 'already active'): make_lock().__enter__()
+                first.check_owner()
+                self.assertEqual('sol-2\n', first.queue.read_text())
+
+    def test_gradle_group_finishes_before_lock_is_released(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); events = []; marker = root / 'child-result'
+            lock = EmulatorLock('sol-2', 1, lambda event, **fields: events.append(event))
+            lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
+            child = "import time; from pathlib import Path; time.sleep(.3); Path(%r).write_text(str(Path(%r).exists()))" % (str(marker), str(lock.lock))
+            parent = "import subprocess,sys; subprocess.Popen([sys.executable,'-c',%r],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)" % child
+            with lock, contextlib.redirect_stdout(io.StringIO()):
+                status = instrumented.run_gradle([sys.executable, '-c', parent], dict(os.environ), io.StringIO(), ['secret'], lock)
+                self.assertEqual(0, status)
+                self.assertEqual('True', marker.read_text())
+                lock.check_owner()
+            self.assertLess(events.index('lock-acquired'), events.index('gradle-start'))
+            self.assertLess(events.index('gradle-group-finished'), events.index('lock-released'))
+
+    def test_cancel_stops_the_entire_group_before_releasing_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); events = []
+            lock = EmulatorLock('sol-2', 1, lambda event, **fields: events.append((event, fields)))
+            lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
+            parent = "import subprocess,sys,time; subprocess.Popen([sys.executable,'-c','import time; time.sleep(30)']); print('ready',flush=True); time.sleep(30)"
+            log = io.StringIO()
+            with patch.object(log, 'write', side_effect=KeyboardInterrupt), self.assertRaises(KeyboardInterrupt):
+                with lock:
+                    instrumented.run_gradle([sys.executable, '-c', parent], dict(os.environ), log, ['secret'], lock)
+            group = next(fields['process_id'] for event, fields in events if event == 'gradle-start')
+            self.assertFalse(instrumented.group_running(group))
+            self.assertEqual('lock-released', events[-1][0])
+
+    def test_cleanup_failure_retains_lock_and_queue_for_inspection(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            lock = EmulatorLock('sol-2', 1)
+            lock.base = root; lock.lock = root / 'lock'; lock.queue = root / 'queue'
+            with self.assertRaises(Failure), patch('instrumented.drain_group', side_effect=Failure('not drained')):
+                with lock:
+                    instrumented.run_gradle([sys.executable, '-c', 'pass'], dict(os.environ), io.StringIO(), ['secret'], lock)
+            self.assertTrue(lock.lock.exists())
+            self.assertEqual('sol-2\n', lock.queue.read_text())
 
     def test_isolated_password_helper_remains_outside_the_ui_runner(self):
         spec = importlib.util.spec_from_file_location('test_password', Path(__file__).parent.parent / 'test-node-password.py')
