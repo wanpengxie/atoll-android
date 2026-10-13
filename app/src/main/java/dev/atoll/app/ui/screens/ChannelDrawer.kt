@@ -7,8 +7,8 @@ import androidx.compose.ui.window.DialogProperties
 @Composable
 fun ChannelDrawer(state: ChannelNavigationViewState, onClose: () -> Unit, onOpen: (String) -> Unit,
     onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSpaceAdmin: () -> Unit = {},
-    onLogout: () -> Unit = {}, onUpgrade: () -> Unit = {}) {
+    onLogout: () -> Unit = {}, onUpgrade: () -> Unit = {}, onSettings: () -> Unit = {}) {
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        ChannelListScreen(state, { onOpen(it); onClose() }, onCreate, onActivity, onSpaceAdmin, onLogout, onUpgrade, onClose)
+        ChannelListScreen(state, { onOpen(it); onClose() }, onCreate, onActivity, onSpaceAdmin, onLogout, onUpgrade, onClose, onSettings)
     }
 }

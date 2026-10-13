@@ -22,12 +22,12 @@ fun ChannelListScreen(channels: List<ChannelViewState>, connection: String, onOp
     onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSettings: () -> Unit = {}, activeChannelId: String? = null) {
     ChannelListScreen(ChannelNavigationViewState(channels,
         ConnectionPhase.entries.firstOrNull { it.name == connection.uppercase() } ?: ConnectionPhase.OPEN,
-        AccountViewState("", "已登录用户"), activeChannelId = activeChannelId), onOpen, onCreate, onActivity, onSettings)
+        AccountViewState("", "已登录用户"), activeChannelId = activeChannelId), onOpen, onCreate, onActivity, onSettings = onSettings)
 }
 @Composable
 fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Unit,
     onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSpaceAdmin: () -> Unit = {},
-    onLogout: () -> Unit = {}, onUpgrade: () -> Unit = {}, onClose: (() -> Unit)? = null) {
+    onLogout: () -> Unit = {}, onUpgrade: () -> Unit = {}, onClose: (() -> Unit)? = null, onSettings: () -> Unit = {}) {
     var collapsed by remember { mutableStateOf(emptySet<String>()) }
     val branches = state.channels.mapNotNull { it.parentId }.toSet()
     val visible = visibleChannels(state.channels, collapsed)
@@ -74,6 +74,7 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
                 Text(state.account.id, color = AtollColors.Muted, fontSize = 10.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
+                TextButton(onSettings, Modifier.height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("设置", fontSize = 11.sp, color = AtollColors.Muted) }
                 TextButton(onSpaceAdmin, Modifier.height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("空间管理", fontSize = 11.sp, color = AtollColors.Muted) }
                 TextButton(onLogout, Modifier.height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("退出", fontSize = 11.sp, color = AtollColors.Muted) }
             }
