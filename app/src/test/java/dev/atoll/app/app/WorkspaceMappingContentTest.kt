@@ -45,6 +45,30 @@ class WorkspaceMappingContentTest {
         val structured=answer("""{"status":"completed","value":42,"attachments":[{"id":"file:x"}]}""")
         assertEquals(json("""{"value":42}"""),structured.result!!.value);assertEquals(1,structured.attachments.size)
     }
+    @Test fun aFailedEntryLeavesNeighborsVisibleAndRetriesWhenItsContentChanges() {
+        val replica=ChannelReplica("c","human:self")
+        val notice=row(2,"notice","event",json("""{"member":"agent:a","body":"codex"}"""),"system.member.created",sender="system")
+        val system=notice.copy(envelope=Envelope(JsonObject(notice.envelope.json+("visibility" to JsonPrimitive("system")))))
+        replica.apply(RowBatch("c",listOf(row(1,"one","request",json("""{"text":"before"}"""),"human.message",sender="human:self"),system,
+            row(3,"two","request",json("""{"text":"after"}"""),"human.message",sender="human:self")),Origin.LIVE))
+        val canonical=replica.snapshot()
+        var failing=true
+        val source=object: TimelineSource by canonical {
+            override val narration: Collection<Row> get() { if(failing) error("private diagnostics");return canonical.narration }
+        }
+        val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self",showNarration=true))
+        val mapper=TimelineMapper()
+        val initial=mapper.map(snapshot,"human:self",emptyList(),source=source)
+        assertEquals(listOf("before","after"),initial.filterIsInstance<UiEntry.Message>().map { it.value.text })
+        val error=initial.filterIsInstance<UiEntry.Notice>().single()
+        assertEquals("这条消息暂时无法显示。内容更新后会自动重试。",error.text)
+        failing=false
+        assertSame(error,mapper.map(snapshot,"human:self",emptyList(),source=source).filterIsInstance<UiEntry.Notice>().single())
+        val updated=snapshot.copy(items=snapshot.items.map { if(it.entry.kind=="narration") it.copy(contentRevision=it.contentRevision+":changed") else it })
+        val recovered=mapper.map(updated,"human:self",emptyList(),source=source)
+        assertEquals("agent:a 已加入频道",recovered.filterIsInstance<UiEntry.Notice>().single().text)
+        assertSame(initial.filterIsInstance<UiEntry.Message>().first().value,recovered.filterIsInstance<UiEntry.Message>().first().value)
+    }
     @Test fun structuredJsonAndBusinessResultsDoNotBecomeMarkdownCodeFences() {
         val objectText=answer(buildJsonObject { put("status","completed");put("text",json("""{"count":2}""").toString()) }.toString())
         assertEquals("",objectText.text);assertEquals("JSON 结果",objectText.result!!.title);assertEquals(json("""{"count":2}"""),objectText.result!!.value)

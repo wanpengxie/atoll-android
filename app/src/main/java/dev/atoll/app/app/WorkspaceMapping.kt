@@ -7,6 +7,7 @@ import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.components.ResultViewState
 import dev.atoll.app.ui.screens.TimelineEntry as UiEntry
 import kotlinx.serialization.json.*
+import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -58,14 +59,21 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         for (item in snapshot.items) {
             retained += item.key
             val latest = item.entry.id == snapshot.currentEntryCandidate?.id
-            val lifecycleKey = (listOf(item.entry) + item.entry.thread).mapNotNull { it.turn }.mapNotNull { turn ->
-                RequestLifecycle.lostReason(turn,restarts,instant).takeIf(String::isNotEmpty)?.let { "${turn.requestId}:$it" }
-            }.joinToString("|")
-            val previous = cache[item.key]
-            val value = if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest && previous.lifecycleKey == lifecycleKey) previous.value
-            else render(item, selfId, names, newerUnloaded, source, restarts, instant).map { entry ->
-                if (entry is UiEntry.Message) UiEntry.Message(entry.value.copy(latest=latest)) else entry
-            }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
+            var lifecycleKey = ""
+            val value = try {
+                lifecycleKey = (listOf(item.entry) + item.entry.thread).mapNotNull { it.turn }.mapNotNull { turn ->
+                    RequestLifecycle.lostReason(turn,restarts,instant).takeIf(String::isNotEmpty)?.let { "${turn.requestId}:$it" }
+                }.joinToString("|")
+                val previous = cache[item.key]
+                if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest && previous.lifecycleKey == lifecycleKey) previous.value
+                else render(item, selfId, names, newerUnloaded, source, restarts, instant).map { entry ->
+                    if (entry is UiEntry.Message) UiEntry.Message(entry.value.copy(latest=latest)) else entry
+                }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
+            } catch (exception: Exception) {
+                if (exception is CancellationException) throw exception
+                listOf(UiEntry.Notice("${item.key}:error", "这条消息暂时无法显示。内容更新后会自动重试。"))
+                    .also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
+            }
             if (value.isNotEmpty() && item.dayKey.isNotEmpty() && item.dayKey != day) { day=item.dayKey;entries+=UiEntry.Day("day:$day:${item.key}",day) }
             entries += value
         }
