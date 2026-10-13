@@ -22,7 +22,9 @@ interface WaitingPort {
 data class WaitingRow(val turn: Turn, val actions: WaitingActions, val labels: List<String>)
 data class WaitingGroup(val actorId: String, val name: String, val rows: List<WaitingRow>, val paused: Boolean = false, val busy: Boolean = false)
 data class WaitingUiState(val groups: List<WaitingGroup> = emptyList(), val collapsed: Boolean = false,
-    val edit: EditState = EditState(), val warningTarget: Turn? = null, val warning: String = "", val error: String = "", val online: Boolean = false)
+    val edit: EditState = EditState(), val warningTarget: Turn? = null, val warning: String = "", val error: String = "", val online: Boolean = false,
+    /** Shared by timeline edit entries; the dock remains the owner of capability probing. */
+    val safeEditActors: Set<String> = emptySet())
 
 /** One writer, independent actor I/O. No queue reconstruction or network work in composition. */
 class WaitingViewModel(
@@ -353,7 +355,8 @@ class WaitingViewModel(
                 WaitingRow(turn, actions, labels)
             }, paused, actor in busy || editing?.actorId == actor)
         }
-        mutable.value = mutable.value.copy(groups = groups)
+        mutable.value = mutable.value.copy(groups = groups,
+            safeEditActors = manifests.filterValues(WaitingRules::leaseSupported).keys.toSet())
     }
     override fun close() {
         enqueue {
