@@ -16,6 +16,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.*
@@ -138,13 +140,24 @@ private fun highlightedText(tokens: List<CodeToken>) = buildAnnotatedString {
 }
 @Composable
 private fun ParagraphText(runs: List<MarkdownRun>, size: Int, heading: Int, onLink: (String) -> Unit) {
-    val inlineContent = runs.mapIndexedNotNull { index, run -> run.math?.let { fragment ->
-        "math-$index" to InlineTextContent(Placeholder((fragment.source.length * 9).coerceIn(40, 180).sp, 28.sp, PlaceholderVerticalAlign.Center)) {
-            RichBitmap("math", fragment.source)
-        }
-    } }.toMap()
-    Text(richText(runs, onLink), inlineContent = inlineContent, fontSize = size.sp, lineHeight = (size * 1.5).sp,
-        fontWeight = if (heading > 0) FontWeight.SemiBold else FontWeight.Normal)
+    val density = LocalDensity.current
+    // Inline placeholders also use cached dimensions on their first frame.
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val availableWidth = with(density) { maxWidth.roundToPx() }
+        val inlineContent = runs.mapIndexedNotNull { index, run -> run.math?.let { fragment ->
+            val result = rememberRichResult("math", fragment.source, availableWidth)
+            val bitmap = result?.bitmap
+            val scale = bitmap?.let { minOf(1f, availableWidth.toFloat() / it.width) } ?: 1f
+            val width = bitmap?.let { with(density) { (it.width * scale).toSp() } } ?: (fragment.source.length * 9).coerceIn(40, 180).sp
+            val height = bitmap?.let { with(density) { (it.height * scale).toSp() } } ?: 28.sp
+            "math-$index" to InlineTextContent(Placeholder(width, height, PlaceholderVerticalAlign.Center)) {
+                if (bitmap != null) Image(bitmap.asImageBitmap(), "数学公式", Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                else Text(if (result?.error != null) "公式语法有误" else "…", fontSize = 11.sp, color = AtollColors.Muted)
+            }
+        } }.toMap()
+        Text(richText(runs, onLink), inlineContent = inlineContent, fontSize = size.sp, lineHeight = (size * 1.5).sp,
+            fontWeight = if (heading > 0) FontWeight.SemiBold else FontWeight.Normal)
+    }
 }
 @Composable
 fun MermaidBlock(source: String) {
