@@ -34,10 +34,10 @@ fun DemoApp(initialScreen: String = "login") {
                     ComposerViewState(draft, "sol-4", "6.1 Sol", "high"), tab,
                     { drawer = true }, { tab = it }, { mine = !mine }, { id -> actorFilters = if (id in actorFilters) actorFilters - id else actorFilters + id }, { draft = it }, { draft = "" },
                     { menu = "已到频道最早一条动态" }, { action -> when {
-                        action == "星标消息" -> panel = "starred"
-                        action.startsWith("后台任务") -> panel = "running"
-                        action == "过程" -> panel = "process"
-                        else -> menu = action
+                        action == ChannelMenuAction.Item.Stars -> panel = "starred"
+                        action == ChannelMenuAction.Item.Running -> panel = "running"
+                        action is ChannelMenuAction.Process -> panel = "process"
+                        else -> menu = when (action) { is ChannelMenuAction.Item -> action.label; is ChannelMenuAction.Task -> action.taskId; is ChannelMenuAction.Process -> "过程" }
                     } }, { menu = "文件预览：$it" })
             }
             if (drawer) ChannelDrawer(ContentDemoData.navigation(selected.id), { drawer = false }, { id -> selected = ContentDemoData.channels.first { it.id == id }; screen = "channel" },

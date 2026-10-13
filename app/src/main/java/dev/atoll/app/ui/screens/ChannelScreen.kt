@@ -25,12 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.screens.ChannelMenuAction.Item
 
 @Composable
 fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab: ChannelTab,
     onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String) -> Unit,
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
-    onMenu: (String) -> Unit = {}, onLink: ((String) -> Unit)? = null,
+    onMenu: (ChannelMenuAction) -> Unit = {}, onLink: ((String) -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
@@ -42,15 +43,15 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                 Text(state.channel.name, Modifier.widthIn(max = titleWidth), fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.weight(1f))
-                TextButton({ onMenu("成员") }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) { Text("成员", fontSize = 11.sp, color = AtollColors.Muted) }
+                TextButton({ onMenu(Item.Members) }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) { Text("成员", fontSize = 11.sp, color = AtollColors.Muted) }
                 Box {
                     IconButton({ menuOpen = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(20.dp)) }
                     DropdownMenu(menuOpen, { menuOpen = false }) {
-                        val choices = listOf("频道详情", "定时动作", "高级资源工具", "新建子频道", "导出性能记录", "重启频道",
-                            if (state.filesOpen) "关闭文件" else "打开文件", "最近阅读", "星标消息", "后台任务(${state.runningCount})",
-                            if (state.terminalOpen) "关闭终端" else "打开终端")
-                        choices.forEach { label -> DropdownMenuItem(text = { Text(label, fontSize = 13.sp) },
-                            enabled = label != "重启频道", onClick = { menuOpen = false; onMenu(label) }) }
+                        val choices = listOf(Item.Details, Item.Timers, Item.Resources, Item.NewChild, Item.ExportPerformance, Item.Restart,
+                            if (state.filesOpen) Item.CloseFiles else Item.OpenFiles, Item.Recent, Item.Stars, Item.Running,
+                            if (state.terminalOpen) Item.CloseTerminal else Item.OpenTerminal)
+                        choices.forEach { action -> DropdownMenuItem(text = { Text(if (action == Item.Running) "${action.label}(${state.runningCount})" else action.label, fontSize = 13.sp) },
+                            enabled = action != Item.Restart, onClick = { menuOpen = false; onMenu(action) }) }
                     }
                 }
             }
@@ -80,7 +81,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                 items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
                     is TimelineEntry.Day -> DaySeparator(entry.text)
                     is TimelineEntry.Notice -> WeakNotice(entry.text)
-                    is TimelineEntry.Message -> MessageFrame(entry.value, onLink) { onMenu("过程") }
+                    is TimelineEntry.Message -> MessageFrame(entry.value, onLink) { onMenu(ChannelMenuAction.Process(entry.value.id)) }
                 } }
                 if (state.entries.isEmpty()) item("empty") { Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("开始一段对话", style = MaterialTheme.typography.titleMedium)
@@ -99,14 +100,14 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             }
             if (state.waitingCount > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).background(AtollColors.MutedSurface, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("${state.waitingCount} 条等待消息", Modifier.weight(1f), fontSize = 12.sp)
-                TextButton({ onMenu("等待区") }) { Text("展开", fontSize = 12.sp) }
+                TextButton({ onMenu(Item.Waiting) }) { Text("展开", fontSize = 12.sp) }
             }
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else TasksScreen(state.tasks, Modifier.weight(1f)) { onMenu(it) }
     }
 }
 @Composable
-fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> Unit, onAction: (String) -> Unit) {
+fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> Unit, onAction: (ChannelMenuAction) -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Surface(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), color = AtollColors.Input,
         shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 3.dp) {
@@ -120,43 +121,43 @@ fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> U
                 }
             }
             if (state.text.isNotEmpty() || focused) Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton({ onAction("选择 Agent") }, Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp)) {
+                TextButton({ onAction(Item.SelectAgent) }, Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp)) {
                     Text(listOf(state.agent, state.model, state.effort).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { "选择 Agent" }, fontSize = 11.sp, color = AtollColors.Muted, maxLines = 1)
                 }
-                IconButton({ onAction("附件") }) { Icon(Icons.Outlined.AttachFile, "添加附件", tint = AtollColors.Muted) }
-                IconButton({ onAction("更多操作") }) { Icon(Icons.Outlined.Add, "更多操作", tint = AtollColors.Muted) }
+                IconButton({ onAction(Item.Attachments) }) { Icon(Icons.Outlined.AttachFile, "添加附件", tint = AtollColors.Muted) }
+                IconButton({ onAction(Item.ComposerMore) }) { Icon(Icons.Outlined.Add, "更多操作", tint = AtollColors.Muted) }
             }
         }
     }
 }
 @Composable
-fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAction: (String) -> Unit) {
+fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAction: (ChannelMenuAction) -> Unit) {
     Column(modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("WORK ITEMS", color = AtollColors.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             Text("任务", style = MaterialTheme.typography.titleLarge)
             Text("审批、运行中回合、恢复事项和自动动作在这里按真实来源汇总。", fontSize = 12.sp, color = AtollColors.Muted)
             Row {
-                OutlinedButton({ onAction("安排自动动作") }, shape = MaterialTheme.shapes.small) { Text("安排自动动作", fontSize = 11.sp) }
-                TextButton({ onAction("新建任务") }) { Text("新建任务", fontSize = 11.sp) }
+                OutlinedButton({ onAction(Item.Schedule) }, shape = MaterialTheme.shapes.small) { Text("安排自动动作", fontSize = 11.sp) }
+                TextButton({ onAction(Item.NewTask) }) { Text("新建任务", fontSize = 11.sp) }
             }
         }
         HorizontalDivider(color = AtollColors.Line)
         Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton({ onAction("工作项") }) { Text("工作项 ${tasks.size}", fontSize = 12.sp) }
-            TextButton({ onAction("等待区") }) { Text("等待区", fontSize = 12.sp, color = AtollColors.Muted) }
+            TextButton({ onAction(Item.WorkItems) }) { Text("工作项 ${tasks.size}", fontSize = 12.sp) }
+            TextButton({ onAction(Item.Waiting) }) { Text("等待区", fontSize = 12.sp, color = AtollColors.Muted) }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).background(AtollColors.MutedSurface, RoundedCornerShape(6.dp))) {
-            TextButton({ onAction("与我相关") }, Modifier.weight(1f)) { Text("与我相关", fontSize = 12.sp, color = AtollColors.Text) }
-            TextButton({ onAction("全部") }, Modifier.weight(1f)) { Text("全部", fontSize = 12.sp, color = AtollColors.Muted) }
+            TextButton({ onAction(Item.Mine) }, Modifier.weight(1f)) { Text("与我相关", fontSize = 12.sp, color = AtollColors.Text) }
+            TextButton({ onAction(Item.All) }, Modifier.weight(1f)) { Text("全部", fontSize = 12.sp, color = AtollColors.Muted) }
         }
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ onAction("状态筛选") }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("待处理 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
-            OutlinedButton({ onAction("类型筛选") }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("全部类型 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
+            OutlinedButton({ onAction(Item.StatusFilter) }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("待处理 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
+            OutlinedButton({ onAction(Item.TypeFilter) }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("全部类型 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
         }
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
             items(tasks, key = { it.id }) { task ->
-                Column(Modifier.fillMaxWidth().clickable { onAction(task.id) }.padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Column(Modifier.fillMaxWidth().clickable { onAction(ChannelMenuAction.Task(task.id)) }.padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                     Text(task.kind, color = AtollColors.Warning, fontSize = 11.sp)
                     Text(task.title, style = MaterialTheme.typography.titleMedium)
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
