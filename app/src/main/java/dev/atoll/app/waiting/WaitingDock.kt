@@ -34,7 +34,7 @@ fun WaitingDock(viewModel: WaitingViewModel, modifier: Modifier = Modifier) {
                     Text("↳ $count 条等待消息", Modifier.padding(10.dp), fontSize = 12.sp)
                     if (!state.collapsed) state.groups.forEach { group ->
                         if (group.rows.any { it.actions.insert != null }) TextButton(onClick = { viewModel.insertAll(group.actorId) }, enabled = state.online && !group.busy) { Text(if (state.groups.size == 1) "全部插入" else "插入 ${group.name} 全部", fontSize = 12.sp) }
-                        if (group.rows.any { it.actions.canCancel }) TextButton(onClick = { viewModel.cancelAll(group.actorId) }, enabled = state.online && !group.busy) { Text(if (state.groups.size == 1) "全部取消" else "取消 ${group.name} 全部", fontSize = 12.sp) }
+                        if (group.rows.any { it.actions.canCancel }) TextButton(onClick = { viewModel.cancelAll(group.actorId) }, enabled = state.online && !group.busy || group.rows.any { it.localSubmission != null && it.actions.canCancel }) { Text(if (state.groups.size == 1) "全部取消" else "取消 ${group.name} 全部", fontSize = 12.sp) }
                     }
                     TextButton(onClick = { viewModel.setCollapsed(!state.collapsed) }) { Text(if (state.collapsed) "展开" else "收起", fontSize = 12.sp) }
                 }
@@ -49,7 +49,7 @@ fun WaitingDock(viewModel: WaitingViewModel, modifier: Modifier = Modifier) {
                                 if (!editing) Row(Modifier.widthIn(max = 200.dp).horizontalScroll(rememberScrollState())) {
                                     if (row.actions.insert != null) WaitingButton("插入", state.online && !group.busy) { viewModel.insert(row.turn.requestId) }
                                     if (row.actions.canEdit) WaitingButton("编辑", state.online && !group.busy && state.edit.phase == EditPhase.IDLE) { viewModel.requestEdit(row.turn.requestId) }
-                                    if (row.actions.canCancel) WaitingButton("取消", state.online && !group.busy) { viewModel.cancel(row.turn.requestId) }
+                                    if (row.actions.canCancel) WaitingButton("取消", row.localSubmission != null || state.online && !group.busy) { viewModel.cancel(row.turn.requestId) }
                                     row.actions.extras.forEach { control -> WaitingButton(control.label, state.online && !group.busy) { viewModel.extra(row.turn.requestId, control.word) } }
                                 }
                             }
