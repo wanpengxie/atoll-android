@@ -32,6 +32,7 @@ class TimelineMessageTargetTest {
             val target = timelineMessageTarget(snapshot, entry.key)!!
             val expected = mapOf("opaque:request:answer" to 1L, "progress:x" to 2L, "nested:request" to 3L, "nested:answer" to 4L)
             assertEquals(expected[target.envelope.id], sequences[entry.key])
+            assertEquals(expected[target.envelope.id], target.seq)
         }
     }
 }
