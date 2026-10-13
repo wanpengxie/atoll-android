@@ -379,9 +379,7 @@ class AppGraph(private val context: Context) {
         val database = AtollDatabase.open(context, "ledger-$namespace.db")
         val store = RoomRowStore(database)
         val sessionScope = CoroutineScope(SupervisorJob(scope.coroutineContext[Job]) + Dispatchers.Default)
-        val http = auth.identity.client.newBuilder().addInterceptor { chain ->
-            chain.proceed(chain.request()).also { if (it.code == 401) post(Expired(requestEpoch)) }
-        }.build()
+        val http = sessionHttp(auth.identity.client) { post(Expired(requestEpoch)) }
         val wire = Wire(auth.server, http, Build.MODEL, focus = { focus.get() })
         val gate = GatedWireClient(wire)
         val hub = SyncHub(gate, store, sessionScope)
