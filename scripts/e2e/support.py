@@ -48,17 +48,30 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class EmulatorLock:
-    def __init__(self, owner, timeout):
+    def __init__(self, owner, timeout, event=None):
         if not re.fullmatch(r"sol-[1-4]", owner):
             raise Failure("owner must be an existing worker name")
         self.owner, self.timeout = owner, timeout
         self.base = Path.home() / "atoll-build"
         self.lock, self.queue = self.base / "emulator.lock", self.base / "emulator.queue"
         self.held = False
+        self.retained = False
+        self.event = event or (lambda *args, **kwargs: None)
+        self.owner_guard = None
+        self.identity = None
 
     def __enter__(self):
         # A short mutation lock serializes queue appends/removals across runners.
+        import fcntl
+        self.base.mkdir(parents=True, exist_ok=True)
+        self.owner_guard = (self.base / (self.owner + '.emulator-runner.guard')).open('a')
+        try:
+            fcntl.flock(self.owner_guard, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            self.owner_guard.close()
+            raise Failure('another emulator runner for this owner is already active')
         self._change_queue(add=True)
+        self.event('queued')
         deadline = time.monotonic() + self.timeout
         try:
             while time.monotonic() < deadline:
@@ -67,7 +80,9 @@ class EmulatorLock:
                     try:
                         self.lock.mkdir()
                         (self.lock / "owner").write_text(self.owner + "\n")
+                        self.identity = self.lock.stat().st_ino
                         self.held = True
+                        self.event('lock-acquired', lock_inode=self.identity)
                         return self
                     except FileExistsError:
                         pass
@@ -75,6 +90,7 @@ class EmulatorLock:
             raise Failure("timed out waiting for emulator queue")
         except BaseException:
             self._change_queue(add=False)
+            self.owner_guard.close()
             raise
 
     def _change_queue(self, add):
@@ -95,12 +111,23 @@ class EmulatorLock:
             actual = (self.lock / "owner").read_text().strip()
         except OSError:
             actual = ""
-        if actual != self.owner:
+        if actual != self.owner or not self.lock.exists() or self.lock.stat().st_ino != self.identity:
             raise Failure("emulator lock is not owned by this runner")
 
-    def __exit__(self, *args):
-        if self.held and (self.lock / "owner").read_text().strip() == self.owner:
-            (self.lock / "owner").unlink()
-            self.lock.rmdir()
-        self._change_queue(add=False)
+    def retain(self):
+        self.retained = True
+        self.event('lock-retained')
 
+    def __exit__(self, *args):
+        try:
+            if self.retained:
+                return
+            if self.held:
+                self.check_owner()
+                (self.lock / "owner").unlink()
+                self.lock.rmdir()
+                self.event('lock-released', lock_inode=self.identity)
+            self._change_queue(add=False)
+        finally:
+            if self.owner_guard is not None:
+                self.owner_guard.close()

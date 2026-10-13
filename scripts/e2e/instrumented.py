@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """One entry point for Compose's real-app smoke test; never drive input with adb."""
 import argparse
+from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -23,6 +25,64 @@ def validate_artifacts(root):
     if record.get('server') != URL or record.get('pending') != [] or \
             [row.get('step') for row in steps] != STEPS or any(row.get('status') != 'passed' for row in steps):
         raise Failure('instrumented run did not pass all 17 isolated-node steps')
+
+
+def group_running(group):
+    # ps prints only group IDs and status; never process arguments or credentials.
+    result = subprocess.run(['ps', '-axo', 'pgid=,stat='], capture_output=True, text=True, check=True)
+    return any(parts[0] == str(group) and not parts[1].startswith('Z')
+               for line in result.stdout.splitlines() if len(parts := line.split()) == 2)
+
+
+def drain_group(process, cancel=False):
+    if cancel:
+        try: os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError: pass
+    deadline = time.monotonic() + 20
+    while group_running(process.pid) and time.monotonic() < deadline:
+        process.poll()
+        time.sleep(0.1)
+    if group_running(process.pid):
+        try: os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError: pass
+        deadline = time.monotonic() + 10
+        while group_running(process.pid) and time.monotonic() < deadline:
+            process.poll()
+            time.sleep(0.1)
+    process.wait(timeout=10)
+    if group_running(process.pid):
+        raise Failure('Gradle processes still running; emulator lock retained for inspection')
+
+
+def run_gradle(command, environment, log, secrets, lock):
+    lock.check_owner()
+    # A private session and a single-use daemon keep cancellation from orphaning
+    # Gradle/UTP work or killing another worker's shared Gradle daemon.
+    process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE,
+                               stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    lock.event('gradle-start', process_id=process.pid)
+    try:
+        for line in process.stdout:
+            for secret in secrets: line = line.replace(secret, '[redacted]')
+            log.write(line); log.flush(); print(line, end='', flush=True)
+        status = process.wait()
+        lock.event('gradle-client-exit', process_id=process.pid, exit_code=status)
+    except BaseException:
+        try: drain_group(process, cancel=True)
+        except BaseException:
+            lock.retain()
+            raise
+        lock.event('gradle-group-finished', process_id=process.pid, cancelled=True)
+        raise
+    finally:
+        process.stdout.close()
+    try: drain_group(process)
+    except BaseException:
+        lock.retain()
+        raise
+    lock.check_owner()
+    lock.event('gradle-group-finished', process_id=process.pid, cancelled=False)
+    return status
 
 
 def main(argv=None):
@@ -52,12 +112,22 @@ def main(argv=None):
     parameters = {'class': 'dev.atoll.app.e2e.IsolatedNodeSmokeTest', 'atollUrl': URL, 'atollPassword': password,
                   'atollToken': token, 'atollChannelId': node['channel_id'], 'atollCodexId': node['codex_actor_id'],
                   'additionalTestOutputDir': '/sdcard/Android/media/dev.atoll.app/additional_test_output'}
-    command = ['./gradlew', '--console=plain', '-PatollTestBuildType=' + args.build_type, task] + [
+    command = ['./gradlew', '--no-daemon', '--console=plain', '-PatollTestBuildType=' + args.build_type, task] + [
         '-Pandroid.testInstrumentationRunnerArguments.' + key + '=' + value for key, value in parameters.items()]
     destination = args.output.resolve() / (time.strftime('%Y%m%d-%H%M%S') + '-' + args.build_type)
     destination.mkdir(parents=True)
     additional = Path('app/build/outputs/connected_android_test_additional_output') / (args.build_type + 'AndroidTest')
-    with EmulatorLock(args.owner, args.queue_timeout) as lock:
+    def audit(event, **fields):
+        record = {'time': datetime.now(timezone.utc).isoformat(), 'event': event,
+                  'owner': args.owner, 'runner_pid': os.getpid(), **fields}
+        with (destination / 'lock.jsonl').open('a') as output:
+            output.write(json.dumps(record) + '\n')
+    # Workspace timeout sends SIGTERM; treat it like Ctrl-C and drain Gradle
+    # before unwinding the lock, rather than letting a daemon keep using adb.
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, interrupted)
+    with EmulatorLock(args.owner, args.queue_timeout, audit) as lock:
         lock.check_owner()
         # Another variant's or a previous run's screenshots cannot establish this run's success.
         if additional.exists():
@@ -65,15 +135,7 @@ def main(argv=None):
         environment = dict(os.environ, ANDROID_SERIAL=args.serial)
         # Capture/sanitize output here, so AGP/adb failure diagnostics cannot expose arguments.
         with (destination / 'gradle.log').open('w') as log:
-            process = subprocess.Popen(command, env=environment, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-            try:
-                for line in process.stdout:
-                    safe = line.replace(password, '[redacted]').replace(token, '[redacted]')
-                    log.write(safe); log.flush(); print(safe, end='', flush=True)
-                status = process.wait()
-            except BaseException:
-                process.terminate(); process.wait(timeout=20)
-                raise
+            status = run_gradle(command, environment, log, [password, token], lock)
         # AGP collects additional outputs before it uninstalls the test packages.
         if additional.is_dir():
             shutil.copytree(additional, destination / 'app-artifacts')
