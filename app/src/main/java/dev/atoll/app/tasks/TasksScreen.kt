@@ -111,6 +111,7 @@ fun ApprovalCard(item: TaskFact,names: Map<String,String> = emptyMap(),busy: Boo
         Text(item.title,style=MaterialTheme.typography.titleMedium)
         Text("${names[item.requesterActorId] ?: item.requesterActorId} · ${taskStates[item.state] ?: item.state}",style=MaterialTheme.typography.bodySmall)
         item.turn?.request?.body?.text("text")?.takeIf { it.isNotEmpty() && it!=item.title }?.let { Text(it) }
+        item.description.takeIf(String::isNotEmpty)?.let { Text(it) }
         if (item.diagnostic.text("impact").isNotEmpty()) Text("影响：${item.diagnostic.text("impact")}")
         if (item.dueAt.isNotEmpty()) Text("到期：${taskDate(item.dueAt)}",style=MaterialTheme.typography.bodySmall)
         if (item.actionableBySelf && item.state=="waiting") {
@@ -134,7 +135,7 @@ fun TaskDetail(item: TaskFact,viewModel: TasksViewModel,modifier: Modifier=Modif
             item { Text("${taskKinds[item.kind] ?: item.kind} · ${taskStates[item.state] ?: item.state}",style=MaterialTheme.typography.titleSmall) }
             if (item.localScope=="this_device") item { Text(if(item.kind=="automation") "本次会话记录" else "本设备记录",style=MaterialTheme.typography.labelLarge) }
             item { Text("负责人：${item.assigneeActorIds.joinToString("、") { state.actorNames[it] ?: it }.ifEmpty { "未指定" }}\n创建者：${state.actorNames[item.requesterActorId] ?: item.requesterActorId}\n截止/触发：${taskDate(item.dueAt)}\n事实来源：${when { item.provenance=="ledger" -> "频道账本";item.kind=="automation" -> "本次会话记录";else -> "本设备持久记录" }}") }
-            if (item.description.isNotEmpty()) item { Text(item.description) }
+            if (item.description.isNotEmpty() && item.kind != "approval") item { Text(item.description) }
             if (item.waitingFor.isNotEmpty()) item { Text("当前等待：${item.waitingFor}") }
             when (item.kind) {
                 "approval" -> item {

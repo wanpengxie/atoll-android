@@ -113,7 +113,7 @@ internal fun selectTaskFacts(turns: List<Turn>, channelId: String, selfId: Strin
             val id = turn.requestId; val key = "approval:$channelId:$id"
             val state = if (turn.terminal == null && now > 0 && request.expiresAt > 0 && request.expiresAt <= now) "expired" else if (turn.terminal != null) terminalState(turn) else "waiting"
             val needs = state == "waiting" && selfId in request.audience
-            facts += TaskFact(key, id, channelId, "approval", title(request, "待处理请求"), state, assigneeActorIds = request.audience,
+            facts += TaskFact(key, id, channelId, "approval", title(request, "待处理请求"), state, description = body.text("detail"), assigneeActorIds = request.audience,
                 ownerId = request.senderId, needsYou = needs, actionableBySelf = needs, waitingFor = if (state == "waiting") "等待决定" else "",
                 dueAt = request.expiresAt.takeIf { it > 0 }?.toString().orEmpty(), priority = body.text("priority").ifEmpty { "high" }, createdAt = request.ts, updatedAt = turn.terminal?.ts ?: request.ts,
                 actions = actions(actionFacts, listOf(key, id)), diagnostic = buildJsonObject { put("requestType", request.type); put("impact", body.text("impact")) }, source = anchor(channelId, turn), turn = turn)
