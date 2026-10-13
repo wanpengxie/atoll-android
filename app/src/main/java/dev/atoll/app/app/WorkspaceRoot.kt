@@ -15,6 +15,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
 import dev.atoll.app.waiting.WaitingDock
 import dev.atoll.app.waiting.editorBinding
+import dev.atoll.app.tasks.ApprovalCard
+import dev.atoll.app.tasks.TasksScreen as NativeTasksScreen
+import dev.atoll.app.tasks.CreateTaskDialog
+import dev.atoll.app.tasks.UiFormsHost
+import kotlinx.serialization.json.*
 import dev.atoll.app.terminal.TerminalScreen
 import dev.atoll.app.terminal.TerminalDevice
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -37,6 +42,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val features = viewModel.session(services)
     val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value
     val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
+    val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value
+    val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
+    val messageTargets by viewModel.messageTargets.collectAsStateWithLifecycle()
     var selectedMessage by remember { mutableStateOf<String?>(null) }
     var recentOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -81,6 +89,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             var autoScrolling by remember { mutableStateOf(false) }
                             var visibleLogged by remember { mutableStateOf(false) }
                             var pickingFile by remember { mutableStateOf(false) }
+                            var focusApplied by remember(state.route?.tab, state.route?.focus) { mutableStateOf(false) }
                             val bottomIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0)
                             val latestBottomIndex by rememberUpdatedState(bottomIndex)
                             DisposableEffect(listState) { onDispose { graph.telemetry.scrolling.set(false) } }
@@ -125,6 +134,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             val terminal = state.route?.tab == "terminal"
                             val content: (@Composable () -> Unit)? = when {
+                                state.route?.tab == "tasks" && tasks != null -> ({ NativeTasksScreen(tasks, onSource = { taskSourceLink(it)?.let(graph::route) },
+                                    onTurn = { graph.route(taskSourceLink(buildJsonObject { put("channelId", state.route!!.channel); put("requestId", it) })!!) }) })
                                 terminal && files != null && features != null && services?.pty != null -> ({
                                     val fileState by files.state.collectAsStateWithLifecycle()
                                     TerminalScreen(services!!.pty!!, state.route!!.channel,
@@ -149,6 +160,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.ExportPerformance -> graph.export(true)
                                     is ChannelMenuAction.Process -> selectedMessage = action.messageId
                                     Item.Waiting -> waiting?.setCollapsed(false)
+                                    Item.NewTask -> tasks?.beginCreation()
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
@@ -156,6 +168,16 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         features.files(state.route!!.channel).openLink(link); graph.files(true)
                                     } else runCatching { uriHandler.openUri(link) } },
                                 contentOverride = content,
+                                messageContent = { message, default ->
+                                    val target = messageTargets[message.id]
+                                    val approval = taskState?.items?.firstOrNull { it.kind == "approval" && it.id == target?.envelope?.id }
+                                    if (approval != null && tasks != null && taskState != null) {
+                                        val command = taskState.commandStates.entries.firstOrNull { it.key.startsWith("${approval.key}:") && it.value.state == "submitting" }?.value
+                                        ApprovalCard(approval, taskState.actorNames, busy = command != null,
+                                            error = taskState.commandStates.filterKeys { it.startsWith("${approval.key}:") }.values.firstOrNull { it.error.isNotEmpty() }?.error.orEmpty(),
+                                            onResolve = { action, text, note -> tasks.perform { execute(approval, action, note, text) } })
+                                    } else default()
+                                },
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
                             if (features != null && !terminal) {
@@ -168,24 +190,35 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             if (pickingFile && features != null) FilePicker(features.files(state.route!!.channel),
                                 onPick = { reference -> features.composer.addAttachments(listOf(reference)); pickingFile = false },
                                 onDismiss = { pickingFile = false })
-                            LaunchedEffect(state.route?.focus) {
+                            LaunchedEffect(state.route?.focus, messageTargets) {
+                                if (focusApplied) return@LaunchedEffect
                                 val key = state.route?.focus?.takeIf { it.startsWith("turn:") }?.substringAfter(':') ?: return@LaunchedEffect
-                                val index = conversation.entries.indexOfFirst { it.key == key || it.key.startsWith("$key:") }
-                                if (index >= 0) { following = false; listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0); graph.follow(false) }
+                                val index = conversation.entries.indexOfFirst { messageTargets[it.key]?.let { target -> target.turn?.requestId == key || target.envelope.id == key } == true }
+                                if (index >= 0) { focusApplied = true; following = false; listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0); graph.follow(false) }
                             }
                         }
                     }
                 }
                 if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
                 selectedMessage?.let { key ->
-                    val target = state.timeline?.let { timelineMessageTarget(it, key) }
+                    val target = messageTargets[key]
                     AlertDialog(onDismissRequest = { selectedMessage = null }, title = { Text("消息操作") },
                         text = { Column {
                             Text(target?.envelope?.let(::messageText).orEmpty(), maxLines = 5)
                             val ownRequest = target?.turn?.takeIf { it.request.id == target.envelope.id && it.request.senderId == services?.selfIds?.get(state.route?.channel) }
                             if (ownRequest != null && waiting != null) TextButton({ waiting.requestEdit(ownRequest.requestId); selectedMessage = null }, enabled = !state.newerUnloaded) { Text("编辑") }
+                            if (target != null && tasks != null) TextButton({
+                                tasks.beginCreation(buildJsonObject { put("channelId", state.route!!.channel); put("view", "conversation"); put("objectType", "turn");
+                                    put("objectId", target.turn?.requestId ?: target.envelope.id); put("requestId", target.turn?.requestId ?: target.envelope.id) })
+                                selectedMessage = null
+                            }, enabled = taskState?.creationReady == true) { Text("创建任务") }
                         } }, confirmButton = { TextButton({ selectedMessage = null }) { Text("关闭") } })
                 }
+                if (tasks != null && taskState?.creating == true && state.route?.tab != "tasks") CreateTaskDialog(tasks, tasks::endCreation)
+                LaunchedEffect(tasks, state.route?.tab, state.route?.focus) {
+                    if (state.route?.tab == "tasks") state.route?.focus?.let { tasks?.select(it) }
+                }
+                if (features != null) UiFormsHost(features.forms, state.roster.associate { it.id to it.name }, state.navigation.channels.associate { it.id to it.name })
                 if (recentOpen && features != null) {
                     val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
                     AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },

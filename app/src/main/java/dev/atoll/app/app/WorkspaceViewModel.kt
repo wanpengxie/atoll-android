@@ -11,6 +11,8 @@ import dev.atoll.app.AtollApp
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
     val graph: AppGraph = (application as AtollApp).graph
     val state = graph.state
+    private val mutableMessageTargets = MutableStateFlow<Map<String, TimelineMessageTarget>>(emptyMap())
+    val messageTargets = mutableMessageTargets.asStateFlow()
     private var features: SessionFeatures? = null
     init {
         viewModelScope.launch { graph.services.collect { session(it) } }
@@ -30,6 +32,15 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                     composerChannel = signature
                     features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters)
                 }
+                state.timelineSource?.takeIf { it.channelId == route.channel }?.let { source ->
+                    val binding = TaskBinding(source, signature, state.newerUnloaded)
+                    if (binding != foldedTasks) {
+                        features.tasks(route.channel).update(source, signature.self,
+                            state.roster.map { dev.atoll.app.tasks.TaskActor(it.id, it.name, it.kind) }, signature.writable && !state.newerUnloaded)
+                        if (foldedTasks?.source !== source) features.forms.scan(source)
+                        foldedTasks = binding
+                    }
+                }
                 val timeline = state.timeline ?: return@collectLatest
                 if (timeline.channelId != route.channel) return@collectLatest
                 val waiting = features.waiting(timeline)
@@ -38,6 +49,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 waiting.setActive(route.tab == "conversation")
                 if (timeline === foldedComposer) return@collectLatest
                 val facts = withContext(Dispatchers.Default) { composerTimelineFacts(timeline) }
+                mutableMessageTargets.value = withContext(Dispatchers.Default) { timelineMessageTargets(timeline) }
                 foldedComposer = timeline
                 features.composer.reconcileLanded(timeline.channelId, facts.landed)
                 facts.usage.forEach { features.offerUsage(timeline.channelId, it) }
@@ -47,6 +59,8 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private data class ComposerChannel(val id: String, val self: String, val roster: List<ComposerActor>, val writable: Boolean, val filters: Set<String>)
     private var composerChannel: ComposerChannel? = null
     private var foldedComposer: dev.atoll.app.model.TimelineSnapshot? = null
+    private data class TaskBinding(val source: dev.atoll.app.model.TimelineSource, val composer: ComposerChannel, val detached: Boolean)
+    private var foldedTasks: TaskBinding? = null
     private var writable = emptyMap<String, Boolean>()
     private fun updateComposerAccess(features: SessionFeatures, services: WorkspaceServices, state: WorkspaceState) {
         val next = state.navigation.channels.associate { it.id to composerWritable(it.access, services.selfIds[it.id].orEmpty()) }
@@ -55,9 +69,10 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun session(services: WorkspaceServices?): SessionFeatures? {
         if (features?.services?.wire !== services?.wire || features?.services?.boot != services?.boot) {
-            features?.clear(); features = null; composerChannel = null; foldedComposer = null; writable = emptyMap()
+            features?.clear(); features = null; composerChannel = null; foldedComposer = null; foldedTasks = null; writable = emptyMap(); mutableMessageTargets.value = emptyMap()
         }
         if (features == null && services != null && services.boot.isNotEmpty()) features = SessionFeatures(getApplication(), services)
+        if (services != null) features?.updateServices(services)
         return features
     }
     override fun onCleared() { features?.clear() }
