@@ -42,6 +42,7 @@ data class WorkspaceState(
     val channelOpenedAt: Long = 0,
     val notice: String? = null,
     val channelError: String? = null,
+    val channelErrorDismissed: Boolean = false,
     val browsePosition: BrowsePosition? = null,
     val restoreNotice: String? = null,
     val rowSequences: Map<String, Long> = emptyMap(),
@@ -84,6 +85,7 @@ class AppGraph(private val context: Context) {
     private val history = RouteHistory()
     private val focus = AtomicReference("")
     private val channelNotices = mutableMapOf<String, String>()
+    private val errorNotices = ChannelErrorNotices()
     private var requestedRoute: AppRoute? = null
     private var requestedRestoreSurface = false
     private val surfaces = mutableMapOf<String, ChannelSurface>()
@@ -136,6 +138,7 @@ class AppGraph(private val context: Context) {
     fun filter(actor: String) { post(Filter(actor)) }
     fun older() { post(Older) }
     fun retryChannel(id: String) { post(RetryChannel(id)) }
+    fun dismissChannelError(id: String, message: String) { post(DismissChannelError(id, message)) }
     fun jumpToBottom() { post(Jump) }
     fun foreground(value: Boolean) { post(Foreground(value)) }
     fun dismissNotice() { post(Notice(null)) }
@@ -282,11 +285,13 @@ class AppGraph(private val context: Context) {
             is Filter -> controllers[route?.channel]?.filter(event.id)
             Older -> controllers[route?.channel]?.loadOlder()
             is RetryChannel -> if (event.id == route?.channel) {
+                errorNotices.reset(event.id)
                 channelNotices.remove(event.id)
                 if (event.id in memberships) controllers[event.id]?.retry()
                 else navigate(route, false, force = true)
                 publish()
             }
+            is DismissChannelError -> { errorNotices.dismiss(event.id, event.message); publish() }
             Jump -> { controllers[route?.channel]?.jumpToBottom(); channelOpenedAt = SystemClock.elapsedRealtime(); publish() }
             is Foreground -> {
                 val resumed = !foreground && event.value
@@ -428,6 +433,7 @@ class AppGraph(private val context: Context) {
                 preferences.clearWorld(rt.namespace)
                 records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); rosterLoading.clear(); accesses.clear(); surfaces.clear()
                 route = route?.copy(tab = "conversation", focus = null); history.clear()
+                errorNotices.clear()
                 rt.world++
                 rt.hub = SyncHub(rt.gate, rt.store, rt.scope)
                 rt.gate.subscribers.first { it > 0 }
@@ -629,8 +635,10 @@ class AppGraph(private val context: Context) {
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.MemberUnavailable, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
+        val channelError = channelState?.error ?: channelNotices[route?.channel]
+        val errorDismissed = route?.channel?.let { errorNotices.visible(it, channelError) == null && channelError != null } == true
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, canForward = history.canForward, canBack = history.canBack, conversation = conversation,
-            firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice, channelError = channelState?.error ?: channelNotices[route?.channel],
+            firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice, channelError = channelError, channelErrorDismissed = errorDismissed,
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true, browsePosition = channelState?.browsePosition, restoreNotice = channelState?.restoreNotice, rowSequences = channelState?.rowSequences.orEmpty(),
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
@@ -646,6 +654,7 @@ class AppGraph(private val context: Context) {
     private suspend fun tearDown(incrementEpoch: Boolean = true) {
         if (incrementEpoch) epoch++
         channelNotices.clear()
+        errorNotices.clear()
         runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
@@ -709,6 +718,7 @@ class AppGraph(private val context: Context) {
     private data class Filter(val id: String?) : Event
     private data object Older : Event
     private data class RetryChannel(val id: String) : Event
+    private data class DismissChannelError(val id: String, val message: String) : Event
     private data object Jump : Event
     private data class Foreground(val value: Boolean) : Event
     private data object NetworkAvailable : Event
