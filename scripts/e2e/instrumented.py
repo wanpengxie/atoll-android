@@ -11,8 +11,7 @@ import sys
 import time
 import urllib.request
 
-from run import EmulatorLock, NoRedirect, STEPS, URL, load_node, ssh, validate_url
-from ui import Adb, Failure
+from support import EmulatorLock, Failure, NoRedirect, STEPS, URL, load_node, ssh, validate_url
 
 
 def main(argv=None):
@@ -20,6 +19,7 @@ def main(argv=None):
     parser.add_argument('--url', default=URL)
     parser.add_argument('--owner', default='sol-2')
     parser.add_argument('--serial', default='emulator-5554')
+    parser.add_argument('--build-type', choices=['debug', 'benchmark'], default='debug')
     parser.add_argument('--queue-timeout', type=int, default=900)
     parser.add_argument('--output', type=Path, default=Path.home() / 'atoll-build/e2e-artifacts/instrumented')
     parser.add_argument('--dry-run', action='store_true')
@@ -27,8 +27,9 @@ def main(argv=None):
     validate_url(args.url)
     if not re.fullmatch(r'emulator-\d+', args.serial):
         raise Failure('only an emulator serial is allowed')
+    task = 'connected' + args.build_type.capitalize() + 'AndroidTest'
     if args.dry_run:
-        print(json.dumps({'task': 'connectedDebugAndroidTest', 'url': URL, 'steps': STEPS,
+        print(json.dumps({'task': task, 'build_type': args.build_type, 'url': URL, 'steps': STEPS,
                           'parameters': ['atollUrl', 'atollPassword', 'atollToken', 'atollChannelId', 'atollCodexId']}, indent=2))
         return 0
     node = load_node()
@@ -40,13 +41,12 @@ def main(argv=None):
     parameters = {'class': 'dev.atoll.app.e2e.IsolatedNodeSmokeTest', 'atollUrl': URL, 'atollPassword': password,
                   'atollToken': token, 'atollChannelId': node['channel_id'], 'atollCodexId': node['codex_actor_id'],
                   'additionalTestOutputDir': '/sdcard/Android/media/dev.atoll.app/additional_test_output'}
-    command = ['./gradlew', '--console=plain', 'connectedDebugAndroidTest'] + [
+    command = ['./gradlew', '--console=plain', '-PatollTestBuildType=' + args.build_type, task] + [
         '-Pandroid.testInstrumentationRunnerArguments.' + key + '=' + value for key, value in parameters.items()]
-    destination = args.output.resolve() / time.strftime('%Y%m%d-%H%M%S')
+    destination = args.output.resolve() / (time.strftime('%Y%m%d-%H%M%S') + '-' + args.build_type)
     destination.mkdir(parents=True)
     with EmulatorLock(args.owner, args.queue_timeout) as lock:
-        adb = Adb(args.serial, lock.lock, args.owner)
-        adb.check_owner()
+        lock.check_owner()
         environment = dict(os.environ, ANDROID_SERIAL=args.serial)
         # Capture/sanitize output here, so AGP/adb failure diagnostics cannot expose arguments.
         with (destination / 'gradle.log').open('w') as log:
@@ -63,7 +63,7 @@ def main(argv=None):
         additional = Path('app/build/outputs/connected_android_test_additional_output')
         if additional.is_dir():
             shutil.copytree(additional, destination / 'app-artifacts')
-    (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': 'connectedDebugAndroidTest', 'exit_code': status}, indent=2))
+    (destination / 'run.json').write_text(json.dumps({'server': URL, 'task': task, 'build_type': args.build_type, 'exit_code': status}, indent=2))
     print('Instrumented artifacts: ' + str(destination))
     return status
 
