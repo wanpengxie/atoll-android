@@ -36,6 +36,8 @@ android {
         // app's external files dir, which adb can write without run-as.
         create("benchmark") {
             initWith(getByName("release"))
+            // Rules for the minified instrumented test APK only.
+            testProguardFiles("proguard-test-rules.pro")
             matchingFallbacks += "release"
             buildConfigField("boolean", "DEV_AUTH_EXTERNAL", "true")
         }
@@ -92,6 +94,8 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:rules:1.6.1")
+    // androidx.test references these annotations; R8 needs them when the benchmark test APK is minified.
+    androidTestImplementation("com.google.errorprone:error_prone_annotations:2.18.0")
     // Composition tracing for the benchmark build only (perfetto); never in release.
     "benchmarkImplementation"("androidx.compose.runtime:runtime-tracing")
     "benchmarkImplementation"("androidx.tracing:tracing-perfetto:1.0.0")
