@@ -23,6 +23,18 @@ android {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "DEV_AUTH_EXTERNAL", "false")
+        }
+        debug {
+            buildConfigField("boolean", "DEV_AUTH_EXTERNAL", "false")
+        }
+        // Release code (R8, not debuggable) for performance measurement on the
+        // emulator. Only this type reads the bootstrap auth file from the
+        // app's external files dir, which adb can write without run-as.
+        create("benchmark") {
+            initWith(getByName("release"))
+            matchingFallbacks += "release"
+            buildConfigField("boolean", "DEV_AUTH_EXTERNAL", "true")
         }
     }
     compileOptions {
@@ -34,6 +46,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
