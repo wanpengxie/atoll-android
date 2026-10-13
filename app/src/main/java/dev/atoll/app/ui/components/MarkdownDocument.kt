@@ -7,6 +7,8 @@ import org.commonmark.parser.Parser
 import org.commonmark.ext.gfm.tables.*
 import org.commonmark.ext.gfm.strikethrough.*
 import org.commonmark.ext.autolink.AutolinkExtension
+import org.commonmark.ext.task.list.items.TaskListItemsExtension
+import org.commonmark.ext.task.list.items.TaskListItemMarker
 
 /** Pure display tree. CommonMark nodes never escape the background parser. */
 data class MarkdownRun(val text: String, val bold: Boolean = false, val italic: Boolean = false,
@@ -18,13 +20,15 @@ sealed interface MarkdownBlock {
         val lineNumbers = if (lineCount >= 5) (1..lineCount).joinToString("\n") else ""
     }
     data class Quote(val blocks: List<MarkdownBlock>) : MarkdownBlock
-    data class ListBlock(val items: List<List<MarkdownBlock>>, val start: Int? = null) : MarkdownBlock
+    data class ListBlock(val items: List<List<MarkdownBlock>>, val start: Int? = null,
+        val checks: List<Boolean?> = emptyList()) : MarkdownBlock
     data class Table(val rows: List<List<List<MarkdownRun>>>, val alignments: List<String?>) : MarkdownBlock
     data class Math(val source: String, val display: Boolean) : MarkdownBlock
     data object Rule : MarkdownBlock
 }
 class MarkdownParser {
-    private val parser = Parser.builder().extensions(listOf(TablesExtension.create(), StrikethroughExtension.create(), AutolinkExtension.create())).build()
+    private val parser = Parser.builder().extensions(listOf(TablesExtension.create(), StrikethroughExtension.create(),
+        AutolinkExtension.create(), TaskListItemsExtension.create())).build()
     private var math = emptyMap<String, MathFragment>()
     fun parse(text: String): List<MarkdownBlock> {
         val prepared = prepareMath(text)
@@ -46,8 +50,8 @@ class MarkdownParser {
             is FencedCodeBlock -> listOf(MarkdownBlock.Code(n.literal.trimEnd('\n'), n.info.orEmpty().substringBefore(' '), CodeHighlighter.highlight(n.literal.trimEnd('\n'), n.info.orEmpty().substringBefore(' '))))
             is IndentedCodeBlock -> listOf(MarkdownBlock.Code(n.literal.trimEnd('\n'), ""))
             is BlockQuote -> listOf(MarkdownBlock.Quote(blocks(n)))
-            is BulletList -> listOf(MarkdownBlock.ListBlock(children(n).map(::blocks)))
-            is OrderedList -> listOf(MarkdownBlock.ListBlock(children(n).map(::blocks), n.markerStartNumber))
+            is BulletList -> listOf(listBlock(n))
+            is OrderedList -> listOf(listBlock(n, n.markerStartNumber))
             is ThematicBreak -> listOf(MarkdownBlock.Rule)
             is TableBlock -> {
                 val rows = children(n).flatMap(::children)
@@ -57,6 +61,12 @@ class MarkdownParser {
             is HtmlBlock -> listOf(MarkdownBlock.Paragraph(listOf(MarkdownRun(n.literal))))
             else -> blocks(n)
         }
+    }
+    private fun listBlock(node: Node, start: Int? = null): MarkdownBlock.ListBlock {
+        val items = children(node)
+        // The GFM extension prepends the marker to its own ListItem, including nested lists.
+        return MarkdownBlock.ListBlock(items.map(::blocks), start,
+            items.map { (it.firstChild as? TaskListItemMarker)?.isChecked })
     }
     private fun inline(parent: Node, style: MarkdownRun = MarkdownRun("")): List<MarkdownRun> = children(parent).flatMap { n ->
         when (n) {

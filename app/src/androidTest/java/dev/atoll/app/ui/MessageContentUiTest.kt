@@ -10,6 +10,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -92,6 +94,21 @@ class MessageContentUiTest {
         compose.onNodeWithText("测试拒绝原因").assertIsDisplayed()
         compose.runOnIdle { failure.value = false }
         compose.onNodeWithText("✓ 已完成").assertIsDisplayed()
+    }
+
+    @Test fun gfmTaskCheckboxesExposeTheirStateAndAreReadOnly() {
+        compose.setContent { TestContent { Markdown("task-list", "- [x] 已完成任务\n- [ ] 待办任务\n- 普通列表项") } }
+        compose.waitUntil(10_000) {
+            compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.ToggleableState)).fetchSemanticsNodes().size == 2
+        }
+        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.On))
+            .assertIsDisplayed().assertIsNotEnabled().assertHasNoClickAction()
+        compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Off))
+            .assertIsDisplayed().assertIsNotEnabled().assertHasNoClickAction()
+        compose.onNodeWithText("已完成任务").assertIsDisplayed()
+        compose.onNodeWithText("待办任务").assertIsDisplayed()
+        compose.onNodeWithText("普通列表项").assertIsDisplayed()
+        screenshot("gfm-task-list")
     }
 
     private fun screenshot(name: String) {
