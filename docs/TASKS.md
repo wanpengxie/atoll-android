@@ -221,11 +221,13 @@ Each package owns its files; live checks run on our test node.
 | W4 #11 identity-ready | sol-3 | merged |
 | W4 N2 process panel lifecycle | sol-3 | merged |
 | W4 #52 process panel controls | sol-3 | merged |
-| W4 #07 history (+ observer filters) | sol-3 | in progress |
+| W4 #07 history (+ observer filters) | sol-3 | merged |
 | W4 #24 related-call data + child focus | sol-1 | merged |
-| W4 #24 renderer | sol-4 | merged (data from sol-1 pending) |
+| W4 #24 renderer | sol-4 | merged |
 | W4 #17 continuation bubbles | sol-4 | merged |
 | W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
-| R8 17-step on 8fd496d, then release APK | sol-2 | rebuilding |
+| e2e network readiness | sol-2 | merged (375eb8b) |
+| v3 audit gaps (#12 preparing state, #29 copy with text+JSON, #15 per-view browse) | tbd | from sol-1 v3 audit |
+| R8 17-step on final main, perf recheck, release APK | sol-2, sol-4 | after v3 fixes |
 
 Live checks use the own test node only (100.99.232.10:18080).
