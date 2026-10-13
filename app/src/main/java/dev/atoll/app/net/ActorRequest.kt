@@ -7,9 +7,9 @@ import kotlinx.serialization.json.*
 import java.util.UUID
 
 /** Actor calls answer on feed; register the response listener before submitting. */
-suspend fun WireClient.actorRequest(channelId: String, actorId: String, type: String, payload: JsonObject, timeoutMs: Long = 30_000): JsonObject = coroutineScope {
+suspend fun WireClient.actorRequest(channelId: String, actorId: String, type: String, payload: JsonObject, timeoutMs: Long = 30_000, messageId: String = UUID.randomUUID().toString()): JsonObject = coroutineScope {
     if (state.value !is WireState.Attached) throw WireException(type, "unavailable", "wire is not attached")
-    val id = UUID.randomUUID().toString()
+    val id = messageId
     val answer = async(start = CoroutineStart.UNDISPATCHED) {
         withTimeout(timeoutMs) {
             val row = frames.filterIsInstance<DownFrame.Feed>().first {

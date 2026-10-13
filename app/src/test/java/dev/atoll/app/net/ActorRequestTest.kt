@@ -8,6 +8,26 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ActorRequestTest {
+    @Test fun callerChosenHoldRequestIdIsUsedForSubmitAndTerminalCorrelation() = runBlocking<Unit> {
+        var submitted: JsonObject? = null
+        val wire = object : WireClient {
+            override val state = MutableStateFlow<WireState>(WireState.Attached(1, Envelope.EMPTY))
+            override val frames = MutableSharedFlow<DownFrame>()
+            override suspend fun request(type: String, payload: JsonObject): JsonObject {
+                submitted = payload
+                val terminal = Envelope(buildJsonObject {
+                    put("id", "hold-answer"); put("parent_id", "edit-hold"); put("type", "agent.hold"); put("kind", "response")
+                    put("payload", buildJsonObject { put("body", buildJsonObject { put("status", "completed"); put("value", Envelope.EMPTY) }) })
+                })
+                frames.emit(DownFrame.Feed("", Row("c", 1, terminal)))
+                return Envelope.EMPTY
+            }
+            override suspend fun history(payload: JsonObject) = HistoryPage(emptyList(), Envelope.EMPTY)
+        }
+        assertEquals(Envelope.EMPTY, wire.actorRequest("c", "agent:a", "agent.hold", Envelope.EMPTY, messageId = "edit-hold"))
+        assertEquals("edit-hold", submitted!!.getValue("id").string())
+        assertEquals(0, wire.frames.subscriptionCount.value)
+    }
     @Test fun lostConnectionFailsAnActorCallAfterItsSubmitReceipt() = runBlocking<Unit> {
         val submitted = CompletableDeferred<Unit>()
         val wire = object : WireClient {
