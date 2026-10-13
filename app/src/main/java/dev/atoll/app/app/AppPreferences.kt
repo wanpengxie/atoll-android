@@ -37,6 +37,9 @@ class AppPreferences(context: Context) : ViewPreferences {
             it[stringSetPreferencesKey("$namespace.$channel.actors")] = options.actorFilters
         }
     }
+    suspend fun bootstrap(server: String, account: String) = BootstrapCache.decode(get(accountNamespace(server, account), "bootstrap"))
+    suspend fun saveBootstrap(server: String, account: String, value: BootstrapCache) = put(accountNamespace(server, account), "bootstrap", value.encode())
+    suspend fun forgetBootstrap(server: String, account: String) { data.edit { it.remove(stringPreferencesKey("${accountNamespace(server, account)}.bootstrap")) } }
     suspend fun clearWorld(namespace: String) { data.edit { values -> values.asMap().keys.filter { it.name.startsWith("$namespace.") }.forEach { values.remove(it) } } }
 }
 

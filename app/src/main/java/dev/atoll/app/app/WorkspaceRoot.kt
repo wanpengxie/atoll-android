@@ -42,8 +42,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     AtollTheme {
         when (state.phase) {
             WorkspacePhase.Booting -> StatusPage("正在启动工作区…")
-            WorkspacePhase.Login -> LoginScreen(state.login, graph::changeLogin, { graph.login(state.login) }, { graph.notice("注册入口将在账号设置中提供") })
-            WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "重新连接", graph::reconnect)
+            WorkspacePhase.Login -> LoginScreen(state.login, graph::changeLogin, { graph.login(state.login) })
+            WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "刷新页面", graph::reconnect)
             WorkspacePhase.Workspace -> {
                 BackHandler(state.route != null || drawer) { if (drawer) drawer = false else graph.back() }
                 Column(Modifier.fillMaxSize()) {
@@ -66,7 +66,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         val conversation = state.conversation
                         if (conversation == null) {
                             val access = state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.access
-                            StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else "正在读取频道…", button = "频道列表", action = { drawer = true })
+                            StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
                         } else {
                             val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0))
                             var following by remember { mutableStateOf(true) }

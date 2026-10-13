@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicReference
 enum class WorkspacePhase { Booting, Login, Workspace, Incompatible }
 data class WorkspaceState(
     val phase: WorkspacePhase = WorkspacePhase.Booting,
+    val identityConfirmed: Boolean = false,
     val login: LoginViewState = LoginViewState(),
     val navigation: ChannelNavigationViewState = ChannelNavigationViewState(emptyList(), ConnectionPhase.CONNECTING, AccountViewState("")),
     val route: AppRoute? = null,
@@ -115,6 +116,12 @@ class AppGraph(private val context: Context) {
             Restore -> {
                 val (server, account) = preferences.account()
                 mutableState.value = mutableState.value.copy(login = LoginViewState(server, account))
+                preferences.bootstrap(server, account)?.let { cached ->
+                    val target = requestedRoute?.let { wanted -> cached.channels.firstOrNull { it.id == wanted.channel || it.qualifiedName == wanted.channel }?.id }
+                        ?: cached.lastChannel
+                    mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Workspace, navigation = cached.navigation(),
+                        route = target?.takeIf(cached.memberships::containsKey)?.let(::AppRoute))
+                }
                 val debug = readDevelopmentAuth()
                 if (debug != null) authenticate(debug.server, debug.account, token = debug.token)
                 else if (account.isEmpty()) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login)
@@ -122,11 +129,16 @@ class AppGraph(private val context: Context) {
             }
             is Form -> mutableState.value = mutableState.value.copy(login = event.value.copy(busy = mutableState.value.login.busy))
             is Login -> {
+                if (mutableState.value.login.busy) return
+                val error = identityFormError(event.form)
+                if (error != null) { mutableState.value = mutableState.value.copy(login = event.form.copy(error = error)); return }
                 mutableState.value = mutableState.value.copy(login = event.form.copy(busy = true, error = null))
-                authenticate(event.form.server, event.form.account, password = event.form.password)
+                authenticate(event.form.server, event.form.account, form = event.form)
             }
             is Authenticated -> if (event.epoch == epoch) {
                 if (event.failure != null) {
+                    if (event.restoring && event.failure is IdentityException && event.failure.status == 401)
+                        preferences.forgetBootstrap(mutableState.value.login.server, mutableState.value.login.account)
                     mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login,
                         login = mutableState.value.login.copy(busy = false, password = "", error = if (event.restoring && event.failure is IdentityException && event.failure.status == 401) null else event.failure.message))
                 } else connect(requireNotNull(event.auth))
@@ -137,6 +149,7 @@ class AppGraph(private val context: Context) {
             is TreeDone -> if (event.epoch == epoch && event.world == runtime?.world) {
                 event.records?.let { complete -> records.keys.retainAll(complete.map { it.id }.toSet()); complete.forEach { records[it.id] = it } }
                 preferences.put(runtime!!.namespace, "channels", cachedTree(records.values).toString())
+                saveBootstrap()
                 if (event.failure != null) notice = event.failure
                 if (route != null && route!!.channel !in records && route!!.channel !in memberships) { notice = "该频道已关闭"; navigate(null, false) }
                 publish(); maybeRequestedRoute()
@@ -186,11 +199,26 @@ class AppGraph(private val context: Context) {
             }
             Logout -> {
                 val old = runtime
+                val currentLogin = mutableState.value.login
+                val identity = old?.identity ?: runCatching { IdentityClient(currentLogin.server,
+                    AndroidKeyValueStore(context.getSharedPreferences("identity_${accountNamespace(currentLogin.server, currentLogin.account)}", Context.MODE_PRIVATE))) }.getOrNull()
+                val login = currentLogin.copy(password = "", busy = identity != null, error = null)
+                preferences.forgetBootstrap(login.server, login.account)
                 tearDown()
-                scope.launch { runCatching { old?.identity?.logout() }; old?.identity?.cookieJar?.clear() }
-                mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false))
+                mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = login)
+                if (identity != null) {
+                    val requestEpoch = epoch
+                    scope.launch {
+                        val failure = runCatching { identity.logout() }.exceptionOrNull()
+                        identity.cookieJar.clear()
+                        commands.send(LoggedOut(requestEpoch, failure?.message))
+                    }
+                }
             }
+            is LoggedOut -> if (event.epoch == epoch) mutableState.value = mutableState.value.copy(login = mutableState.value.login.copy(busy = false,
+                error = event.failure?.let { "本机会话已清理，节点退出未确认：$it" }))
             is Expired -> if (event.epoch == epoch && runtime != null) {
+                preferences.forgetBootstrap(mutableState.value.login.server, mutableState.value.login.account)
                 runtime!!.identity.cookieJar.clear(); tearDown()
                 mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false, error = "会话已失效，请重新登录"))
             }
@@ -215,7 +243,7 @@ class AppGraph(private val context: Context) {
         }
     }
 
-    private fun authenticate(serverValue: String, accountValue: String, password: String? = null, token: String? = null) {
+    private fun authenticate(serverValue: String, accountValue: String, form: LoginViewState? = null, token: String? = null) {
         val requestEpoch = ++epoch
         scope.launch {
             try {
@@ -229,10 +257,10 @@ class AppGraph(private val context: Context) {
                     if (token != null) addInterceptor { chain -> chain.proceed(chain.request().newBuilder().header("Authorization", "Bearer $token").build()) }
                 }.build()
                 val identity = IdentityClient(server, keyValues, http)
-                val principal = if (password != null) identity.login(account, password) else identity.session()
-                commands.send(Authenticated(requestEpoch, Auth(server, account, principal, identity), null, password == null))
+                val principal = if (form != null) submitIdentity(identity, form) else identity.session()
+                commands.send(Authenticated(requestEpoch, Auth(server, account, principal, identity), null, form == null))
             } catch (failure: Exception) {
-                if (failure !is CancellationException) commands.send(Authenticated(requestEpoch, null, failure, password == null))
+                if (failure !is CancellationException) commands.send(Authenticated(requestEpoch, null, failure, form == null))
             }
         }
     }
@@ -255,17 +283,24 @@ class AppGraph(private val context: Context) {
         val hub = SyncHub(gate, store, sessionScope)
         val obs = ObsClient(auth.server, http) { post(Expired(requestEpoch)) }
         val pty = PtyClient(auth.server, http)
-        runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope, pty)
+        runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope, pty, name = auth.principal["display_name"].string().ifEmpty { principalId })
         mutableServices.value = WorkspaceServices(auth.server, principalId, emptyMap(), gate, obs, http, pty = pty)
         preferences.get(namespace, "channels")?.let { saved -> runCatching { channelRecords(Json.parseToJsonElement(saved).jsonObject).forEach { records[it.id] = it } } }
         if (requestedRoute == null) {
             requestedRoute = preferences.get(namespace, "last-channel")?.takeIf { it.isNotEmpty() }?.let { AppRoute(it) }
             requestedRestoreSurface = true
         }
-        mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Workspace,
+        mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Workspace, identityConfirmed = true,
             login = mutableState.value.login.copy(server = auth.server, account = auth.account, password = "", busy = false), notice = null)
         sessionScope.launch(start = CoroutineStart.UNDISPATCHED) { wire.state.collect { commands.send(TransportState(requestEpoch, it)) } }
         sessionScope.launch(start = CoroutineStart.UNDISPATCHED) { wire.frames.collect { if (gate.awaitReady(it)) commands.send(TransportFrame(requestEpoch, it)) } }
+        preferences.bootstrap(auth.server, auth.account)?.forPrincipal(principalId)?.let { cached ->
+            memberships.putAll(cached.memberships)
+            for ((id, self) in cached.memberships) ensureController(id, self, cached.heads[id] ?: 0)
+            val wanted = requestedRoute
+            val channel = wanted?.let { route -> records.values.firstOrNull { it.id == route.channel || it.qualifiedName == route.channel }?.id ?: route.channel }
+            if (channel in memberships && wanted != null) { requestedRoute = null; navigate(wanted.copy(channel = channel!!), false, restoreSurface = requestedRestoreSurface) }
+        }
         gate.subscribers.first { it > 0 }
         wire.start()
         loadTree(requestEpoch)
@@ -333,6 +368,7 @@ class AppGraph(private val context: Context) {
         mutableServices.value = mutableServices.value?.copy(selfIds = next.toMap())
         val heads = payload.objects("history_meta").associate { it["channel_id"].string() to it.longValue("head_seq") }
         for ((id, self) in next) ensureController(id, self, heads[id] ?: 0)
+        saveBootstrap()
         if (removedCurrent) { notice = "频道成员关系已结束"; navigate(null, false) }
     }
 
@@ -368,6 +404,7 @@ class AppGraph(private val context: Context) {
         channelOpenedAt = SystemClock.elapsedRealtime()
         if (selected != null) {
             preferences.put(rt.namespace, "last-channel", selected.channel)
+            saveBootstrap()
             if (selected.channel in memberships) {
                 controllers[selected.channel]?.follow(selected.tab == "conversation")
                 if (channelChanged) controllers[selected.channel]?.open(records[selected.channel] ?: fallback(selected.channel))
@@ -388,6 +425,15 @@ class AppGraph(private val context: Context) {
             }
         }
         publish()
+    }
+
+    private suspend fun saveBootstrap() {
+        val rt = runtime ?: return
+        val attached = rt.gate.state.value as? WireState.Attached ?: return
+        val services = mutableServices.value ?: return
+        val heads = attached.receipt.objects("history_meta").associate { it["channel_id"].string() to it.longValue("head_seq") }
+        preferences.saveBootstrap(services.server, mutableState.value.login.account,
+            BootstrapCache(rt.principal, rt.name, memberships.toMap(), records.values.toList(), heads, route?.channel))
     }
 
     private suspend fun saveSurface(channel: String, surface: ChannelSurface) {
@@ -459,7 +505,7 @@ class AppGraph(private val context: Context) {
                 unreadPhase = if (unread.pending) UnreadPhase.Recovering else if (unread.unknown) UnreadPhase.Unknown else UnreadPhase.Ready,
                 activity = state?.activity.orEmpty(), parentId = record.parent, depth = depth)
         }
-        val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.principal, rt.principal == "root"), route?.channel)
+        val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.name, rt.principal == "root"), route?.channel)
         val channelState = channelStates[route?.channel]
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
@@ -504,7 +550,7 @@ class AppGraph(private val context: Context) {
     private data class DevelopmentAuth(val server: String, val account: String, val token: String)
     private data class Auth(val server: String, val account: String, val principal: JsonObject, val identity: IdentityClient)
     private class Runtime(val namespace: String, val principal: String, val identity: IdentityClient, val wire: Wire,
-        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0)
+        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal)
     private sealed interface Event
     private data object Restore : Event
     private data class Form(val value: LoginViewState) : Event
@@ -529,6 +575,7 @@ class AppGraph(private val context: Context) {
     private data object Jump : Event
     private data class Foreground(val value: Boolean) : Event
     private data object Logout : Event
+    private data class LoggedOut(val epoch: Long, val failure: String?) : Event
     private data class Expired(val epoch: Long) : Event
     private data class Observed(val epoch: Long, val world: Long, val id: String, val meta: JsonObject?, val failure: String?) : Event
     private data class Notice(val value: String?) : Event
