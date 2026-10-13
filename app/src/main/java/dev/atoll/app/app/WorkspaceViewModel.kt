@@ -9,6 +9,7 @@ import dev.atoll.app.compose.ComposerActor
 import dev.atoll.app.AtollApp
 import dev.atoll.app.tasks.*
 import dev.atoll.app.ui.screens.ConnectionPhase
+import dev.atoll.app.waiting.busyActors as receiverBusyActors
 
 class WorkspaceViewModel(application: Application) : AndroidViewModel(application) {
     val graph: AppGraph = (application as AtollApp).graph
@@ -22,10 +23,21 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             graph.services.collectLatest { services ->
                 val current = session(services) ?: return@collectLatest
+                current.waiting.collectLatest { waiting ->
+                    if (waiting == null) return@collectLatest
+                    waiting.state.map { it.localEchoes to it.timelinePlaced }.distinctUntilChanged().collect { (echoes, placed) ->
+                        graph.localPlacement(waiting.channelId, current.services, echoes, placed)
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
+            graph.services.collectLatest { services ->
+                val current = session(services) ?: return@collectLatest
                 val reported = mutableSetOf<String>()
                 current.governance.creations.collect { operations ->
                     operations.filter { it.ledger && !it.failed && it.targetId.isNotEmpty() && reported.add(it.targetId) }.forEach {
-                        graph.channelCreated(it.targetId, it.parentId, it.name, current.services.boot)
+                        graph.channelCreated(it.targetId, it.parentId, it.name, current.services)
                     }
                 }
             }
@@ -65,6 +77,11 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                     features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters)
                 }
                 state.timelineSource?.takeIf { it.channelId == route.channel }?.let { source ->
+                    val busyKey = BusyProjection(source.channelId, source.revision, source.projectionVersion)
+                    if (busyKey != busyProjection) {
+                        val actors = withContext(Dispatchers.Default) { receiverBusyActors(source) }
+                        receiverBusy = actors; busyProjection = busyKey
+                    }
                     val binding = TaskBinding(source, signature, state.newerUnloaded)
                     if (binding != foldedTasks) {
                         features.tasks(route.channel).update(source, signature.self,
@@ -77,7 +94,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 if (timeline.channelId != route.channel) return@collectLatest
                 val waiting = features.waiting(timeline)
                 waiting.updateAccess(signature.writable, signature.self, state.roster.associate { it.id to it.name }, state.rosterCurrent)
-                waiting.updateSnapshot(timeline, state.newerUnloaded)
+                waiting.updateSnapshot(timeline, state.newerUnloaded, receiverBusy)
                 waiting.setActive(route.tab == "conversation")
                 if (timeline === foldedComposer) return@collectLatest
                 val facts = withContext(Dispatchers.Default) { composerTimelineFacts(timeline) }
@@ -93,6 +110,9 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private var foldedComposer: dev.atoll.app.model.TimelineSnapshot? = null
     private data class TaskBinding(val source: dev.atoll.app.model.TimelineSource, val composer: ComposerChannel, val detached: Boolean)
     private var foldedTasks: TaskBinding? = null
+    private data class BusyProjection(val channel: String, val revision: Long, val projection: Long)
+    private var busyProjection: BusyProjection? = null
+    private var receiverBusy = emptySet<String>()
     private data class ActivityBinding(val inputs: List<ChannelActivityInput>, val runs: List<ActivityAgentRun>, val operations: List<ActivityOperation>, val connected: Boolean)
     private var writable = emptyMap<String, Boolean>()
     private fun updateComposerAccess(features: SessionFeatures, services: WorkspaceServices, state: WorkspaceState) {
@@ -102,7 +122,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
     fun session(services: WorkspaceServices?): SessionFeatures? {
         if (features?.services?.wire !== services?.wire || features?.services?.boot != services?.boot) {
-            features?.clear(); features = null; composerChannel = null; foldedComposer = null; foldedTasks = null; writable = emptyMap(); mutableMessageTargets.value = MessageTargetIndex()
+            features?.clear(); features = null; composerChannel = null; foldedComposer = null; foldedTasks = null; busyProjection = null; receiverBusy = emptySet(); writable = emptyMap(); mutableMessageTargets.value = MessageTargetIndex()
         }
         if (features == null && services != null && services.boot.isNotEmpty()) features = SessionFeatures(getApplication(), services)
         if (services != null) features?.updateServices(services)

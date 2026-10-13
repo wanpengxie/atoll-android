@@ -111,7 +111,7 @@ class AppGraph(private val context: Context) {
     fun login(form: LoginViewState) { post(Login(form)) }
     fun logout() { post(Logout) }
     fun openChannel(id: String) { post(Navigate(AppRoute(id), push = true, restoreSurface = true)) }
-    fun channelCreated(id: String, parent: String, name: String, boot: String, enter: Boolean = false) { post(CreatedChannel(id, parent, name, boot, enter)) }
+    fun channelCreated(id: String, parent: String, name: String, owner: WorkspaceServices, enter: Boolean = false) { post(CreatedChannel(id, parent, name, owner.boot, owner.wire, enter)) }
     fun route(value: String?) { AppRoute.parse(value)?.let { post(Navigate(it, push = true)) } }
     fun tab(value: ChannelTab) { post(Tab(value)) }
     fun files(open: Boolean) { post(Files(open)) }
@@ -119,6 +119,7 @@ class AppGraph(private val context: Context) {
     fun back() { post(Back) }
     fun follow(value: Boolean) { post(Follow(value)) }
     fun visibleRows(channel: String, keys: Set<String>) { post(VisibleRows(channel, keys)) }
+    fun localPlacement(channel: String, owner: WorkspaceServices, echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { post(LocalPlacement(channel, owner.boot, owner.wire, echoes, placed)) }
     fun scopeToggle() { post(ScopeToggle) }
     fun filter(actor: String) { post(Filter(actor)) }
     fun older() { post(Older) }
@@ -193,7 +194,7 @@ class AppGraph(private val context: Context) {
                 if (runtime == null || mutableState.value.phase != WorkspacePhase.Workspace || runtime!!.gate.state.value !is WireState.Attached) { requestedRoute = event.route; requestedRestoreSurface = event.restoreSurface }
                 else navigate(event.route, event.push, restoreSurface = event.restoreSurface)
             }
-            is CreatedChannel -> if (runtime != null && event.boot == mutableServices.value?.boot && event.id.isNotEmpty() && event.name.isNotEmpty()) {
+            is CreatedChannel -> if (runtime != null && event.owner === mutableServices.value?.wire && event.boot == mutableServices.value?.boot && event.id.isNotEmpty() && event.name.isNotEmpty()) {
                 val added = event.id !in records
                 records.putIfAbsent(event.id, createdChannelRecord(event.id, event.parent, event.name, records[event.parent]))
                 if (added || event.enter) loadTree(epoch)
@@ -245,6 +246,8 @@ class AppGraph(private val context: Context) {
             }
             is Follow -> controllers[route?.channel]?.follow(event.value && route?.tab == "conversation")
             is VisibleRows -> if (event.channel == route?.channel && route?.tab == "conversation") controllers[event.channel]?.visibleRows(event.keys)
+            is LocalPlacement -> if (event.channel == route?.channel && event.owner === mutableServices.value?.wire && event.boot == mutableServices.value?.boot)
+                controllers[event.channel]?.localPlacement(event.echoes, event.placed)
             ScopeToggle -> controllers[route?.channel]?.toggleScope()
             is Filter -> controllers[route?.channel]?.filter(event.id)
             Older -> controllers[route?.channel]?.loadOlder()
@@ -640,7 +643,7 @@ class AppGraph(private val context: Context) {
     private data class TransportFrame(val epoch: Long, val frame: DownFrame) : Event
     private data class Tree(val epoch: Long, val world: Long, val generation: Long, val records: List<ChannelRecord>) : Event
     private data class TreeDone(val epoch: Long, val world: Long, val generation: Long, val records: List<ChannelRecord>?, val failure: String?) : Event
-    private data class CreatedChannel(val id: String, val parent: String, val name: String, val boot: String, val enter: Boolean) : Event
+    private data class CreatedChannel(val id: String, val parent: String, val name: String, val boot: String, val owner: WireClient, val enter: Boolean) : Event
     private data class Roster(val epoch: Long, val world: Long, val channel: String, val actors: List<ActorRecord>, val generation: Long, val success: Boolean = true) : Event
     private data class Controller(val epoch: Long, val world: Long, val id: String, val value: ChannelRuntimeState) : Event
     private data class Navigate(val route: AppRoute, val push: Boolean, val restoreSurface: Boolean = false) : Event
@@ -655,6 +658,7 @@ class AppGraph(private val context: Context) {
     private data class Update(val epoch: Long, val value: NodeUpdateValue) : Event
     private data class Follow(val value: Boolean) : Event
     private data class VisibleRows(val channel: String, val keys: Set<String>) : Event
+    private data class LocalPlacement(val channel: String, val boot: String, val owner: WireClient, val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Event
     private data object ScopeToggle : Event
     private data class Filter(val id: String?) : Event
     private data object Older : Event
