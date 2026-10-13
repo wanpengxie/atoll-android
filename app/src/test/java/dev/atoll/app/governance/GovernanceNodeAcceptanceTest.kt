@@ -69,7 +69,7 @@ class GovernanceNodeAcceptanceTest {
                     record("retire created child",GovernanceCommands.channelDelete(child));childRetired=true;child=""
                     val replica=ChannelReplica(parent,identities[parent].orEmpty())
                     val services=WorkspaceServices(base,"root",identities,wire,ObsClient(base,client),client)
-                    val tasks=TasksViewModel(services,parent,store=MemoryKeyValueStore(),dispatcher=dispatcher)
+                    val tasks=TasksViewModel(services,parent,dispatcher=dispatcher)
                     val fold=membershipScope.launch(start=CoroutineStart.UNDISPATCHED) { wire.frames.collect { f -> if (f is DownFrame.Feed && f.row.channelId==parent) { replica.apply(RowBatch(parent,listOf(f.row),Origin.LIVE));tasks.update(replica.snapshot(),identities[parent].orEmpty(),writable=true) } } }
                     try {
                         tasks.update(replica.snapshot(),identities[parent].orEmpty(),writable=true)
