@@ -15,6 +15,8 @@ data class TimelineOptions(
     val showNarration: Boolean = false,
     val localEchoes: List<TimelineEntry> = emptyList(),
     val timelinePlaced: Set<String> = emptySet(),
+    /** A historical window cannot prove that an apparently open turn is still running. */
+    val newerUnloaded: Boolean = false,
     val now: Long = System.currentTimeMillis(),
     val zoneId: ZoneId = ZoneId.systemDefault(),
 )
@@ -51,7 +53,7 @@ object ConversationPresentation {
         return { envelope -> byEnvelope[envelope.id] ?: (envelope.id in related) }
     }
     private fun matchesConversation(entry: TimelineEntry, related: Set<String>) = entry.envelopes().any { it.type !in selfOperations } && entry.envelopes().any { it.id in related }
-    private fun waiting(turn: Turn, restarts: Map<String, Long>, options: TimelineOptions) = turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, restarts, options.now) in setOf(Lifecycle.PENDING, Lifecycle.WAITING)
+    private fun waiting(turn: Turn, restarts: Map<String, Long>, options: TimelineOptions) = !options.newerUnloaded && turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, restarts, options.now) in setOf(Lifecycle.PENDING, Lifecycle.WAITING)
     fun selectTimelineItems(state: TimelineSource, options: TimelineOptions = TimelineOptions(), facts: ProjectionFacts? = null): List<TimelineEntry> {
         val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
         val related = facts?.relatedIds ?: if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relatedEnvelopeIds(state, options.selfId) else null
@@ -146,7 +148,7 @@ object ConversationPresentation {
         val items = entries.mapIndexed { index, entry -> presentationItem(entry, entries.getOrNull(index - 1), entries.getOrNull(index + 1), options) }
         val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
         val waitingTurns = state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } }.filter { waiting(it, restarts, options) }.sortedBy { it.requestSeq }
-        return TimelineSnapshot(state.channelId, state.projectionVersion, frozen(items), frozen(waitingTurns), (facts?.runningTasks ?: BackgroundTasks.runningBackgroundTasks(state)), entries.firstOrNull()?.seq ?: 0, entries.lastOrNull()?.seq ?: 0)
+        return TimelineSnapshot(state.channelId, state.projectionVersion, frozen(items), frozen(waitingTurns), if (options.newerUnloaded) emptyList() else (facts?.runningTasks ?: BackgroundTasks.runningBackgroundTasks(state)), entries.firstOrNull()?.seq ?: 0, entries.lastOrNull()?.seq ?: 0)
     }
     internal fun presentationItem(entry: TimelineEntry, previous: TimelineEntry?, next: TimelineEntry?, options: TimelineOptions): PresentationItem {
         val envelope = entry.turn?.request ?: entry.envelope
@@ -161,14 +163,14 @@ object ConversationPresentation {
         val layout = when {
             entry.kind == "narration" || entry.envelope?.let(ConversationVisibility::weakNoticeEvent) == true -> "compact"
             envelope != null && (ConversationVisibility.attachments(envelope.body).isNotEmpty() || "```" in text || text.length > 1200) -> "rich"
-            entry.turn != null -> if (entry.turn.terminal == null) "reserved" else "normal"
+            entry.turn != null -> if (entry.turn.terminal == null && !options.newerUnloaded) "reserved" else "normal"
             text.length < 120 -> "compact"
             else -> "normal"
         }
         return PresentationItem(entry.id, entry, bounds.first, bounds.second,
             entry.turn?.request?.audience?.firstOrNull() ?: entry.turn?.terminal?.senderId ?: envelope?.senderId.orEmpty(),
             timestamp, day, if (timestamp > 0 && nextTimestamp > 0 && day != dayOf(nextTimestamp, options.zoneId)) nextTimestamp else 0,
-            continuation, layout, entry.turn?.terminal != null || entry.kind == "narration" || entry.turn == null && envelope?.body?.flag("transient") != true,
+            continuation, layout, options.newerUnloaded || entry.turn?.terminal != null || entry.kind == "narration" || entry.turn == null && envelope?.body?.flag("transient") != true,
             "${bounds.second}:${entry.copy(subTasks = emptyList()).hashCode()}${entry.subTaskRevision.takeIf { it.isNotEmpty() }?.let { ":$it" }.orEmpty()}")
     }
     private fun dayOf(timestamp: Long, zone: ZoneId) = if (timestamp <= 0) "" else Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate().toString()
