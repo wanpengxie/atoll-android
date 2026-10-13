@@ -18,6 +18,7 @@ data class ChannelCreation(val requestId: String, val parentId: String, val name
         targetId = value.text("channel_id").ifEmpty { value.text("channelId") },
         error = if (value.text("channel_id").ifEmpty { value.text("channelId") }.isEmpty()) "终态没有返回频道 ID；请刷新结果，勿重复创建。" else "")
     fun converge(channels: List<kotlinx.serialization.json.JsonObject>, memberships: Set<String>): ChannelCreation {
+        if (ready) return this // This operation completed; later retirement/access changes do not reopen it.
         val row = channels.firstOrNull { it.declared().text("id").ifEmpty { it.text("key") } == targetId }
         return copy(observable = row != null, membership = targetId.isNotEmpty() && targetId in memberships,
             serving = row?.let { it.declared().bool("open") || it.declared().bool("serving") || it.obj("actual").bool("open") || it.obj("actual").bool("serving") ||

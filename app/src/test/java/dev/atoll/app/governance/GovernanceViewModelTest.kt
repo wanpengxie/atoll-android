@@ -98,6 +98,14 @@ class GovernanceViewModelTest {
             frames.emit(terminal("unrelated"));runCurrent();assertEquals(count,port.channelsCalls);assertEquals(id,vm.creations.value.single().requestId)
         } finally { vm.close() }
     }
+    @Test fun instantRepeatedKeyWritesPublishDistinctCompletionAndNeverRetainTheValue()=runTest {
+        val vm=model(Port(),MutableSharedFlow(),StandardTestDispatcher(testScheduler))
+        try {
+            vm.saveKey("key","dummy-one",false);runCurrent();assertEquals(1L,vm.state.value.keyRevision)
+            vm.saveKey("key","dummy-two",true);runCurrent();assertEquals(2L,vm.state.value.keyRevision)
+            assertEquals("全局 key 已保存",vm.state.value.message);assertFalse(vm.state.value.toString().contains("dummy"))
+        } finally { vm.close() }
+    }
     @Test fun contextSwitchClearsMemberReadAndCancelsOldDirectoryWithoutPublishingIt()=runTest {
         val port=Port();port.reply={ _,_ -> delay(100);json("""{"member":"old"}""") }
         val vm=model(port,MutableSharedFlow(),StandardTestDispatcher(testScheduler))

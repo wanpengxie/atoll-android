@@ -44,5 +44,6 @@ class GovernanceProjectionTest {
         assertEquals("failed",governanceActivityOperations(listOf(pending.copy(failed=true,uncertain=false))).single().state)
         val ready=pending.copy(ledger=true,targetId="child",observable=true,membership=true,serving=true,uncertain=false,error="")
         assertEquals("completed",governanceActivityOperations(listOf(ready)).single().state)
+        assertTrue(ready.converge(emptyList(),emptySet()).ready)
     }
 }
