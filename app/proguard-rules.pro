@@ -1,0 +1,4 @@
+-keepattributes *Annotation*, InnerClasses
+-dontnote kotlinx.serialization.**
+-keep,includedescriptorclasses class dev.atoll.app.**$$serializer { *; }
+-keepclassmembers class dev.atoll.app.** { *** Companion; }
