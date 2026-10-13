@@ -1,0 +1,144 @@
+package dev.atoll.app.tasks
+
+import android.app.DatePickerDialog
+import android.app.TimePickerDialog
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.dp
+import kotlinx.serialization.json.*
+import java.time.LocalDateTime
+import java.time.ZoneId
+
+@Composable
+fun CreateTaskDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
+    val state by viewModel.state.collectAsState()
+    val context=LocalContext.current
+    var title by remember { mutableStateOf("") };var description by remember { mutableStateOf("") }
+    var provider by remember { mutableStateOf(state.providers.firstOrNull()?.actorId.orEmpty()) }
+    var due by remember { mutableStateOf<LocalDateTime?>(null) };var menu by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) };var error by remember { mutableStateOf("") }
+    TaskDialog("新建任务",onClose,busy=busy) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            state.source?.let { source -> item { Text("来源：动态 #${source.number("seq").takeIf { it>0 }?.toString() ?: source.text("objectId")}") } }
+            item { OutlinedTextField(title,{ title=it },label={ Text("任务内容") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=3,maxLines=6) }
+            item { OutlinedTextField(description,{ description=it },label={ Text("补充说明（可选）") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=2,maxLines=4) }
+            item { Box { OutlinedButton(onClick={ menu=true },enabled=!busy) { Text(state.providers.firstOrNull { it.actorId==provider }?.name ?: "选择执行者") }
+                DropdownMenu(menu,onDismissRequest={ menu=false }) { state.providers.forEach { p -> DropdownMenuItem(text={ Text(p.name) },onClick={ provider=p.actorId;menu=false }) } }
+            } }
+            item { Row {
+                TextButton(onClick={
+                    val initial=due ?: LocalDateTime.now()
+                    DatePickerDialog(context,{ _,year,month,day -> TimePickerDialog(context,{ _,hour,minute -> due=LocalDateTime.of(year,month+1,day,hour,minute) },initial.hour,initial.minute,true).show() },initial.year,initial.monthValue-1,initial.dayOfMonth).show()
+                },enabled=!busy) { Text(due?.toString()?.replace('T',' ') ?: "截止时间（可选）") }
+                if (due!=null) TextButton(onClick={ due=null },enabled=!busy) { Text("清除") }
+            } }
+            if (error.isNotEmpty()) item { Text(error,color=MaterialTheme.colorScheme.error) }
+            item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick=onClose,enabled=!busy) { Text("取消") }
+                Button(onClick={ busy=true;error="";viewModel.perform {
+                    try { createTask(provider,title,description,due?.atZone(ZoneId.systemDefault())?.toInstant()?.toString().orEmpty());onClose() }
+                    catch (e:Exception) { error=e.message.orEmpty();throw e }
+                    finally { busy=false }
+                } },enabled=!busy && state.creationReady && title.isNotBlank() && provider.isNotEmpty()) { Text(if (busy) "正在提交…" else "创建任务") }
+            } }
+        }
+    }
+}
+@Composable
+fun TimedActionsDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
+    val state by viewModel.state.collectAsState()
+    var duration by remember { mutableStateOf("5000") };var type by remember { mutableStateOf("agent.ask") };var payload by remember { mutableStateOf("{\"text\":\"定时提醒\"}") }
+    var cancelId by remember { mutableStateOf("") };var busy by remember { mutableStateOf(false) };var error by remember { mutableStateOf("") };var notice by remember { mutableStateOf("") }
+    fun perform(block: suspend TasksViewModel.()->String) {
+        busy=true;error="";notice=""
+        viewModel.perform { try { notice=block() } catch (e:Exception) { error=e.message.orEmpty();throw e } finally { busy=false } }
+    }
+    TaskDialog("定时动作",onClose,busy=busy) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            item { Text("本设备已安排的定时动作",style=MaterialTheme.typography.titleSmall) }
+            item { OutlinedTextField(duration,{ duration=it },label={ Text("延迟（毫秒）") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth(),enabled=!busy) }
+            item { OutlinedTextField(type,{ type=it },label={ Text("消息类型") },modifier=Modifier.fillMaxWidth(),enabled=!busy) }
+            item { OutlinedTextField(payload,{ payload=it },label={ Text("Payload JSON") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=3,maxLines=6) }
+            item { Button(onClick={ perform {
+                val delay=duration.toLongOrNull()?.takeIf { it>0 } ?: throw IllegalArgumentException("延迟必须是正整数毫秒")
+                val body=runCatching { Json.parseToJsonElement(payload) as? JsonObject }.getOrNull() ?: throw IllegalArgumentException("Payload 必须是 JSON 对象")
+                val id=schedule(delay,type,body);cancelId=id;"已安排 $id"
+            } },enabled=!busy && state.writable) { Text(if (busy) "正在提交…" else "创建定时动作") } }
+            if (error.isNotEmpty()) item { Text(error,color=MaterialTheme.colorScheme.error) }
+            if (notice.isNotEmpty()) item { Text(notice,style=MaterialTheme.typography.bodySmall) }
+            item { OutlinedTextField(cancelId,{ cancelId=it },label={ Text("取消已知 timer_id") },modifier=Modifier.fillMaxWidth(),enabled=!busy) }
+            item { TextButton(onClick={ perform { cancelTimer(cancelId.trim());"已确认取消 ${cancelId.trim()}" } },enabled=!busy && state.writable && cancelId.isNotBlank()) { Text("取消定时动作") } }
+            items(state.timers,key={ it.timerId }) { timer ->
+                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
+                    Text(timer.payload.text("text").ifEmpty { timer.msgType },style=MaterialTheme.typography.titleSmall)
+                    Text("${when (timer.state) { "scheduled" -> "已安排";"fired" -> "已触发";else -> "已取消" }} · ${taskDate(timer.dueAt.toString())}",style=MaterialTheme.typography.bodySmall)
+                    Text(timer.timerId,style=MaterialTheme.typography.bodySmall)
+                    if (timer.state=="scheduled") TextButton(onClick={ perform { cancelTimer(timer.timerId);"已确认取消 ${timer.timerId}" } },enabled=!busy && state.writable) { Text("取消") }
+                } }
+            }
+            if (state.timers.isEmpty()) item { Text("本设备还没有定时记录。",style=MaterialTheme.typography.bodySmall) }
+        }
+    }
+}
+
+/** Mount once at workspace level, so addressed forms do not depend on the Tasks tab. */
+@Composable
+fun UiFormsHost(controller: UiFormController,actorNames: Map<String,String> = emptyMap(),channelNames: Map<String,String> = emptyMap()) {
+    val state by controller.state.collectAsState()
+    state.current?.let { form -> UiFormDialog(form,controller,actorNames[form.requester].orEmpty(),channelNames[form.channelId].orEmpty()) }
+    if (state.notice.isNotEmpty()) AlertDialog(onDismissRequest=controller::dismissNotice,text={ Text(state.notice) },confirmButton={ TextButton(onClick=controller::dismissNotice) { Text("知道了") } })
+}
+@Composable
+fun UiFormDialog(form: UiForm,controller: UiFormController,requesterName: String="",channelName: String="") {
+    val state by controller.state.collectAsState()
+    var values by remember(form.id) { mutableStateOf(initialFormValues(form.fields,form.values)) }
+    var errors by remember(form.id) { mutableStateOf<Map<String,String>>(emptyMap()) }
+    val busy=state.busy.isNotEmpty()
+    TaskDialog(form.title,onClose={ controller.cancelAsync(form) },busy=busy) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+            item { Text("${requesterName.ifEmpty { form.requester }} 请你在这块屏上填写${if (channelName.isNotEmpty()) " · $channelName" else ""}",style=MaterialTheme.typography.bodySmall) }
+            items(form.fields,key={ it.name }) { field ->
+                val value=values[field.name];val error=errors[field.name].orEmpty()
+                val label=field.label+if (field.required) " *" else ""
+                when (field.control) {
+                    "checkbox" -> Row { Checkbox(value==JsonPrimitive(true),onCheckedChange={ values=values+(field.name to JsonPrimitive(it)) },enabled=!busy);Text(label,Modifier.padding(top=12.dp)) }
+                    "select" -> {
+                        var menu by remember { mutableStateOf(false) }
+                        Box { OutlinedButton(onClick={ menu=true },enabled=!busy,modifier=Modifier.fillMaxWidth()) {
+                            Text("$label：${field.enum?.firstOrNull { it.toString()==(value as? JsonPrimitive)?.content }?.let { (it as? JsonPrimitive)?.contentOrNull ?: it.toString() } ?: "请选择"}")
+                        }
+                            DropdownMenu(menu,onDismissRequest={ menu=false }) { field.enum.orEmpty().forEach { option -> DropdownMenuItem(text={ Text((option as? JsonPrimitive)?.contentOrNull ?: option.toString()) },onClick={ menu=false;values=values+(field.name to JsonPrimitive(option.toString())) }) } }
+                        }
+                    }
+                    else -> OutlinedTextField((value as? JsonPrimitive)?.contentOrNull.orEmpty(),onValueChange={ values=values+(field.name to JsonPrimitive(it)) },label={ Text(label) },modifier=Modifier.fillMaxWidth(),enabled=!busy,
+                        isError=error.isNotEmpty(),supportingText={ if (error.isNotEmpty()) Text(error) else if (field.description.isNotEmpty()) Text(field.description) },
+                        singleLine=field.control!="json",minLines=if (field.control=="json") 3 else 1,maxLines=if (field.control=="json") 7 else 1,
+                        keyboardOptions=KeyboardOptions(keyboardType=when (field.control) { "password" -> KeyboardType.Password;"number" -> KeyboardType.Decimal;else -> KeyboardType.Text }),
+                        visualTransformation=if (field.secret) PasswordVisualTransformation() else VisualTransformation.None)
+                }
+                if (error.isNotEmpty() && field.control in setOf("select","checkbox")) Text(error,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+                if (field.secret) {
+                    Text("写入 ${form.secret[field.name]}，回复里只有掩码。",style=MaterialTheme.typography.bodySmall)
+                    val existing=state.existing[field.name]
+                    if (existing?.exists==true) Text("已有值：${existing.value}；提交会覆盖。",style=MaterialTheme.typography.bodySmall)
+                    else if (existing?.error?.isNotEmpty()==true) Text("读不到现值：${existing.error}",style=MaterialTheme.typography.bodySmall)
+                    else if (existing!=null) Text("这个 key 现在还没有值。",style=MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (state.error.isNotEmpty()) item { Text(state.error,color=MaterialTheme.colorScheme.error) }
+            item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick={ controller.cancelAsync(form) },enabled=!busy) { Text(if (state.busy=="cancel") "正在取消…" else "取消") }
+                Button(onClick={ val validation=validateFormValues(form.fields,values);errors=validation.errors;if (validation.valid) controller.submitAsync(form,validation.values) },enabled=!busy) { Text(if (state.busy=="submit") "正在提交…" else "提交") }
+            } }
+        }
+    }
+}
