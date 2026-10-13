@@ -64,6 +64,13 @@ UI actions --> net (submit/resolve/cancel/resource frames) --> node --> back as 
   "newest held row" alone (that bug cost the web a stuck Waiting dock).
 - Memory bound: the in-memory replica holds at most 5000 rows per channel
   (trim to 4500); older rows come back from Room when the reader pages up.
+  Only the open channel holds a replica; other channels keep sync state and
+  unread counts. Paging back past the cap swaps in a detached window (the
+  oldest 4500 rows reached); live rows then go to Room and the new-items
+  pill, and jumping to the bottom reopens the tail. A detached window has
+  newer rows unloaded, so a request without a terminal in it is not shown
+  as waiting or running (`TimelineOptions.newerUnloaded`), and read marks
+  stop at what was seen.
 
 ## Protocol (frame version 5)
 
