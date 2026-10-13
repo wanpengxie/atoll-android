@@ -17,7 +17,23 @@ class MessageCopyTextTest {
 
     @Test fun existingMarkdownIsPreservedAndOnlyOuterWhitespaceIsTrimmed() {
         val text = "  # Title\n\n```kotlin\nval x = 1\n```\n  "
-        assertEquals(text.trim(), messageCopyText(message(text, ResultViewState(buildJsonObject { put("ignored", true) }))))
+        assertEquals(text.trim(), messageCopyText(message(text)))
+    }
+
+    @Test fun streamedMarkdownAndTerminalResultAreBothCopiedInReadingOrder() {
+        val prose = "  # Streamed answer\n\n```kotlin\nval x = 1\n```\n  "
+        val result = buildJsonObject { put("items", buildJsonArray { repeat(75) { add(it) } }) }
+        val copied = messageCopyText(message(prose, ResultViewState(result)))
+        val prefix = prose.trim() + "\n\n"
+        assertTrue(copied.startsWith(prefix + "```json\n"))
+        assertEquals(result, Json.parseToJsonElement(copied.removePrefix(prefix + "```json\n").removeSuffix("\n```")))
+    }
+
+    @Test fun streamedTextDoesNotHideTerminalErrorOrAcquireAnEmptyResultBlock() {
+        assertEquals("stream\n\n```json\n{\n  \"error_code\": \"cancelled\",\n  \"detail\": \"stopped\"\n}\n```",
+            messageCopyText(message(" stream ", ResultViewState(errorCode = "cancelled", detail = "stopped"))))
+        for (result in listOf(null, ResultViewState(emptyText = true), ResultViewState(acknowledgement = true)))
+            assertEquals("stream", messageCopyText(message(" stream ", result)))
     }
 
     @Test fun structuredResultIncludesAllRowsAndKeepsNestedTypes() {

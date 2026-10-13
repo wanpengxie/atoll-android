@@ -8,8 +8,8 @@ private val clipboardJson = Json { prettyPrint = true; prettyPrintIndent = "  " 
 
 /** The mapped content, including the full JSON rather than the tree's visible page. */
 internal fun messageCopyText(message: MessageViewState): String {
-    message.text.trim().takeIf(String::isNotEmpty)?.let { return it }
-    val result = message.result ?: return ""
+    val text = message.text.trim()
+    val result = message.result ?: return text
     val value = if (result.errorCode != null) buildJsonObject {
         // Keep the machine-readable error and all business data together.
         when (val data = result.errorData) {
@@ -19,7 +19,10 @@ internal fun messageCopyText(message: MessageViewState): String {
         }
         put("error_code", result.errorCode)
         if (result.detail.isNotEmpty()) put("detail", result.detail)
-    } else result.value ?: return "" // Empty text and bare acknowledgements have no body to copy.
+    } else result.value ?: return text // A bare acknowledgement contributes no extra body.
     // Match web's textOf JSON presentation and keep Markdown/code-fence copy behavior.
-    return "```json\n${clipboardJson.encodeToString(JsonElement.serializer(), value)}\n```"
+    val structured = "```json\n${clipboardJson.encodeToString(JsonElement.serializer(), value)}\n```"
+    // A mapped turn can combine streamed prose with a separate terminal result.
+    // Retain both, in reading order, using web's blank-line content separator.
+    return if (text.isEmpty()) structured else "$text\n\n$structured"
 }
