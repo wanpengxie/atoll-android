@@ -80,7 +80,9 @@ fun projectFilePage(receipt: JsonObject, channelId: String, prefix: String, dire
 
 internal fun JsonObject.items(): List<JsonObject> = (get("items") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
 fun sortedFiles(entries: List<FileEntry>, sort: FileSort, descending: Boolean): List<FileEntry> {
-    val collator = Collator.getInstance(Locale.CHINA)
+    // Web uses zh-CN, numeric:true, sensitivity:base: ignore case and accents.
+    val collator = Collator.getInstance(Locale.CHINA).apply { strength = Collator.PRIMARY }
+    val keyCollator = Collator.getInstance()
     return entries.sortedWith { a, b ->
         fun rank(f: FileEntry) = if (f.directory != null) 0 else if (f.nodeType == "regular") 1 else 2
         val kind = rank(a) - rank(b)
@@ -94,7 +96,11 @@ fun sortedFiles(entries: List<FileEntry>, sort: FileSort, descending: Boolean): 
             FileSort.SIZE -> a.reference.size.compareTo(b.reference.size)
             FileSort.KIND -> kind
         }
-        if (order != 0) order * (if (descending) -1 else 1) else naturalNameCompare(a.reference.name, b.reference.name, collator)
+        if (order != 0) order * (if (descending) -1 else 1) else {
+            val byName = naturalNameCompare(a.reference.name, b.reference.name, collator)
+            fun key(f: FileEntry): String = "${if (f.directory != null) "directory" else if (f.nodeType == "regular") "file" else "other"}:${f.reference.resourceId}"
+            if (byName != 0) byName else keyCollator.compare(key(a), key(b))
+        }
     }
 }
 fun previewKind(name: String, mediaType: String): PreviewKind {

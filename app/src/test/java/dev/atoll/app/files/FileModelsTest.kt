@@ -37,6 +37,21 @@ class FileModelsTest {
         assertEquals("中文", sniffText("中文".toByteArray()))
         assertNull(sniffText(byteArrayOf(0, 1))); assertNull(sniffText(byteArrayOf(-1, -2)))
     }
+    @Test fun nameSortMatchesWebNumericBaseSensitivityAndStableResourceKeys() {
+        // Captured files-failed.png names, compared with web's Intl.Collator.
+        val names=listOf("0c73007a98","04a3b571a2","5cca8d786e","302b13f891","a2c939ab4d","c4367dd627","d2a6a25667","db29e47a0d")
+            .map { "android-e2e-$it.txt" }
+        val entries=names.reversed().map { FileEntry(FileReference("c",it,it)) }
+        assertEquals(names,sortedFiles(entries,FileSort.NAME,false).map { it.reference.name })
+        val folder=FileEntry(FileReference("c","directory:z","z-directory"),directory="z-directory/")
+        assertSame(folder,sortedFiles(entries+folder,FileSort.NAME,false).first())
+        assertSame(folder,sortedFiles(entries+folder,FileSort.NAME,true).first())
+        val ties=listOf(FileEntry(FileReference("c","z","Á")),FileEntry(FileReference("c","a","a")))
+        assertEquals(listOf("a","z"),sortedFiles(ties,FileSort.NAME,false).map { it.reference.resourceId })
+        assertEquals(listOf("a","z"),sortedFiles(ties,FileSort.NAME,true).map { it.reference.resourceId })
+        val case=listOf(FileEntry(FileReference("c","z","B")),FileEntry(FileReference("c","a","b")))
+        assertEquals(listOf("a","z"),sortedFiles(case,FileSort.NAME,false).map { it.reference.resourceId })
+    }
     @Test fun readingHistoryAndStacksAreBoundedPersistedAndWorldScoped() {
         val store = MemoryKeyValueStore()
         val history = FileHistory(store, "node", "principal", "world")
