@@ -117,7 +117,8 @@ internal fun selectTaskFacts(turns: List<Turn>, channelId: String, selfId: Strin
                 ownerId = request.senderId, needsYou = needs, actionableBySelf = needs, waitingFor = if (state == "waiting") "等待决定" else "",
                 dueAt = request.expiresAt.takeIf { it > 0 }?.toString().orEmpty(), priority = body.text("priority").ifEmpty { "high" }, createdAt = request.ts, updatedAt = turn.terminal?.ts ?: request.ts,
                 actions = actions(actionFacts, listOf(key, id)), diagnostic = buildJsonObject { put("requestType", request.type); put("impact", body.text("impact")) }, source = anchor(channelId, turn), turn = turn)
-        } else if (request.type !in controlTypes && !request.type.startsWith("system.")) {
+        } else if (request.type !in controlTypes && !request.type.startsWith("system.")
+            && !(request.type=="human.message" && request.audience==listOf(request.senderId))) {
             val id = turn.requestId; val key = "agent_run:$channelId:$id"
             val unavailable = turn.terminalClosureOnly && (request.type == "task.create" || turn.terminal?.status == "failed")
             val phase = if (turn.terminal == null) "waiting" else if (turn.terminalClosureOnly) "unavailable" else "available"
