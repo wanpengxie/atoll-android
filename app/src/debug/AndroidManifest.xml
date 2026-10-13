@@ -3,6 +3,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <activity
+            android:name="dev.atoll.app.app.SettingsDemoActivity"
+            android:exported="true"
+            android:label="Offline settings demo" />
+        <activity
             android:name="dev.atoll.app.files.FilesDemoActivity"
             android:exported="true"
             android:label="Files demo" />
