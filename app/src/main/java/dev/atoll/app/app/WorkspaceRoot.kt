@@ -90,6 +90,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var governanceOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var spaceOpen by remember(services?.wire, services?.boot) { mutableStateOf(false) }
     var createChannelOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
+    val routeFocus = RouteFocus.parse(state.route?.focus, state.route?.tab.orEmpty())
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
@@ -148,9 +149,21 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             var visibleLogged by remember { mutableStateOf(false) }
                             var pickingFile by remember { mutableStateOf(false) }
                             var focusApplied by remember(state.route?.tab, state.route?.focus) { mutableStateOf(false) }
+                            var focusMissing by remember(state.route?.focus) { mutableStateOf(false) }
                             val bottomIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0)
                             val latestBottomIndex by rememberUpdatedState(bottomIndex)
                             DisposableEffect(listState) { onDispose { graph.telemetry.scrolling.set(false) } }
+                            suspend fun scrollCentre(index: Int) {
+                                autoScrolling = true
+                                try {
+                                    listState.scrollToItem(index)
+                                    withFrameNanos { }
+                                    val layout = listState.layoutInfo
+                                    layout.visibleItemsInfo.firstOrNull { it.index == index }?.let {
+                                        listState.scrollBy(centredScrollDelta(it.offset, it.size, layout.viewportStartOffset, layout.viewportEndOffset))
+                                    }
+                                } finally { autoScrolling = false }
+                            }
                             suspend fun scrollEnd() {
                                 autoScrolling = true
                                 try {
@@ -209,13 +222,15 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 if (!initialized) {
                                     val position = state.browsePosition?.takeIf { !it.following && state.route?.focus == null }
                                     val index = conversation.entries.indexOfFirst { it.key == position?.key }
-                                    if (index >= 0) {
+                                    if (routeFocus?.kind == FocusKind.Turn) {
+                                        following = false; graph.follow(false)
+                                    } else if (index >= 0) {
                                         autoScrolling = true
                                         try { listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0, position!!.offset) }
                                         finally { autoScrolling = false }
                                         following = false; graph.follow(false)
                                     } else { scrollEnd(); following = true; graph.follow(true) }
-                                    initialized = true
+                                    if (routeFocus?.kind != FocusKind.Turn) initialized = true
                                 } else if (following && !latestDetached) scrollEnd()
                                 if (!visibleLogged && conversation.entries.isNotEmpty()) {
                                     withFrameNanos { }
@@ -235,10 +250,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 }
                             }
                             var jump by remember { mutableStateOf(0) }
-                            LaunchedEffect(jump) { if (jump > 0) { scrollEnd(); following = true; graph.follow(true) } }
+                            LaunchedEffect(jump) { if (jump > 0) { scrollEnd(); initialized = true; following = true; graph.follow(true) } }
                             val files = if (state.route?.tab in setOf("files", "terminal")) features?.files(state.route!!.channel) else null
                             LaunchedEffect(files, state.route?.focus) {
-                                if (files != null && state.route?.tab == "files") state.route?.focus?.let(files::openLink)
+                                if (files != null && state.route?.tab == "files") routeFocus?.takeIf { it.kind == FocusKind.Artifact }?.key?.let { resource ->
+                                    if (!files.openLink(resource)) files.open(dev.atoll.app.files.FileReference(state.route!!.channel, resource, resource.substringAfterLast('/')))
+                                }
                             }
                             val terminal = state.route?.tab == "terminal"
                             val content: (@Composable () -> Unit)? = when {
@@ -262,6 +279,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                             var restoreNoticeDismissed by remember(state.restoreNotice) { mutableStateOf(false) }
+                            if (focusMissing) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("目标消息尚未加载，请加载更早历史或返回最新动态。", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                TextButton({ graph.older() }, enabled = conversation.hasOlder && !conversation.loadingOlder) { Text("加载更早") }
+                            }
                             if (!restoreNoticeDismissed) state.restoreNotice?.let { info -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Text(info, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                                 TextButton({ restoreNoticeDismissed = true }) { Text("关闭") }
@@ -338,9 +359,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 onDismiss = { pickingFile = false })
                             LaunchedEffect(state.route?.focus, messageTargets) {
                                 if (focusApplied) return@LaunchedEffect
-                                val key = state.route?.focus?.takeIf { it.startsWith("turn:") }?.substringAfter(':') ?: return@LaunchedEffect
+                                val key = routeFocus?.takeIf { it.kind == FocusKind.Turn }?.key ?: return@LaunchedEffect
+                                following = false; graph.follow(false)
                                 val index = conversation.entries.indexOfFirst { messageTargets[it.key]?.let { target -> target.turn?.requestId == key || target.envelope.id == key } == true }
-                                if (index >= 0) { focusApplied = true; following = false; listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0); graph.follow(false) }
+                                focusMissing = index < 0
+                                if (index >= 0) {
+                                    scrollCentre(index + if (conversation.hasOlder) 1 else 0)
+                                    focusApplied = true; initialized = true; following = false; graph.follow(false)
+                                }
                             }
                         }
                     }
@@ -386,7 +412,15 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 }
                 if (tasks != null && taskState?.creating == true && state.route?.tab != "tasks") CreateTaskDialog(tasks, tasks::endCreation)
                 LaunchedEffect(tasks, state.route?.tab, state.route?.focus) {
-                    if (state.route?.tab == "tasks") state.route?.focus?.let { tasks?.select(it) }
+                    routeFocus?.takeIf { it.kind == FocusKind.WorkItem }?.key?.let { tasks?.select(it) }
+                }
+                LaunchedEffect(routeFocus, roster, state.route?.tab) {
+                    if (routeFocus?.kind == FocusKind.Artifact && state.route?.tab != "files") graph.files(true)
+                    if (routeFocus?.kind == FocusKind.WorkItem && state.route?.tab != "tasks") graph.tab(ChannelTab.Tasks)
+                    if (routeFocus?.kind == FocusKind.Participant && roster != null) {
+                        roster.select(routeFocus.key); rosterOpen = true; actorOpen = true
+                    }
+                    if (routeFocus?.kind == FocusKind.Channel) governanceOpen = true
                 }
                 if (features != null) UiFormsHost(features.forms, state.roster.associate { it.id to it.name }, state.navigation.channels.associate { it.id to it.name })
                 if (activityOpen) Dialog(onDismissRequest = { activityOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
