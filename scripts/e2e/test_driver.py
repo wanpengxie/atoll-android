@@ -3,6 +3,7 @@ import importlib.util
 import io
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -27,6 +28,60 @@ XML = '''<hierarchy><node package="dev.atoll.app" bounds="[0,0][1000,1000]">
 
 
 class DriverTest(unittest.TestCase):
+    def test_login_waits_for_authenticated_ui_instead_of_shared_title(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from unittest.mock import Mock
+            smoke = run.Smoke(SimpleNamespace(apk=Path('/tmp/test.apk')), {}, Mock(), tmp)
+            smoke.ui = Mock()
+            smoke.ui.dump.return_value = Tree('''<hierarchy><node package="dev.atoll.app" bounds="[0,0][1000,80]">
+                <node package="dev.atoll.app" text="服务器地址" bounds="[10,10][100,30]"/>
+                <node package="dev.atoll.app" class="android.widget.EditText" text="http://100.99.232.10:18080" bounds="[10,30][900,70]"/>
+                </node><node package="dev.atoll.app" bounds="[0,80][1000,160]">
+                <node package="dev.atoll.app" text="账号" bounds="[10,80][100,100]"/>
+                <node package="dev.atoll.app" class="android.widget.EditText" text="root" bounds="[10,100][900,150]"/>
+                </node><node package="dev.atoll.app" bounds="[0,160][1000,240]">
+                <node package="dev.atoll.app" text="密码" bounds="[10,160][100,180]"/>
+                <node package="dev.atoll.app" class="android.widget.EditText" password="true" text="********************************" bounds="[10,180][900,230]"/>
+                </node></hierarchy>''')
+            with patch('run.ssh', return_value=b'a' * 32):
+                smoke.login()
+            smoke.ui.wait.assert_any_call(S(text='OPEN'), timeout=40)
+            self.assertFalse(any(call.args == (S(text='ATOLL'),) for call in smoke.ui.wait.call_args_list))
+            calls = smoke.ui.method_calls
+            hide = next(i for i, call in enumerate(calls) if call[0] == 'hide_keyboard')
+            submit = next(i for i, call in enumerate(calls) if call[0] == 'click' and call.args == (S(text='进入 Atoll'),))
+            self.assertLess(hide, submit)
+
+    def test_server_readback_mismatch_stops_before_login_submit(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory() as tmp:
+            smoke = run.Smoke(SimpleNamespace(apk=Path('/tmp/test.apk')), {}, Mock(), tmp)
+            smoke.ui = Mock()
+            smoke.ui.dump.return_value = Tree('''<hierarchy><node package="dev.atoll.app" bounds="[0,0][1000,80]">
+                <node package="dev.atoll.app" text="服务器地址" bounds="[10,10][100,30]"/>
+                <node package="dev.atoll.app" class="android.widget.EditText" text="https://tardis.tail6bc2a1.ts.net" bounds="[10,30][900,70]"/>
+                </node></hierarchy>''')
+            with patch('run.ssh', return_value=b'a' * 32), self.assertRaisesRegex(Failure, 'server field'):
+                smoke.login()
+            smoke.ui.click.assert_not_called()
+
+    def test_test_password_migrates_to_alphanumeric_and_survives_reset(self):
+        spec = importlib.util.spec_from_file_location('test_password', Path(__file__).with_name('test-node-password.py'))
+        helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp).resolve()  # macOS /var is a symlink; use a canonical fake home.
+            root = home / 'atoll-test'; root.mkdir()
+            path = root / 'root-password'; path.write_text('legacy-symbol-password_\n')
+            with patch.object(helper.Path, 'home', return_value=home), patch.object(helper.subprocess, 'run') as execute:
+                execute.return_value.returncode = 0
+                helper.ensure_password()
+                first = path.read_text().strip()
+                self.assertRegex(first, r'^[A-Za-z0-9]{32}$')
+                self.assertEqual(0o600, path.stat().st_mode & 0o777)
+                helper.ensure_password()
+                self.assertEqual(first, path.read_text().strip())
+                self.assertEqual((first + '\n').encode(), execute.call_args.kwargs['input'])
+
     def test_only_exact_test_origin_is_allowed(self):
         self.assertEqual(run.URL, run.validate_url(run.URL + "/"))
         for url in ("https://tardis.tail6bc2a1.ts.net", "http://100.99.232.10:8832", "https://100.99.232.10:18080", "http://root@100.99.232.10:18080", run.URL + "/api", run.URL + "?x=1", "http://localhost:18080"):

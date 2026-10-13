@@ -3,7 +3,7 @@
 Run on mbp. Python 3 standard library, adb, and uiautomator are enough. The
 runner accepts **only** `http://100.99.232.10:18080`; it rejects other hosts,
 ports, schemes, query strings and redirects before reading credentials or
-calling adb. It never touches the user's node or `~/.atoll`.
+calling adb. It does not read the user's `~/.atoll`.
 
 ```sh
 python3 scripts/e2e/run.py --dry-run
@@ -25,6 +25,11 @@ time, never printed, logged or stored in reports. Its transient adb argv is
 acceptable for this isolated test password. The user node's credentials
 are never read. Before login the runner clears **only** the emulator's
 `dev.atoll.app` data, so an old user's session cannot be restored. At the
+submit boundary it reads the actual server, account and password fields:
+server must equal the isolated URL, account must equal root, and password
+length must equal 32. A mismatch stops before submission. Only these checks
+are reported; password contents are never reported. Login passes only when
+the authenticated `OPEN` connection indicator appears. At the
 end logout invalidates only the newly created UI session, leaving the
 shared test-node token and other workers' sessions usable.
 
@@ -32,7 +37,8 @@ shared test-node token and other workers' sessions usable.
 `~/atoll-test/bin/atoll passwd --stdin --dir ~/atoll-test`. A copy is installed
 as `~/atoll-test/bin/test-node-password.py`; the isolated node's control
 script calls it after `start` and `reset`. The password persists across
-reset; no secrets are on a command line or in this repository.
+reset; its 32 alphanumeric characters avoid adb shell/input escaping.
+No secrets are in this repository or the command text sent to workspace tools.
 
 Steps cover login, channel list, opening `c0.android-test`, a real codex
 reply, queued messages, cancel/edit/insert, file browsing and preview,

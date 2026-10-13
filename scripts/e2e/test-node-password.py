@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import secrets
+import re
 import subprocess
 
 
@@ -13,10 +14,11 @@ def ensure_password():
     path = root / "root-password"
     if path.is_symlink():
         raise RuntimeError("refuse a redirected test password file")
-    if not path.exists():
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    current = path.read_text().strip() if path.exists() else ""
+    if not re.fullmatch(r"[A-Za-z0-9]{32}", current):
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w") as output:
-            output.write(secrets.token_urlsafe(32) + "\n")
+            output.write(secrets.token_hex(16) + "\n")
     os.chmod(path, 0o600)
     password = path.read_bytes()
     if not password.strip():
