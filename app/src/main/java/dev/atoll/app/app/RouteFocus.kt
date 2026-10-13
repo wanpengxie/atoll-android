@@ -5,7 +5,7 @@ import java.net.URLEncoder
 /** Prefixes belong to routing; the remaining opaque key is never split again. */
 enum class FocusKind(val prefix: String, val tab: String) {
     Turn("turn", "conversation"), Artifact("artifact", "files"), WorkItem("work_item", "tasks"),
-    Participant("participant", "conversation"), Channel("channel", "conversation")
+    Participant("participant", "conversation"), Channel("channel", "conversation"), Panel("panel", "conversation")
 }
 data class RouteFocus(val kind: FocusKind, val key: String) {
     companion object {
@@ -27,3 +27,5 @@ internal fun centredScrollDelta(itemOffset: Int, itemSize: Int, viewportStart: I
     val target = viewportStart + ((viewportEnd - viewportStart - itemSize).coerceAtLeast(0) / 2)
     return (itemOffset - target).toFloat()
 }
+
+enum class WorkspacePanel(val key: String) { Running("running"), Recent("recent"), Timers("timers"), Stars("stars") }

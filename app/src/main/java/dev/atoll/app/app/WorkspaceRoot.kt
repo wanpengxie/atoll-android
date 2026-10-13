@@ -50,6 +50,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
 import dev.atoll.app.compose.LocalSubmission
+import dev.atoll.app.stars.StarredState
+import dev.atoll.app.tasks.TimedActionsDialog
 import dev.atoll.app.waiting.WaitingViewModel
 import dev.atoll.app.waiting.WaitingUiState
 import dev.atoll.app.tasks.TasksViewModel
@@ -64,6 +66,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val graph = viewModel.graph
     val services by graph.services.collectAsStateWithLifecycle()
     val features = viewModel.session(services)
+    val stars = viewModel.starred
+    val emptyStars = remember { MutableStateFlow(StarredState()) }
+    val starredState by (stars?.state ?: emptyStars).collectAsStateWithLifecycle()
     // Keep subscription call sites present while the session/channel owners change.
     // Safe-call composable invocations would shift later slots on login/logout.
     val emptyWaiting = remember { MutableStateFlow<WaitingViewModel?>(null) }
@@ -99,14 +104,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
         if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services, enter = true) else graph.openChannel(id)
     }
     var activityOpen by rememberSaveable { mutableStateOf(false) }
-    var selectedMessage by remember { mutableStateOf<String?>(null) }
-    var recentOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
-    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; recentOpen = false; activityOpen = false; selectedMessage = null } }
+    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; activityOpen = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val markdownCache = remember(services?.wire, services?.boot) { MarkdownCache() }
     AtollTheme {
@@ -117,8 +120,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
             WorkspacePhase.Login -> LoginScreen(state.login, graph::login)
             WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "刷新页面", graph::reconnect)
             WorkspacePhase.Workspace -> {
-                BackHandler(state.route != null || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
+                BackHandler(state.route != null || state.canBack || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
                 Column(Modifier.fillMaxSize()) {
+                    if (state.canForward) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(graph::forward) { Text("前进 ›") } }
                     state.notice?.let { text -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
@@ -178,11 +182,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             LaunchedEffect(state.route?.tab) { graph.follow(state.route?.tab == "conversation" && following) }
                             val latestRevision by rememberUpdatedState(state.timeline?.revision)
                             val latestDetached by rememberUpdatedState(state.newerUnloaded)
+                            val latestCovered by rememberUpdatedState(drawer || settingsOpen || activityOpen || governanceOpen || rosterOpen || createChannelOpen || routeFocus != null)
                             LaunchedEffect(listState, state.route?.tab) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 val channel = state.route!!.channel
                                 snapshotFlow {
-                                    latestRevision to if (!initialized) emptySet() else listState.layoutInfo.let { layout ->
+                                    latestRevision to if (!initialized || latestCovered) emptySet() else listState.layoutInfo.let { layout ->
                                         layout.visibleItemsInfo.filter { it.offset < layout.viewportEndOffset && it.offset + it.size > layout.viewportStartOffset }
                                             .mapNotNull { it.key as? String }.toSet()
                                     }
@@ -193,7 +198,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 val channel = state.route!!.channel
                                 snapshotFlow {
-                                    if (!initialized || autoScrolling || listState.isScrollInProgress) null else {
+                                    if (!initialized || latestCovered || autoScrolling || listState.isScrollInProgress) null else {
                                         val layout = listState.layoutInfo
                                         layout.visibleItemsInfo.firstOrNull { (it.key as? String) in latestRowSequences }?.let {
                                             Triple(it.key as String, (layout.viewportStartOffset - it.offset).coerceAtLeast(0), following)
@@ -209,7 +214,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 var requestedBoundary: String? = null
                                 snapshotFlow {
                                     val current = latestConversation
-                                    val nearStart = initialized && !autoScrolling && listState.isScrollInProgress &&
+                                    val nearStart = initialized && !latestCovered && !autoScrolling && listState.isScrollInProgress &&
                                         listState.firstVisibleItemIndex <= 12 && current.hasOlder && !current.loadingOlder
                                     current.entries.firstOrNull()?.key.takeIf { nearStart }
                                 }.distinctUntilChanged().collect { boundary ->
@@ -304,14 +309,20 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.OpenFiles -> graph.files(true)
                                     Item.Resources -> graph.resources()
                                     Item.CloseFiles -> graph.files(false)
-                                    Item.Recent -> recentOpen = true
+                                    Item.Recent -> graph.panel(WorkspacePanel.Recent)
+                                    Item.Stars -> graph.panel(WorkspacePanel.Stars)
+                                    Item.Timers, Item.Schedule -> graph.panel(WorkspacePanel.Timers)
                                     Item.OpenTerminal -> graph.terminal(true)
                                     Item.CloseTerminal -> graph.terminal(false)
                                     Item.ExportPerformance -> graph.export(true)
-                                    is ChannelMenuAction.Process -> selectedMessage = action.messageId
+                                    is ChannelMenuAction.Process -> {
+                                        val target = messageTargets[action.messageId]
+                                        val id = target?.turn?.requestId ?: target?.envelope?.id
+                                        if (id != null) graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Turn, id))
+                                    }
                                     Item.Waiting -> waiting?.setCollapsed(false)
                                     Item.NewTask -> tasks?.beginCreation()
-                                    Item.Running -> activityOpen = true
+                                    Item.Running -> graph.panel(WorkspacePanel.Running)
                                     Item.Members -> { actorOpen = false; rosterOpen = true }
                                     Item.Details -> governanceOpen = true
                                     Item.NewChild -> createChannelOpen = true
@@ -341,7 +352,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                             onReply = features.composer::setReply, onEdit = { waiting?.requestEdit(it) },
                                             onCreateTask = if (taskState?.creationReady == true && tasks != null && source != null) ({ _, _ -> tasks.beginCreation(source) }) else null,
                                             onStop = waiting?.let { owner -> { id -> owner.stop(id) } },
-                                            busyActors = waitingState?.busyActors.orEmpty(), content = default)
+                                            busyActors = waitingState?.busyActors.orEmpty(),
+                                            starred = starredState.isStarred(state.route!!.channel, target.envelope.id),
+                                            onToggleStar = stars?.let { it::toggle }, content = default)
                                     } else default()
                                     if (target?.seq == 0L && features != null) localById[target.envelope.id]?.let { row ->
                                         TimelineSubmissionStatus(row, features.composer::retry, features.composer::cancel)
@@ -359,7 +372,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             if (pickingFile && features != null) FilePicker(features.files(state.route!!.channel),
                                 onPick = { reference -> features.composer.addAttachments(listOf(reference)); pickingFile = false },
                                 onDismiss = { pickingFile = false })
-                            LaunchedEffect(state.route?.focus, messageTargets) {
+                            LaunchedEffect(state.route?.focus, state.route?.tab, messageTargets) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (focusApplied) return@LaunchedEffect
                                 val key = routeFocus?.takeIf { it.kind == FocusKind.Turn }?.key ?: return@LaunchedEffect
                                 following = false; graph.follow(false)
@@ -398,19 +412,47 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         else RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = { rosterOpen = false }, onSelect = { actorOpen = true })
                     }
                 }
-                selectedMessage?.let { key ->
-                    val target = messageTargets[key]
-                    AlertDialog(onDismissRequest = { selectedMessage = null }, title = { Text("消息操作") },
-                        text = { Column {
-                            Text(target?.envelope?.let(::messageText).orEmpty(), maxLines = 5)
-                            val ownRequest = target?.turn?.takeIf { it.request.id == target.envelope.id && it.request.senderId == services?.selfIds?.get(state.route?.channel) }
-                            if (ownRequest != null && waiting != null) TextButton({ waiting.requestEdit(ownRequest.requestId); selectedMessage = null }, enabled = !state.newerUnloaded) { Text("编辑") }
-                            if (target != null && tasks != null) {
-                                val source = timelineTaskSource(state.route!!.channel, target)
-                                TextButton({ source?.let(tasks::beginCreation); selectedMessage = null },
-                                    enabled = taskState?.creationReady == true && source != null) { Text("创建任务") }
-                            }
-                        } }, confirmButton = { TextButton({ selectedMessage = null }) { Text("关闭") } })
+                if (routeFocus?.kind == FocusKind.Turn) key(routeFocus.key) {
+                    val target = remember(routeFocus.key, messageTargets, state.timelineSource) { processTarget(routeFocus.key, messageTargets, state.timelineSource) }
+                    if (target != null) {
+                        val source = state.timelineSource
+                        val detached = state.newerUnloaded
+                        val panel by produceState<ProcessPanelViewState?>(null, target, source, detached) {
+                            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { processPanel(target, source, detached) }
+                        }
+                        panel?.let { ProcessPanel(it, graph::closeFocus) }
+                    } else ContentPanel("过程", graph::closeFocus) {
+                        Text("目标消息尚未加载，请加载更早历史后重试。", Modifier.padding(16.dp))
+                        TextButton(graph::older, enabled = state.conversation?.hasOlder == true && state.conversation?.loadingOlder != true) { Text("加载更早") }
+                    }
+                }
+                if (routeFocus?.kind == FocusKind.Panel) key(routeFocus.key) {
+                    var pendingJump by remember { mutableStateOf<String?>(null) }
+                    fun jumpLoaded(id: String): Boolean {
+                        if (messageTargets.values.none { it.envelope.id == id || it.turn?.requestId == id }) return false
+                        pendingJump = id; return true
+                    }
+                    fun closeOrJump() {
+                        val target = pendingJump
+                        if (target != null && state.route != null) graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Turn, target))
+                        else graph.closeFocus()
+                    }
+                    when (routeFocus.key) {
+                        WorkspacePanel.Running.key -> RunningDrawer(remember(state.timeline, state.roster) { runningPanel(state.timeline?.runningTasks.orEmpty(), state.roster) }, ::jumpLoaded, ::closeOrJump)
+                        WorkspacePanel.Stars.key -> StarredDrawer(remember(starredState, state.route?.channel, state.roster) {
+                            starredState.drawerItems(state.route?.channel.orEmpty(), state.roster.associate { it.id to it.name }, ::panelTime)
+                        }, ::jumpLoaded, { id -> stars?.remove(state.route?.channel.orEmpty(), id) }, ::closeOrJump)
+                        WorkspacePanel.Timers.key -> if (tasks != null) TimedActionsDialog(tasks, graph::closeFocus)
+                        WorkspacePanel.Recent.key -> if (features != null) key(features) {
+                            val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
+                            RecentReadsPanel(recent, { reference ->
+                                features.files(reference.channelId).open(reference)
+                                val id = reference.resourceId + if (reference.line > 0) ":${reference.line}" else ""
+                                graph.route(focusedChannelLink(reference.channelId, FocusKind.Artifact, id))
+                            }, graph::closeFocus)
+                        }
+                        else -> ContentPanel("未找到面板", graph::closeFocus) { Text("此面板不可用", Modifier.padding(16.dp)) }
+                    }
                 }
                 if (tasks != null && taskState?.creating == true && state.route?.tab != "tasks") CreateTaskDialog(tasks, tasks::endCreation)
                 LaunchedEffect(tasks, state.route?.tab, state.route?.focus) {
@@ -435,17 +477,6 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             taskSourceLink(source)?.let { activityOpen = false; graph.route(it) }
                         })
                     } }
-                }
-                if (recentOpen && features != null) key(features) {
-                    val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
-                    AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },
-                        text = { Column(Modifier.heightIn(max = 400.dp)) {
-                            if (recent.isEmpty()) Text("尚未阅读文件")
-                            androidx.compose.foundation.lazy.LazyColumn { items(recent.size) { index ->
-                                val reference = recent[index]
-                                TextButton({ features.files(reference.channelId).open(reference); graph.route("atoll://channels/${reference.channelId}/files"); recentOpen = false }) { Text(reference.name) }
-                            } }
-                        } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
                 if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true },
                     onCreate = { drawer = false; createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) { drawer = false; spaceOpen = true } })
