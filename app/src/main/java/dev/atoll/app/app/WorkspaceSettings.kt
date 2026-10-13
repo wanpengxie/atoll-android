@@ -14,11 +14,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.terminal.TerminalPreferences
 import dev.atoll.app.terminal.TerminalTheme
 import dev.atoll.app.ui.screens.ConnectionPhase
+import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
 fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, terminal: TerminalPreferences?,
     onClose: () -> Unit, onExport: (Boolean) -> Unit, onLogout: () -> Unit) {
-    val theme = terminal?.theme?.collectAsStateWithLifecycle()?.value ?: TerminalTheme.DARK
+    val emptyTheme = remember { MutableStateFlow(TerminalTheme.DARK) }
+    val theme by (terminal?.theme ?: emptyTheme).collectAsStateWithLifecycle()
     val channel = state.navigation.channels.firstOrNull { it.id == state.route?.channel }
     val canExport = services != null && services.boot.isNotEmpty() && channel?.id in services.selfIds &&
         state.navigation.connection == ConnectionPhase.OPEN && !state.exporting
