@@ -14,5 +14,9 @@
             android:name="dev.atoll.app.terminal.TerminalDemoActivity"
             android:exported="true"
             android:label="Terminal demo" />
+        <activity
+            android:name="dev.atoll.app.tasks.TasksDemoActivity"
+            android:exported="true"
+            android:label="Tasks demo" />
     </application>
 </manifest>
