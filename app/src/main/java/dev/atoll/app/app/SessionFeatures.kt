@@ -90,10 +90,25 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         val key = channel to value.actor
         if (value.seq > (usageSeq[key] ?: 0)) { usageSeq[key] = value.seq; composer.updateUsage(channel, value.actor, value.value) }
     }
-    fun files(channel: String): FilesViewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
-        @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T = FilesViewModel(services.wire, services.httpClient,
-            services.server, channel, context.cacheDir, fileHistory) as T
-    })["files:$channel", FilesViewModel::class.java]
-    fun clear() { mutableRoster.value?.close(); mutableRoster.value = null; governance.close(); forms.close(); automation.clear(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
+    private val fileModels=ChannelModelCache(6,{ ViewModelStore() },{ it.clear() })
+    fun files(channel: String): FilesViewModel {
+        val store=fileModels.get(channel)
+        val owner=object:ViewModelStoreOwner { override val viewModelStore=store }
+        return ViewModelProvider(owner,object:ViewModelProvider.Factory {
+            @Suppress("UNCHECKED_CAST")
+            override fun <T:ViewModel> create(modelClass: Class<T>):T = FilesViewModel(services.wire,services.httpClient,
+                services.server,channel,context.cacheDir,fileHistory) as T
+        })[FilesViewModel::class.java]
+    }
+    fun clear() { mutableRoster.value?.close(); mutableRoster.value = null; governance.close(); forms.close(); automation.clear(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); fileModels.clear(); viewModelStore.clear() }
+}
+
+/** Access order tracks actual file-surface use; eviction releases each channel's ViewModelStore. */
+internal class ChannelModelCache<T>(private val capacity: Int,private val create: (String)->T,private val release: (T)->Unit) {
+    private val values=LinkedHashMap<String,T>(capacity,.75f,true)
+    fun get(channel: String):T = values[channel] ?: create(channel).also { value ->
+        values[channel]=value
+        if(values.size>capacity) values.remove(values.keys.first())?.let(release)
+    }
+    fun clear() { values.values.forEach(release);values.clear() }
 }
