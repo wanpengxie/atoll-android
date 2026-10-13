@@ -46,10 +46,10 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
             graph.services.collectLatest { services ->
                 val current = session(services)
                 if (current == null) { mutableActivity.value = ActivitySnapshot(emptyList(), emptyList(), true); return@collectLatest }
-                combine(graph.state, current.governance.creations) { state, operations ->
-                    ActivityBinding(state.activityInputs, state.activityRuns, operations.map(::creationActivity), state.navigation.connection == ConnectionPhase.OPEN)
+                combine(graph.state, current.governance.creations,current.composer.submissions,current.automation.records) { state, operations,submissions,timers ->
+                    ActivityBinding(state.activityInputs, state.activityRuns, operations.map(::creationActivity), state.navigation.connection == ConnectionPhase.OPEN,submissions,timers,services?.selfIds.orEmpty())
                 }.distinctUntilChanged().mapLatest { binding -> withContext(Dispatchers.Default) {
-                    selectActivity(binding.inputs, binding.runs, binding.operations, binding.connected)
+                    selectActivity(mergeActivityInputs(binding.inputs,binding.submissions,binding.timers,binding.selfIds,System.currentTimeMillis()), binding.runs, binding.operations, binding.connected)
                 } }.collect { mutableActivity.value = it }
             }
         }
@@ -113,7 +113,8 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private data class BusyProjection(val channel: String, val revision: Long, val projection: Long)
     private var busyProjection: BusyProjection? = null
     private var receiverBusy = emptySet<String>()
-    private data class ActivityBinding(val inputs: List<ChannelActivityInput>, val runs: List<ActivityAgentRun>, val operations: List<ActivityOperation>, val connected: Boolean)
+    private data class ActivityBinding(val inputs: List<ChannelActivityInput>, val runs: List<ActivityAgentRun>, val operations: List<ActivityOperation>, val connected: Boolean,
+        val submissions: List<dev.atoll.app.compose.LocalSubmission>,val timers: List<AutomationRecord>,val selfIds: Map<String,String>)
     private var writable = emptyMap<String, Boolean>()
     private fun updateComposerAccess(features: SessionFeatures, services: WorkspaceServices, state: WorkspaceState) {
         val next = state.navigation.channels.associate { it.id to composerWritable(it.access, services.selfIds[it.id].orEmpty()) }

@@ -56,7 +56,7 @@ data class WorkspaceServices(val server: String, val principalId: String, val se
 
 /** Manual app wiring. The manager owns navigation/session facts; channel writers own folds. */
 class AppGraph(private val context: Context) {
-    val telemetry = AppTelemetry()
+    val telemetry = AppTelemetry(warningStore=AndroidKeyValueStore(context.getSharedPreferences("diagnostics",Context.MODE_PRIVATE)))
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<Event>(256)
     private val mutableState = MutableStateFlow(WorkspaceState())
@@ -596,8 +596,8 @@ class AppGraph(private val context: Context) {
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
             newerUnloaded = channelState?.newerUnloaded == true,
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
-            activityInputs = channels.filter { it.id in memberships }.map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
-            activityRuns = channelStates.filterKeys { it in memberships }.values.flatMap { it.agentRuns },
+            activityInputs = visibleActivityChannels(channels,memberships.keys).map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
+            activityRuns = visibleActivityChannels(channels,memberships.keys).flatMap { channelStates[it.id]?.agentRuns.orEmpty() },
             rosterCurrent = (rt.gate.state.value as? WireState.Attached)?.generation?.let { rosterGenerations[route?.channel] == it } == true)
     }
 
