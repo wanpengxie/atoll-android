@@ -8,6 +8,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -19,14 +22,15 @@ import kotlinx.serialization.json.*
 fun WaitingDock(viewModel: WaitingViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val count = state.groups.sumOf { it.rows.size }
+    val dockHeight = (LocalConfiguration.current.screenHeightDp * .4f).dp
     Column(modifier) {
         if (state.edit.notice.isNotEmpty() || state.error.isNotEmpty()) Row(Modifier.fillMaxWidth()) {
             Text(state.error.ifEmpty { state.edit.notice }, Modifier.weight(1f).padding(8.dp), color = AtollColors.Warning, fontSize = 12.sp)
             TextButton(onClick = viewModel::clearError) { Text("关闭") }
         }
         if (count > 0) Surface(color = AtollColors.MutedSurface, shape = RoundedCornerShape(8.dp), border = BorderStroke(1.dp, AtollColors.ControlLine)) {
-            Column {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
+            Column(Modifier.heightIn(max = dockHeight)) {
+                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                     Text("↳ $count 条等待消息", Modifier.padding(10.dp), fontSize = 12.sp)
                     if (!state.collapsed) state.groups.forEach { group ->
                         if (group.rows.any { it.actions.insert != null }) TextButton(onClick = { viewModel.insertAll(group.actorId) }, enabled = state.online && !group.busy) { Text(if (state.groups.size == 1) "全部插入" else "插入 ${group.name} 全部", fontSize = 12.sp) }
@@ -34,21 +38,19 @@ fun WaitingDock(viewModel: WaitingViewModel, modifier: Modifier = Modifier) {
                     }
                     TextButton(onClick = { viewModel.setCollapsed(!state.collapsed) }) { Text(if (state.collapsed) "展开" else "收起", fontSize = 12.sp) }
                 }
-                if (!state.collapsed) LazyColumn(Modifier.fillMaxWidth().heightIn(max = 210.dp)) {
+                if (!state.collapsed) LazyColumn(Modifier.fillMaxWidth().weight(1f, fill = false)) {
                     state.groups.forEach { group ->
-                        if (state.groups.size > 1) item(key = "group:${group.actorId}") { Text(group.name + if (group.paused) "（已暂停）" else "", Modifier.padding(horizontal = 10.dp), color = AtollColors.Agent, fontSize = 12.sp) }
+                        if (state.groups.size > 1) item(key = "group:${group.actorId}") { Text(group.name + if (group.paused) "（已暂停）" else "", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), color = AtollColors.Agent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                         items(group.rows, key = { it.turn.requestId }) { row ->
                             val editing = state.edit.session?.targetId == row.turn.requestId
-                            Column(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 3.dp)) {
-                                Text("↳ ${row.turn.exactText().ifEmpty { row.turn.request.type }}", maxLines = 3, fontSize = 14.sp)
-                                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-                                    row.labels.forEach { Text(it, Modifier.padding(end = 8.dp, top = 12.dp), fontSize = 11.sp, color = AtollColors.Muted) }
-                                    if (!editing) {
-                                        if (row.actions.insert != null) TextButton(onClick = { viewModel.insert(row.turn.requestId) }, enabled = state.online && !group.busy) { Text("插入", fontSize = 12.sp) }
-                                        if (row.actions.canEdit) TextButton(onClick = { viewModel.requestEdit(row.turn.requestId) }, enabled = state.online && !group.busy && state.edit.phase == EditPhase.IDLE) { Text("编辑", fontSize = 12.sp) }
-                                        if (row.actions.canCancel) TextButton(onClick = { viewModel.cancel(row.turn.requestId) }, enabled = state.online && !group.busy) { Text("取消", fontSize = 12.sp) }
-                                        row.actions.extras.forEach { control -> TextButton(onClick = { viewModel.extra(row.turn.requestId, control.word) }, enabled = state.online && !group.busy) { Text(control.label, fontSize = 12.sp) } }
-                                    }
+                            Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).padding(start = 10.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                val labels = row.labels.takeIf { it.isNotEmpty() }?.joinToString(" · ", postfix = " · ").orEmpty()
+                                Text("↳ $labels${row.turn.exactText().ifEmpty { row.turn.request.type }}", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                                if (!editing) Row(Modifier.widthIn(max = 200.dp).horizontalScroll(rememberScrollState())) {
+                                    if (row.actions.insert != null) WaitingButton("插入", state.online && !group.busy) { viewModel.insert(row.turn.requestId) }
+                                    if (row.actions.canEdit) WaitingButton("编辑", state.online && !group.busy && state.edit.phase == EditPhase.IDLE) { viewModel.requestEdit(row.turn.requestId) }
+                                    if (row.actions.canCancel) WaitingButton("取消", state.online && !group.busy) { viewModel.cancel(row.turn.requestId) }
+                                    row.actions.extras.forEach { control -> WaitingButton(control.label, state.online && !group.busy) { viewModel.extra(row.turn.requestId, control.word) } }
                                 }
                             }
                         }
@@ -59,6 +61,13 @@ fun WaitingDock(viewModel: WaitingViewModel, modifier: Modifier = Modifier) {
     }
     if (state.warningTarget != null) AlertDialog(onDismissRequest = { viewModel.confirmEdit(false) }, title = { Text("确认编辑") }, text = { Text(state.warning) },
         confirmButton = { TextButton(onClick = { viewModel.confirmEdit(true) }) { Text("继续编辑") } }, dismissButton = { TextButton(onClick = { viewModel.confirmEdit(false) }) { Text("取消") } })
+}
+
+@Composable
+private fun WaitingButton(label: String, enabled: Boolean, onClick: () -> Unit) {
+    TextButton(onClick = onClick, enabled = enabled, modifier = Modifier.widthIn(min = 44.dp).height(44.dp), contentPadding = PaddingValues(horizontal = 6.dp)) {
+        Text(label, fontSize = 12.sp, maxLines = 1)
+    }
 }
 
 /** Read state in the host, pass this to AtollComposer(editing = ...). */
