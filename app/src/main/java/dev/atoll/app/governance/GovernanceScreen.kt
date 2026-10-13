@@ -1,6 +1,8 @@
 package dev.atoll.app.governance
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -46,7 +48,7 @@ internal data class GovernanceConfirmation(val title: String,val detail: String,
     }
 }
 @Composable internal fun GovernanceTabs(tabs: List<Pair<String,String>>,selected: String,onSelect: (String)->Unit) {
-    ScrollableTabRow(tabs.indexOfFirst { it.first==selected }.coerceAtLeast(0),edgePadding=0.dp) { tabs.forEach { (key,label) -> Tab(key==selected,onClick={ onSelect(key) },text={ Text(label) }) } }
+    ScrollableTabRow(tabs.indexOfFirst { it.first==selected }.coerceAtLeast(0),modifier=Modifier.fillMaxWidth(),edgePadding=0.dp) { tabs.forEach { (key,label) -> Tab(key==selected,onClick={ onSelect(key) },text={ Text(label) }) } }
 }
 @Composable internal fun GovernanceStatus(state: GovernanceState) {
     if (state.loading || state.busy || state.error.isNotEmpty() || state.message.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp)) {
@@ -127,13 +129,17 @@ private fun ChannelMembers(vm: GovernanceViewModel,state: GovernanceState,onActo
             if (state.channelView==null) Text("点“读取”获取频道描述。",style=MaterialTheme.typography.bodySmall)
             else {
                 Text("描述版本：第 $revision 版")
-                if (body!=null) { Text("说明：${body.text("description").ifEmpty { "—" }}\n对外服务：${if (body.integer("serving")==1) "是" else "否"}");if (body.bool("readonly")) Text("这份描述由内核写入，只读。") }
+                if (body!=null) { Text("说明：${body.text("description").ifEmpty { "—" }}\n对外服务：${if (body.integer("serving")==1) "是" else "否"}");if (body.bool("readonly")) {
+                    Text("这份描述由内核写入，只读。")
+                    val raw=state.channelView.obj("description")["raw"]
+                    SelectionContainer { Text((raw as? JsonPrimitive)?.content ?: raw?.toString() ?: body.toString(),style=MaterialTheme.typography.bodySmall) }
+                } }
                 else { Text(state.channelView.obj("description").text("problem").ifEmpty { "描述不可读" },color=MaterialTheme.colorScheme.error);SelectionContainer { Text(state.channelView.obj("description")["raw"]?.let { (it as? JsonPrimitive)?.content ?: it.toString() }.orEmpty()) } }
             }
         } }
         if (edit) item { GovernanceCard("说明与服务") {
             OutlinedTextField(description,{ description=it },label={ Text("说明") },modifier=Modifier.fillMaxWidth(),enabled=!state.busy,minLines=2,maxLines=5)
-            Row { Checkbox(serving,{ serving=it },enabled=!state.busy);Text("对外服务",Modifier.padding(top=12.dp)) }
+            Row(Modifier.fillMaxWidth().toggleable(serving,enabled=!state.busy,role=Role.Checkbox) { serving=it }) { Checkbox(serving,null,enabled=!state.busy);Text("对外服务",Modifier.padding(top=12.dp)) }
             Button(onClick={ vm.execute(GovernanceCommands.channelSet(state.channel,description,serving),"频道描述已写入") },enabled=state.writable && !state.busy) { Text("保存") }
         } }
         if (edit) item { GovernanceCard("设备") {
