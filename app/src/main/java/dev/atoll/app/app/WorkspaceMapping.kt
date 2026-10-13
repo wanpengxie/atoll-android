@@ -261,7 +261,7 @@ private fun processValue(value: JsonElement?,budget: ProcessBudget,depth:Int=0):
         else -> null
     }
 }
-private fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEntry>,running: Boolean,time: (Long)->String):ProgressTrailViewState? {
+internal fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEntry>,running: Boolean,time: (Long)->String):ProgressTrailViewState? {
     val records=mutableListOf<TrailRecord>();val tools=mutableMapOf<String,Int>()
     for(row in turn.provisional.sortedBy { it.seq }) {
         val process=row.envelope.body["process"] as? JsonObject ?: continue
