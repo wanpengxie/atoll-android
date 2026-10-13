@@ -32,6 +32,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     onReply: (ReplyTarget) -> Unit, onEdit: (String) -> Unit,
     onCreateTask: ((Envelope, Turn?) -> Unit)? = null,
     onStop: ((String) -> Unit)? = null, busyActors: Set<String> = emptySet(),
+    starred: Boolean = false, onToggleStar: ((Envelope, String) -> Unit)? = null,
     content: @Composable () -> Unit) {
     val actions = TimelineActionPolicy.actions(envelope, turn, message.text, selfId, roster,
         writable, online, newerUnloaded, safeEditActors)
@@ -53,12 +54,16 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
         if (editingTargetId.isNotEmpty() && envelope.id == editingTargetId) {
             Text("正在输入框中编辑", Modifier.padding(horizontal = 16.dp), fontSize = 11.sp, color = AtollColors.Muted)
         }
-        if (copyText.isNotEmpty() || actions.reply != null || actions.editTargetId.isNotEmpty() || onCreateTask != null || actions.stopTargetId.isNotEmpty() && onStop != null) {
+        val canStar = onToggleStar != null && envelope.id.isNotEmpty() && envelope.channelId.isNotEmpty()
+        if (canStar || copyText.isNotEmpty() || actions.reply != null || actions.editTargetId.isNotEmpty() || onCreateTask != null || actions.stopTargetId.isNotEmpty() && onStop != null) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp),
                 horizontalArrangement = if (message.self) Arrangement.End else Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically) {
                 if (copyText.isNotEmpty()) TextButton({ copy() }, Modifier.heightIn(min = 44.dp)) {
                     Text(copied.ifEmpty { "复制" }, fontSize = 11.sp, color = AtollColors.Muted)
+                }
+                if (canStar) TextButton({ onToggleStar?.invoke(envelope, message.text) }, Modifier.heightIn(min = 44.dp)) {
+                    Text(if (starred) "★ 已星标" else "☆ 星标", fontSize = 11.sp, color = if (starred) AtollColors.Warning else AtollColors.Muted)
                 }
                 actions.reply?.let { reply ->
                     TextButton({ onReply(reply) }, Modifier.heightIn(min = 44.dp)) {
