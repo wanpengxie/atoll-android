@@ -51,7 +51,8 @@ class OutboxPlacement {
         val placed = placement.filterValues { it }.keys.toSet()
         val echoes = current.filter { row ->
             val type = row.frame.text("msg_type")
-            type != "agent.replace" && (type !in waitingTypes || row.messageId in placed)
+            // Rejections have one recovery entry at the composer, including non-agent sends.
+            row.state != SendState.REJECTED && type != "agent.replace" && (type !in waitingTypes || row.messageId in placed)
         }.map { it.localTimelineEntry(selfId) }.filter { entry ->
             val envelope = entry.turn?.request ?: entry.envelope!!
             !envelope.type.startsWith("ui.") && envelope.type !in setOf("agent.select", "agent.new") &&

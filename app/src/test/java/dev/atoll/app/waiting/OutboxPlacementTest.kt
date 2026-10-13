@@ -70,4 +70,11 @@ class OutboxPlacementTest {
         val projection = OutboxPlacement().project("c", "self", rows, emptyMap(), emptySet(), 101)
         assertTrue(projection.waiting.isEmpty()); assertTrue(projection.localEchoes.isEmpty())
     }
+    @Test fun allRejectedTypesBelongOnlyToComposerRecovery() {
+        val rejected = listOf("agent.ask", "agent.queue", "human.message", "agent.steer").mapIndexed { index, type ->
+            submission("rejected$index", type, SendState.REJECTED)
+        }
+        val projection = OutboxPlacement().project("c", "self", rejected, emptyMap(), setOf("agent:a"), 101)
+        assertTrue(projection.localEchoes.isEmpty()); assertTrue(projection.waiting.isEmpty()); assertTrue(projection.timelinePlaced.isEmpty())
+    }
 }
