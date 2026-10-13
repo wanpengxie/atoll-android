@@ -40,6 +40,9 @@ import dev.atoll.app.core.Origin
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.screens.ChannelMenuAction.Item
 import dev.atoll.app.ui.theme.AtollTheme
+import dev.atoll.app.ui.components.LocalMarkdownCache
+import dev.atoll.app.ui.components.MarkdownCache
+import dev.atoll.app.ui.components.RichContentHost
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.gestures.scrollBy
 
@@ -72,7 +75,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
     LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; recentOpen = false; activityOpen = false; selectedMessage = null } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
+    val markdownCache = remember(services?.wire, services?.boot) { MarkdownCache() }
     AtollTheme {
+        CompositionLocalProvider(LocalMarkdownCache provides markdownCache) {
+        RichContentHost {
         when (state.phase) {
             WorkspacePhase.Booting -> StatusPage("正在启动工作区…")
             WorkspacePhase.Login -> LoginScreen(state.login, graph::changeLogin, { graph.login(state.login) })
@@ -291,6 +297,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true },
                     onCreate = { drawer = false; createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) { drawer = false; spaceOpen = true } })
             }
+        }
+        }
         }
     }
 }

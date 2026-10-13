@@ -151,6 +151,37 @@ after the feature is merged.
 10. **W2-misc** — perf export, diagnostics, node upgrade block (root),
     registration, logout, settings. PARITY §16, §1, §2 upgrade.
 
+## Wave 3 (parity gaps; source: c0.dev.web/android-parity-gaps.md @ a9aba77)
+
+Each package owns its files; live checks run on our test node.
+
+1. **W3-timeline-content** (sol-4, after the scroll measurement) — mapper and
+   cards: result/JSON/error cards, progress trail, sub-task trees, `latest`
+   not folded, attachments in messages, lost/restart status text, keep
+   streamed text above the terminal, hide merged_into/preempted_by turns,
+   narration/weak-notice wording, resolved approval details, row error
+   fallback, empty states, task-list checkboxes, mount `RichContentHost`
+   (math/Mermaid in chat and file preview). Owns `app/WorkspaceMapping.kt`
+   (exception) plus `ui/**`.
+2. **W3-timeline-actions** (sol-2, after the e2e script) — per-message
+   actions: self bubble menu, reply from timeline, edit entry and
+   "正在输入框中编辑" mark, stop on running turns, whole-message copy and
+   long press, stars (principal/world store, drawer), local echoes in the
+   timeline and offline items in the waiting dock, recent-agent default
+   target. Owns `compose/**`, `waiting/**`, a new `stars/` package.
+3. **W3-shell** (sol-3, after mount verification) — network-available
+   reconnect, files 401 and onAttach, route fallback, forward stack and
+   panels in history, typed focus deep links, per-channel notice/retry,
+   per-channel scroll position, read cursor from visible rows, prefetch on
+   scroll-up, centred jumps with "not loaded" feedback, mount Running /
+   Starred / Process panels and full recent reads, timers menu entry,
+   activity: local recovery/timers and observer channels, files VM eviction
+   (6 channels), warnings persisted for the session. Owns `app/**`.
+4. **W3-tasks** (sol-1, after governance live tests) — task source seq,
+   timer records scoped to session/world, KV resource panel (§8.3).
+5. Large-screen layout (§2 breakpoints, rail collapse/resize, header slots,
+   keyboard shortcuts) — not scheduled; waiting for the user's call.
+
 ## Status (lead keeps this current)
 
 | Task | Owner | State |
