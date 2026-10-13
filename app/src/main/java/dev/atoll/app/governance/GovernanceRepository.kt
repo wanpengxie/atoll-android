@@ -10,6 +10,7 @@ import java.util.UUID
 interface GovernancePort {
     suspend fun execute(channel: String, command: GovernanceCommand, id: String = UUID.randomUUID().toString(), accepted: () -> Unit = {}): JsonObject
     suspend fun directory(channel: String): GovernanceDirectory
+    suspend fun channels(): List<JsonObject>
     suspend fun resource(channel: String, payload: JsonObject): JsonObject
 }
 data class GovernanceDirectory(val channels: List<JsonObject> = emptyList(), val actors: List<JsonObject> = emptyList(),
@@ -17,6 +18,7 @@ data class GovernanceDirectory(val channels: List<JsonObject> = emptyList(), val
     val profile: JsonObject = JsonObject(emptyMap()))
 
 class GovernanceRepository(private val wire: WireClient, private val obs: ObsClient) : GovernancePort {
+    override suspend fun channels(): List<JsonObject> = obs.spaceChannels().rows()
     override suspend fun execute(channel: String, command: GovernanceCommand, id: String, accepted: () -> Unit): JsonObject {
         val receiptAware = object : WireClient by wire {
             override suspend fun request(type: String, payload: JsonObject): JsonObject = wire.request(type, payload).also { accepted() }
