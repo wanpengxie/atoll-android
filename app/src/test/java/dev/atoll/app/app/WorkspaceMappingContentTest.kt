@@ -144,7 +144,7 @@ class WorkspaceMappingContentTest {
             row(2,"thinking","response",json("""{"status":"processing","process":{"kind":"stage","stage":"thinking"}}"""),parent="q"),
             row(3,"started","response",json("""{"status":"processing","process":{"kind":"tool","tool":"workspace.bash","tool_call_id":"call","phase":"started","input":{"command":"ls"}}}"""),parent="q"),
             row(4,"words","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"explanation"}}"""),parent="q"),
-            row(5,"ended","response",json("""{"status":"processing","process":{"kind":"tool","tool":"workspace.bash","tool_call_id":"call","phase":"ended","outcome":"ok","output":"files"}}"""),parent="q"),
+            row(5,"ended","response",json("""{"status":"processing","process":{"kind":"tool","tool":"workspace.bash","tool_call_id":"call","phase":"ended","outcome":"ok","input":{},"output":"files"}}"""),parent="q"),
             row(6,"a","response",json("""{"status":"completed","text":"done"}"""),parent="q")).last()
         val records=answer.trail!!.records
         assertEquals(2,records.size);assertEquals("tool:call",records.last().id)

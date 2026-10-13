@@ -115,6 +115,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
             }
             val calls = entry.thread.filter { child -> child.turn?.request?.let { it.senderKind!="human" &&
                 (it.type.startsWith("system.") || it.audience.any { audience -> audience.startsWith("tool:") || audience=="system" }) } == true }
+            val callIds = calls.mapNotNull { it.turn?.requestId }.toHashSet()
             val lostReason = RequestLifecycle.lostReason(turn,restarts,instant)
             val trail = progressTrail(turn,calls,terminal==null && lostReason.isEmpty() && !newerUnloaded,::time)
             val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
@@ -147,7 +148,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                         trailState=trail,taskStates=ownedTasks)
                 }
             }
-            if (!superseded) entry.thread.filterNot { it in calls }.forEach { turn(it, "$key:${it.id}", false) }
+            if (!superseded) entry.thread.filterNot { it.turn?.requestId in callIds }.forEach { turn(it, "$key:${it.id}", false) }
         }
         turn(item.entry, item.key, item.continuation)
         return result
@@ -251,6 +252,10 @@ private fun narrationText(e: Envelope,names: Map<String,String>):String? {
 private data class TrailRecord(val seq: Long,val value: ProcessRecordViewState)
 private class ProcessBudget(var nodes: Int=128,var characters: Int=8192)
 /** Visit only the documented input/output fields, within one small shared budget. */
+private fun meaningfulToolValue(value: JsonElement?): Boolean = when(value) {
+    null,JsonNull -> false;is JsonObject -> value.isNotEmpty();is JsonArray -> value.isNotEmpty()
+    is JsonPrimitive -> !value.isString || value.content.isNotBlank()
+}
 private fun processValue(value: JsonElement?,budget: ProcessBudget,depth:Int=0):JsonElement? {
     if(value==null || value==JsonNull) return null
     if(budget.nodes--<=0) return JsonPrimitive("…（内容已省略）")
@@ -281,8 +286,8 @@ internal fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEn
         val call=process["tool_call_id"].string().ifEmpty { row.seq.toString() }
         val phase=process["phase"].string();if(phase !in setOf("started","ended")) continue
         val before=tools[call]?.let { records[it].value }
-        val budget=ProcessBudget();val input=processValue(process["input"],budget) ?: before?.input
-        val output=processValue(process["output"],budget) ?: before?.output
+        val budget=ProcessBudget();val input=processValue(process["input"],budget).takeIf(::meaningfulToolValue) ?: before?.input
+        val output=processValue(process["output"],budget).takeIf(::meaningfulToolValue) ?: before?.output
         val body=process["detail"].string().take(8192).ifEmpty { before?.body.orEmpty() }
         val identifiers=linkedMapOf<String,String>()
         listOf("audit_id" to "审计编号","auditId" to "审计编号","tool_call_id" to "调用编号","toolCallId" to "调用编号",
