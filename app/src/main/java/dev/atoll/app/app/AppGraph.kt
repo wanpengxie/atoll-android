@@ -40,6 +40,9 @@ data class WorkspaceState(
     val channelOpenedAt: Long = 0,
     val notice: String? = null,
     val channelError: String? = null,
+    val browsePosition: BrowsePosition? = null,
+    val restoreNotice: String? = null,
+    val rowSequences: Map<String, Long> = emptyMap(),
     val incompatible: String = "",
     val timeline: TimelineSnapshot? = null,
     val roster: List<ActorRecord> = emptyList(),
@@ -122,6 +125,7 @@ class AppGraph(private val context: Context) {
     fun back() { post(Back) }
     fun follow(value: Boolean) { post(Follow(value)) }
     fun visibleRows(channel: String, keys: Set<String>) { post(VisibleRows(channel, keys)) }
+    fun browse(channel: String, key: String, offset: Int, following: Boolean) { post(Browse(channel, key, offset, following)) }
     fun localPlacement(channel: String, owner: WorkspaceServices, echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { post(LocalPlacement(channel, owner.boot, owner.wire, echoes, placed)) }
     fun scopeToggle() { post(ScopeToggle) }
     fun filter(actor: String) { post(Filter(actor)) }
@@ -260,6 +264,7 @@ class AppGraph(private val context: Context) {
             }
             is Follow -> controllers[route?.channel]?.follow(event.value && route?.tab == "conversation")
             is VisibleRows -> if (event.channel == route?.channel && route?.tab == "conversation") controllers[event.channel]?.visibleRows(event.keys)
+            is Browse -> if (event.channel == route?.channel && route?.tab == "conversation") controllers[event.channel]?.browse(event.key, event.offset, event.following)
             is LocalPlacement -> if (event.channel == route?.channel && event.owner === mutableServices.value?.wire && event.boot == mutableServices.value?.boot)
                 controllers[event.channel]?.localPlacement(event.echoes, event.placed)
             ScopeToggle -> controllers[route?.channel]?.toggleScope()
@@ -614,7 +619,7 @@ class AppGraph(private val context: Context) {
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice, channelError = channelState?.error ?: channelNotices[route?.channel],
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
-            newerUnloaded = channelState?.newerUnloaded == true,
+            newerUnloaded = channelState?.newerUnloaded == true, browsePosition = channelState?.browsePosition, restoreNotice = channelState?.restoreNotice, rowSequences = channelState?.rowSequences.orEmpty(),
             timelineSource = channelState?.timelineSource?.takeIf { contentAllowed },
             activityInputs = visibleActivityChannels(channels,memberships.keys).map { ChannelActivityInput(it.id, it.name, channelStates[it.id]?.taskFacts.orEmpty()) },
             activityRuns = visibleActivityChannels(channels,memberships.keys).flatMap { channelStates[it.id]?.agentRuns.orEmpty() },
@@ -682,6 +687,7 @@ class AppGraph(private val context: Context) {
     private data class Update(val epoch: Long, val value: NodeUpdateValue) : Event
     private data class Follow(val value: Boolean) : Event
     private data class VisibleRows(val channel: String, val keys: Set<String>) : Event
+    private data class Browse(val channel: String, val key: String, val offset: Int, val following: Boolean) : Event
     private data class LocalPlacement(val channel: String, val boot: String, val owner: WireClient, val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Event
     private data object ScopeToggle : Event
     private data class Filter(val id: String?) : Event

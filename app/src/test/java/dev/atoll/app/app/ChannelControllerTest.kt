@@ -30,6 +30,40 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
+    @Test fun historicalBrowsePositionRestoresOneBoundedCacheWindowAndJumpReturnsToTail() = runBlocking {
+        val saved = BrowsePosition("q500:request", 500, 87, following = false)
+        val fixture = Fixture(head = 6000, rows = (1L..6000).map(::row), browse = saved)
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val restored = fixture.await { it.newerUnloaded && it.conversation != null }
+            assertEquals(saved, restored.browsePosition)
+            assertEquals("q1:request", restored.conversation!!.entries.first().key)
+            assertEquals("q700:request", restored.conversation.entries.last().key)
+            assertEquals(0L, fixture.memory.channel("c").meta.readPosition)
+            fixture.controller.browse("q550:request", 22, false)
+            fixture.await { it.browsePosition?.seq == 550L }
+            assertEquals(BrowsePosition("q550:request", 550, 22, false), BrowsePosition.decode(fixture.preferences.get("ns", "c.browse")))
+            fixture.controller.closeView()
+            fixture.await { it.conversation == null }
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            fixture.await { it.newerUnloaded && it.conversation?.entries?.lastOrNull()?.key == "q750:request" }
+            fixture.controller.jumpToBottom()
+            val tail = fixture.await { !it.newerUnloaded && it.conversation?.entries?.lastOrNull()?.key == "q6000:request" }
+            assertEquals(4500, tail.timelineSource!!.rows.size)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun prunedBrowsePositionFallsBackToTailWithAnExplicitNotice() = runBlocking {
+        val fixture = Fixture(head = 6000, rows = (1501L..6000).map(::row), browse = BrowsePosition("q500:request", 500, following = false))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val state = fixture.await { it.conversation != null }
+            assertFalse(state.newerUnloaded)
+            assertNotNull(state.restoreNotice)
+            assertEquals("q6000:request", state.conversation!!.entries.last().key)
+        } finally { fixture.stop() }
+    }
+
     @Test fun oldWindowsKeepTheirRowsAndReadOnlyToTheLoadedBoundaryThenReturnToTail() = runBlocking {
         val fixture = Fixture(head = 5100, rows = (1L..5100).map(::row))
         try {
@@ -174,7 +208,7 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
-    private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true) {
+    private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true, browse: BrowsePosition? = null) {
         val memory = MemoryRowStore()
         val lookups = AtomicInteger()
         val failNextRead = AtomicBoolean()
@@ -193,6 +227,7 @@ class ChannelControllerTest {
         init {
             runBlocking {
                 memory.commit("c", rows, listOf(CoverageRange(1, head)))
+                if (browse != null) preferences.put("ns", "c.browse", browse.encode())
                 if (baseline) preferences.put("ns", "c.baselined", "true")
                 hub = SyncHub(wire, store, scope)
                 controller = ChannelController("c", "human:self", hub.channel("c"), store, preferences, "ns", head, scope)
