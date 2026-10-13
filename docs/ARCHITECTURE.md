@@ -75,7 +75,8 @@ UI actions --> net (submit/resolve/cancel/resource frames) --> node --> back as 
   - up: attach, submit, resolve, cancel, after, cancel_timer, resource,
     observe, unobserve, channel_meta, history_before, history_cancel
   - down: receipt (answers a ref), error (ref optional), feed
-    `{channel_id, seq, envelope}`, checkpoint `{channel_id, scan_low_seq,
+    `{channel_id, seq, envelope, source, generation}` (frames of another
+    generation are dropped, as the web does), checkpoint `{channel_id, scan_low_seq,
     scanned_seq, generation}`, page_end `{head_seq, oldest_seq, newest_seq,
     scan_low_seq, scan_high_seq, next_before_seq, rows, bytes, has_older}`,
     observe_ended, memberships
