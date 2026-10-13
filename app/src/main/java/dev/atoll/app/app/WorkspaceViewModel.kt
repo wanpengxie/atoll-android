@@ -19,7 +19,9 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 val features = session(services) ?: return@collectLatest
                 if (state.boot != services!!.boot) return@collectLatest
                 updateComposerAccess(features, services, state)
-                val route = state.route ?: return@collectLatest
+                val route = state.route
+                features.waiting.value?.setActive(route?.channel == features.waiting.value?.channelId && route?.tab == "conversation")
+                if (route == null) return@collectLatest
                 val roster = state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) }
                 val signature = ComposerChannel(route.channel, services.selfIds[route.channel].orEmpty(), roster,
                     state.navigation.channels.firstOrNull { it.id == route.channel }?.let { composerWritable(it.access, services.selfIds[route.channel].orEmpty()) } == true,
@@ -29,7 +31,12 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                     features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters)
                 }
                 val timeline = state.timeline ?: return@collectLatest
-                if (timeline.channelId != route.channel || timeline === foldedComposer) return@collectLatest
+                if (timeline.channelId != route.channel) return@collectLatest
+                val waiting = features.waiting(timeline)
+                waiting.updateAccess(signature.writable, signature.self, state.roster.associate { it.id to it.name }, state.rosterCurrent)
+                waiting.updateSnapshot(timeline, state.newerUnloaded)
+                waiting.setActive(route.tab == "conversation")
+                if (timeline === foldedComposer) return@collectLatest
                 val facts = withContext(Dispatchers.Default) { composerTimelineFacts(timeline) }
                 foldedComposer = timeline
                 features.composer.reconcileLanded(timeline.channelId, facts.landed)
