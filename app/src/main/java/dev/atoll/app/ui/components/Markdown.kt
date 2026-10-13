@@ -17,6 +17,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalDensity
@@ -82,7 +88,15 @@ private fun RenderBlocks(blocks: List<MarkdownBlock>, onLink: (String) -> Unit) 
             }
             is MarkdownBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 block.items.forEachIndexed { index, item -> Row {
-                    Text(block.start?.let { "${it + index}. " } ?: "• ", modifier = Modifier.widthIn(min = 22.dp))
+                    val checked = block.checks.getOrNull(index)
+                    if (checked == null) Text(block.start?.let { "${it + index}. " } ?: "• ", modifier = Modifier.widthIn(min = 22.dp))
+                    else Checkbox(checked = checked, onCheckedChange = null, enabled = false,
+                        modifier = Modifier.width(22.dp).height(20.dp).semantics {
+                            role = Role.Checkbox
+                            toggleableState = if (checked) ToggleableState.On else ToggleableState.Off
+                            disabled()
+                        }, colors = CheckboxDefaults.colors(disabledCheckedColor = AtollColors.Agent,
+                            disabledUncheckedColor = AtollColors.Muted, checkmarkColor = AtollColors.Workspace))
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) { RenderBlocks(item, onLink) }
                 } }
             }

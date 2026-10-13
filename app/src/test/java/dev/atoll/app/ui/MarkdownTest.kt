@@ -6,6 +6,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MarkdownTest {
+    @Test fun taskMarkersBelongToTheirOwnItemAndPreserveRichText() {
+        val list = MarkdownParser().parse("- [x] **done**\n- [ ] pending\n- normal\n  - [X] nested\n  - [ ] child").single() as MarkdownBlock.ListBlock
+        assertEquals(listOf(true, false, null), list.checks)
+        val done = list.items[0].single() as MarkdownBlock.Paragraph
+        assertEquals("done", done.runs.joinToString("") { it.text })
+        assertTrue(done.runs.single { it.text.isNotEmpty() }.bold)
+        val nested = list.items[2][1] as MarkdownBlock.ListBlock
+        assertEquals(listOf(true, false), nested.checks)
+    }
+    @Test fun orderedTasksKeepNumberingAndCodeIsNotATaskMarker() {
+        val list = MarkdownParser().parse("4. [ ] todo\n5. `[x] literal`\n6. ordinary").single() as MarkdownBlock.ListBlock
+        assertEquals(4, list.start)
+        assertEquals(listOf(false, null, null), list.checks)
+        val literal = (list.items[1].single() as MarkdownBlock.Paragraph).runs.single()
+        assertTrue(literal.code)
+        assertEquals("[x] literal", literal.text)
+        val paragraph = MarkdownParser().parse("[x] outside a list").single() as MarkdownBlock.Paragraph
+        assertEquals("[x] outside a list", paragraph.runs.joinToString("") { it.text })
+    }
     @Test fun parsesStructuredMarkdownAndPreservesFileTargets() {
         val blocks = MarkdownParser().parse("# Title\n\n**strong** *em* `code` ~~gone~~ [file](/tmp/file.kt:12)\n\n> quote\n\n1. first\n2. second\n\n```kotlin\nval a = 1\n```\n\n| A | B |\n| --- | --- |\n| one | two |")
         assertEquals(1, (blocks[0] as MarkdownBlock.Paragraph).heading)
