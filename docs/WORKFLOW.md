@@ -27,7 +27,9 @@
   Never install, run or uninstall anything on another device.
 - The emulator is off by default (mbp memory is tight; the user may shut it
   down). Whoever holds the lock starts it if it is not running and, when
-  the queue is empty at release, stops it (`adb -s emulator-5554 emu kill`).
+  the queue is empty at release, stops it (`adb -s emulator-5554 emu kill`)
+  only if e2e started it (marker `~/atoll-build/emulator.started-by-e2e`);
+  an emulator the user or another project started is left running.
   `scripts/e2e/instrumented.py` does both.
 - Emulator (`emulator-5554`) is shared: take the lock first
   (`mkdir ~/atoll-build/emulator.lock` succeeds = yours; `rmdir` when done).
