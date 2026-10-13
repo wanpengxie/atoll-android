@@ -128,6 +128,17 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 } finally { autoScrolling = false }
                             }
                             LaunchedEffect(state.route?.tab) { graph.follow(state.route?.tab == "conversation" && following) }
+                            val latestRevision by rememberUpdatedState(state.timeline?.revision)
+                            LaunchedEffect(listState, state.route?.tab) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
+                                val channel = state.route!!.channel
+                                snapshotFlow {
+                                    latestRevision to if (!initialized) emptySet() else listState.layoutInfo.let { layout ->
+                                        layout.visibleItemsInfo.filter { it.offset < layout.viewportEndOffset && it.offset + it.size > layout.viewportStartOffset }
+                                            .mapNotNull { it.key as? String }.toSet()
+                                    }
+                                }.distinctUntilChanged().collect { (_, keys) -> graph.visibleRows(channel, keys) }
+                            }
                             LaunchedEffect(state.route?.tab, conversation.entries.lastOrNull()?.key, conversation.entries.size) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (!initialized || following) {
