@@ -81,15 +81,27 @@ class TimelineMapper {
             }
             message(turn.request, "$key:request", continuation = continuation)
             val terminal = turn.terminal
+            val streamed = turn.provisional.mapNotNull { row ->
+                (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
+                    ?.get("text").string().takeIf(String::isNotBlank)
+            }
             if (terminal != null) {
-                val answer = if (turn.terminalClosureOnly) MappedResult("终态详情不可用，请刷新或重新进入频道") else terminalResult(terminal, turn.request.type)
-                message(terminal, "$key:answer", answer.text, if (terminal.status == "failed") MessageStatus.Failed else null, resultState = answer.result)
+                val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
+                val answer = when {
+                    turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
+                    interrupted -> MappedResult("✗ 已停止 · 发消息即继续")
+                    else -> terminalResult(terminal, turn.request.type)
+                }
+                val finalText = terminal.body["text"].string().trim()
+                val tail = streamed.lastOrNull()?.trim()?.removeSuffix("…[truncated]").orEmpty()
+                val visible = if (!interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
+                val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
+                message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted) MessageStatus.Failed else null, resultState=answer.result)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 if (latest != null) {
-                    val textStages = turn.provisional.mapNotNull { (it.envelope.body["process"] as? JsonObject)?.takeIf { p -> p["kind"].string() == "stage" && p["stage"].string() == "text" }?.get("text").string().takeIf(String::isNotBlank) }
                     val process = latest.body["process"] as? JsonObject
-                    message(latest, "$key:answer", textStages.joinToString("\n\n"),
+                    message(latest, "$key:answer", streamed.joinToString("\n\n"),
                         if (turn.latestCoreStatus == "processing") MessageStatus.Processing else MessageStatus.Queued,
                         process?.get("text").string().takeIf { it.isNotBlank() } ?: process?.get("stage").string().takeIf { it.isNotBlank() })
                 }

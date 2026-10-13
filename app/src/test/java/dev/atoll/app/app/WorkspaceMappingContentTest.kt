@@ -36,7 +36,7 @@ class WorkspaceMappingContentTest {
         val failed=answer("""{"status":"failed","error_code":"receiver_unavailable","reason":"dead","detail":"process exited","data":{"request":"q"},"closed_by":"system"}""")
         assertEquals("",failed.text);assertEquals("receiver_unavailable",failed.result!!.errorCode)
         assertEquals("process exited",failed.result!!.detail);assertEquals(json("""{"data":{"request":"q"}}"""),failed.result!!.errorData)
-        assertEquals("cancelled",answer("""{"status":"failed","cancelled":true,"reason":"interrupted"}""").result!!.errorCode)
+        assertEquals("cancelled",answer("""{"status":"failed","cancelled":true,"reason":"cancelled"}""").result!!.errorCode)
     }
     @Test fun emptyTextAndBareAcknowledgementsStayDistinctFromReadableContentBlocks() {
         assertTrue(answer("""{"status":"completed","text":""}""").result!!.emptyText)
@@ -44,4 +44,20 @@ class WorkspaceMappingContentTest {
         val content=answer("""{"status":"completed","content":[{"type":"text","text":"hello"},{"type":"resource_link","uri":"file:test","name":"test"}]}""")
         assertEquals("hello",content.text);assertNull(content.result)
     }
+    @Test fun completedTurnsKeepStreamingTextAndRemoveOnlyTheFinalEcho() {
+        fun stage(seq: Long,text: String)=row(seq,"p$seq","response",buildJsonObject { put("status","processing");put("process",buildJsonObject { put("kind","stage");put("stage","text");put("text",text) }) },parent="q")
+        val request=row(1,"q","request",json("""{"text":"question"}"""))
+        val result=mapped(request,stage(2,"First explanation"),stage(3,"Final…[truncated]"),
+            row(4,"a","response",json("""{"status":"completed","text":"Final answer"}"""),parent="q")).last()
+        assertEquals("First explanation\n\nFinal answer",result.text)
+        assertNull(result.status)
+    }
+    @Test fun interruptedTurnKeepsAlreadyProducedTextWithoutAnErrorAckBubble() {
+        val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"partial answer"}}"""),parent="q"),
+            row(3,"a","response",json("""{"status":"failed","reason":"interrupted"}"""),parent="q")).last()
+        assertEquals("partial answer\n\n✗ 已停止 · 发消息即继续",answer.text);assertNull(answer.result)
+    }
+
+
 }
