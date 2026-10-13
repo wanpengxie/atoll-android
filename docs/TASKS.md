@@ -150,3 +150,17 @@ after the feature is merged.
    `ui/` (owner of W1-ui).
 10. **W2-misc** — perf export, diagnostics, node upgrade block (root),
     registration, logout, settings. PARITY §16, §1, §2 upgrade.
+
+## Status (lead keeps this current)
+
+| Task | Owner | State |
+|---|---|---|
+| W1 net/model/sync/ui | sol-1..4 | merged |
+| W2-integrate | sol-3 | milestone + files + composer merged; mounting terminal; emulator perf (benchmark build) pending |
+| W2-files | sol-1 | merged (b175d8d) |
+| W2-composer | sol-2 | merged (b8d9f83, a9adfac) |
+| W2-content | sol-4 | merged (3c2a9fe); renderer reuse + real heights in progress |
+| W2-terminal | sol-1 | merged (a7483ab); light-theme/IME screenshots + output coalescing pending |
+| W2-waiting-edit | sol-2 | in progress |
+| W2-tasks | sol-1 | in progress |
+| W2-roster, W2-governance, W2-misc | — | queued |
