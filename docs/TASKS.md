@@ -190,6 +190,23 @@ Each package owns its files; live checks run on our test node.
 7. Native vs web speed comparison on the same emulator and test channel
    (sol-4).
 
+## Wave 4 (remaining gaps; source: c0.dev.web/android-parity-gaps-v2.md @ f35c4af)
+
+- sol-3 (app/**): #12 empty-state data and #33 attachment callbacks (in
+  progress), then #02 verify files 401 path, #07 roster/governance/activity
+  panels in route history, #10 dismissable channel error, #11 identity-ready
+  flag for the scope filter, #52 turn controls inside the process panel, N2
+  process panel follows restart/expiry.
+- sol-1 (WorkspaceMapping, tasks/**): #19 "已完成" status label, #24 agent
+  collaboration "N 次关联调用" grouping (data), #34 resolver/decision/response
+  in tasks detail and approval card, N1 approval body.detail.
+- sol-4 (ui/**): #17 continuation time and self continuation bubbles, #11
+  hide scope filter until identity is ready (UI), #24 grouping UI.
+- sol-2 (compose/**): #29 whole-message copy for structured results; then
+  the release APK from the final main.
+- Accepted deviation: #31 long-press uses the platform's own timeout/slop
+  instead of web's 500 ms / 8 px constants.
+
 ## Status (lead keeps this current)
 
 | Task | Owner | State |
