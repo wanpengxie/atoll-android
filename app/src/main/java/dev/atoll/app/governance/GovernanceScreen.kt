@@ -158,11 +158,16 @@ private fun ChannelMembers(vm: GovernanceViewModel,state: GovernanceState,onActo
     }
 }
 @Composable private fun ChannelDanger(vm: GovernanceViewModel,state: GovernanceState,onConfirm: (GovernanceConfirmation)->Unit) {
-    var typed by remember(state.channel) { mutableStateOf("") };val expected=channelName(state)
+    var typed by remember(state.channel) { mutableStateOf("") }
+    var selected by remember(state.channel) { mutableStateOf(retirementTarget(state)) }
+    val candidate=retirementTarget(state,selected)
+    LaunchedEffect(candidate) { selected=candidate }
+    val target=selected
     Column(Modifier.fillMaxWidth().padding(12.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
         Text("退役频道",style=MaterialTheme.typography.titleMedium)
         Text("退役后频道停止写入。存在活动子频道或描述只读时，服务端会拒绝。")
-        OutlinedTextField(typed,{ typed=it },label={ Text("输入 $expected 确认") },modifier=Modifier.fillMaxWidth(),singleLine=true,enabled=!state.busy)
-        Button(onClick={ onConfirm(GovernanceConfirmation("退役 $expected？","频道将停止写入。",GovernanceCommands.channelDelete(state.channel),"频道退役终态已确认")) },enabled=state.writable && !state.busy && typed==expected,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)) { Text("退役当前频道") }
+        if (target==null) Text("正在读取频道信息…",style=MaterialTheme.typography.bodySmall)
+        else OutlinedTextField(typed,{ typed=it },label={ Text("输入 ${target.name} 确认") },modifier=Modifier.fillMaxWidth(),singleLine=true,enabled=!state.busy)
+        Button(onClick={ target?.let { onConfirm(GovernanceConfirmation("退役 ${it.name}？","频道将停止写入。",GovernanceCommands.channelDelete(it.channel),"频道退役终态已确认")) } },enabled=target!=null && state.writable && !state.busy && typed==target.name,colors=ButtonDefaults.buttonColors(containerColor=MaterialTheme.colorScheme.error)) { Text("退役当前频道") }
     }
 }
