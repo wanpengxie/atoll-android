@@ -31,10 +31,11 @@ fun ContentPanel(title: String, onClose: () -> Unit, content: @Composable () -> 
     }
 }
 @Composable
-fun ProcessPanel(state: ProcessPanelViewState, onClose: () -> Unit) {
+fun ProcessPanel(state: ProcessPanelViewState, onClose: () -> Unit, actions: (@Composable () -> Unit)? = null) {
     var selected by remember(state.requestId, state.selectedRecordId) { mutableStateOf(state.selectedRecordId) }
     var ledger by remember(state.requestId) { mutableStateOf(false) }
     ContentPanel("过程 · ${state.title}", onClose) {
+        actions?.invoke()
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (state.records.isEmpty()) item { Text("这一轮还没有过程记录。", color = AtollColors.Muted, fontSize = 12.sp) }
             items(state.records, key = { it.id }) { record ->
