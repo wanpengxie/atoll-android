@@ -37,6 +37,11 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 if (state.boot != services!!.boot) return@collectLatest
                 updateComposerAccess(features, services, state)
                 val route = state.route
+                val governanceChannel = route?.channel ?: state.navigation.channels.firstOrNull { it.id in services.selfIds }?.id.orEmpty()
+                val governanceSelf = services.selfIds[governanceChannel].orEmpty()
+                features.governance.context(governanceChannel, governanceSelf,
+                    state.navigation.channels.firstOrNull { it.id == governanceChannel }?.let { composerWritable(it.access, governanceSelf) } == true,
+                    services.selfIds.keys)
                 features.waiting.value?.setActive(route?.channel == features.waiting.value?.channelId && route?.tab == "conversation")
                 if (route == null) return@collectLatest
                 val roster = state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) }

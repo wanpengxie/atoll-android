@@ -22,6 +22,10 @@ import dev.atoll.app.tasks.UiFormsHost
 import dev.atoll.app.tasks.ActivityCenterScreen
 import dev.atoll.app.roster.RosterPanel
 import dev.atoll.app.roster.ActorDetail
+import dev.atoll.app.governance.GovernanceScreen
+import dev.atoll.app.governance.SpaceAdministrationScreen
+import dev.atoll.app.governance.ChannelCreateDialog
+import dev.atoll.app.core.string
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.serialization.json.*
@@ -52,6 +56,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val roster = features?.roster?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     var rosterOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var actorOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
+    var governanceOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
+    var spaceOpen by remember(services?.wire, services?.boot) { mutableStateOf(false) }
+    var createChannelOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
@@ -80,7 +87,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     } }
                     if (state.route == null) {
-                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { activityOpen = true })
+                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { activityOpen = true },
+                            onCreate = { createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) spaceOpen = true })
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
                                 withFrameNanos { }
@@ -174,6 +182,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.NewTask -> tasks?.beginCreation()
                                     Item.Running -> activityOpen = true
                                     Item.Members -> { actorOpen = false; rosterOpen = true }
+                                    Item.Details -> governanceOpen = true
+                                    Item.NewChild -> createChannelOpen = true
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
@@ -213,6 +223,23 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     }
                 }
                 if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
+                if (features != null && (governanceOpen || spaceOpen && state.navigation.account.root)) Dialog(
+                    onDismissRequest = { governanceOpen = false; spaceOpen = false },
+                    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+                    Surface(Modifier.fillMaxSize()) {
+                        if (spaceOpen) SpaceAdministrationScreen(features.governance, Modifier.safeDrawingPadding(), onClose = { spaceOpen = false })
+                        else GovernanceScreen(features.governance, Modifier.safeDrawingPadding(), initialTab = "settings", onActor = { row ->
+                            val declared = row["declared"] as? JsonObject ?: row
+                            val id = declared["id"].string().ifEmpty { row["key"].string() }
+                            if (id.isNotEmpty() && state.route != null) {
+                                features.roster(state.route!!.channel).select(id)
+                                governanceOpen = false; rosterOpen = true; actorOpen = true
+                            }
+                        }, onEnterChannel = { governanceOpen = false; graph.openChannel(it) }, onClose = { governanceOpen = false })
+                    }
+                }
+                if (createChannelOpen && features != null) ChannelCreateDialog(features.governance,
+                    onEnterChannel = { createChannelOpen = false; graph.openChannel(it) }, onClose = { createChannelOpen = false })
                 if (rosterOpen && roster != null) Dialog(onDismissRequest = { rosterOpen = false; actorOpen = false; roster.clearSelection() },
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) {
@@ -261,7 +288,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             } }
                         } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
-                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true })
+                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true },
+                    onCreate = { drawer = false; createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) { drawer = false; spaceOpen = true } })
             }
         }
     }
