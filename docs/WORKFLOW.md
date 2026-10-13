@@ -41,18 +41,19 @@
   Hold it only for install + run + screenshots (about 10 minutes at most);
   develop and run JVM tests without it.
 - Workers do not message each other; anything shared goes through the lead.
-- Node for live tests: `https://tardis.tail6bc2a1.ts.net` (from mbp and the
-  emulator). A local automation token is on tardis at
-  `~/.atoll/server/atoll-token` (send as `Authorization: Bearer`). Everything
-  you send through `workspace.bash` — the command and its output — is written
-  to the channel ledger, so never put the token on a command line or print
-  it: read it on mbp at use time, e.g.
-  `ATOLL_TOKEN=$(ssh xiewanpeng@100.99.232.10 cat .atoll/server/atoll-token) ./gradlew ...`.
-  Never commit it. It is the node's shared root session (minted at node
-  start, also used by the local `atoll` TUI): never send logout or anything
-  else that ends a session with it, and never register accounts or change
-  principals/passwords on the real node. Test logout, registration and
-  upgrade against MockWebServer only.
+- Node for live tests: OUR OWN test node `http://100.99.232.10:18080`
+  (tardis; home `~/atoll-test`). Never test against the user's node
+  (`tardis.tail6bc2a1.ts.net`, `~/.atoll`). Control:
+  `~/atoll-test/bin/test-node.sh start|stop|status|reset` (reset wipes it and
+  recreates channel `c0.android-test` with a codex member; actor ids change,
+  read them from `~/atoll-test/node.json`). Its token is
+  `~/atoll-test/server/atoll-token` on tardis: read it at use time over ssh,
+  never print it or put it on a command line (everything sent through
+  `workspace.bash`, command and output, goes into the channel ledger), e.g.
+  `ATOLL_TOKEN=$(ssh xiewanpeng@100.99.232.10 cat atoll-test/server/atoll-token) ./gradlew ...`.
+  Never commit it. Anything may be tested there,
+  writes and logout included; if you break it, `reset`. Debug and benchmark
+  builds allow cleartext to 100.99.232.10 only.
 - Report a commit only after `git rev-parse HEAD` printed it; never a guessed or placeholder hash.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions
