@@ -97,6 +97,10 @@ on the emulator against the real node (screenshots in the report) and the
 JVM tests for its logic pass. UI follows `ui/theme` and `ui/components`
 from W1-ui. Each new local table lives in the task's own package and its
 own Room database file (no edits to `store/`).
+Features take `WorkspaceServices` (from `AppGraph.services`) and a channel
+id, and ship a self-contained ViewModel + Screen in their own package. Only
+the W2-integrate owner edits `app/**`; it mounts each feature in MainRoot
+after the feature is merged.
 
 1. **W2-integrate** (critical path; starts when wave 1 is merged) —
    `app/AppGraph`, ViewModels: login -> attach -> channel list (names from
