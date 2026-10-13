@@ -124,7 +124,9 @@ class ComposerDemoActivity : ComponentActivity() {
             if (preview) {
                 val state by fileModel.state.collectAsState()
                 androidx.compose.ui.window.Dialog(onDismissRequest = { preview = false }, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-                    FilePreviewPanel(state, fileModel::backPreview, { preview = false; fileModel.closePreview() }, { ref -> fileModel.download(this@ComposerDemoActivity, ref) }, fileModel::openLink)
+                    Surface(Modifier.fillMaxSize()) {
+                        FilePreviewPanel(state, fileModel::backPreview, { preview = false; fileModel.closePreview() }, { ref -> fileModel.download(this@ComposerDemoActivity, ref) }, fileModel::openLink)
+                    }
                 }
             }
         }

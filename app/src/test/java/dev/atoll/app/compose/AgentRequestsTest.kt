@@ -30,6 +30,21 @@ class AgentRequestsTest {
         val manifest = Json.parseToJsonElement("""{"words":{"agent.select":{"input_schema":{"oneOf":[{"properties":{"model":{"const":"fallback","title":"Fallback"},"effort":{"const":"max"}}}]}}}}""").jsonObject
         assertEquals(listOf(ModelChoice("fallback", "max", "Fallback", "max")), AgentParameterParser.options(AGENT.id, JsonObject(emptyMap()), manifest).choices)
     }
+    @Test fun retiredWorldCannotReplayBeforeHostRecreatesViewModel() = runTest {
+        val wire = FakeComposerWire(); val store = MemoryOutbox()
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        val vm = ComposerViewModel("owner", wire, store, AttachmentUploader { _, _ -> error("unused") }, dispatcher, dispatcher,
+            actorQueries = ActorQueries { _, _, _, _ -> Envelope.EMPTY }, serverBoot = "old-world")
+        try {
+            vm.setChannel("c0", HUMAN.id, listOf(HUMAN, AGENT)); vm.updateText("hello"); vm.send(); runCurrent()
+            wire.state.value = WireState.Attached(1, json("boot" to text("old-world"))); runCurrent()
+            assertEquals(1, wire.calls.size)
+            wire.calls.single().result.completeExceptionally(WireException(Up.SUBMIT, "closed", "receipt lost")); runCurrent()
+            assertEquals(SendState.UNCERTAIN, store.rows.values.single().state)
+            wire.state.value = WireState.Attached(2, json("boot" to text("new-world"))); runCurrent()
+            assertEquals(1, wire.calls.size)
+        } finally { vm.close() }
+    }
     @Test fun duplicateEnterIsAcceptedOnceAndDraftsStayPerChannel() = runTest {
         val wire = FakeComposerWire(); val store = MemoryOutbox()
         val dispatcher = StandardTestDispatcher(testScheduler)
