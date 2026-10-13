@@ -28,6 +28,7 @@ enum class WorkspacePhase { Booting, Login, Workspace, Incompatible }
 data class WorkspaceState(
     val phase: WorkspacePhase = WorkspacePhase.Booting,
     val identityConfirmed: Boolean = false,
+    val exporting: Boolean = false,
     val login: LoginViewState = LoginViewState(),
     val navigation: ChannelNavigationViewState = ChannelNavigationViewState(emptyList(), ConnectionPhase.CONNECTING, AccountViewState("")),
     val route: AppRoute? = null,
@@ -47,6 +48,7 @@ data class WorkspaceServices(val server: String, val principalId: String, val se
 
 /** Manual app wiring. The manager owns navigation/session facts; channel writers own folds. */
 class AppGraph(private val context: Context) {
+    val telemetry = AppTelemetry()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val commands = Channel<Event>(256)
     private val mutableState = MutableStateFlow(WorkspaceState())
@@ -74,13 +76,16 @@ class AppGraph(private val context: Context) {
     private var channelOpenedAt = 0L
     private var notice: String? = null
     private var upgrade: NodeUpdateValue? = null
+    private var exporting = false
 
     init {
+        telemetry.event("app.boot")
         scope.launch {
             for (event in commands) {
                 try { handle(event) }
                 catch (failure: Exception) {
                     if (failure is CancellationException) throw failure
+                    telemetry.event("app.command_failed", "error", buildJsonObject { put("exception", failure.javaClass.simpleName) })
                     notice = failure.message ?: "工作区暂时不可用"
                     if (runtime == null) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login,
                         login = mutableState.value.login.copy(busy = false, password = "", error = notice))
@@ -109,6 +114,12 @@ class AppGraph(private val context: Context) {
     fun dismissNotice() { post(Notice(null)) }
     fun reconnect() { post(Reconnect) }
     fun upgrade() { post(Upgrade) }
+    fun export(performance: Boolean) { post(Export(performance)) }
+    fun performanceMark(type: String, elapsedMs: Long, channel: String? = null, source: String? = null) {
+        val data = buildJsonObject { put("elapsedMs", elapsedMs); channel?.let { put("channelId", it) }; source?.let { put("source", it) } }
+        telemetry.event("perf.$type", data = data)
+        android.util.Log.i("AtollPerf", "$type channel=${channel.orEmpty()} source=${source.orEmpty()} elapsed_ms=$elapsedMs")
+    }
     fun notice(value: String) { post(Notice(value)) }
 
     private fun post(event: Event) { scope.launch { commands.send(event) } }
@@ -176,8 +187,28 @@ class AppGraph(private val context: Context) {
             is Terminal -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).terminal(event.open))
             }
+            is Export -> {
+                val rt = runtime ?: return
+                val id = route?.channel
+                if (exporting) return
+                if (rt.gate.state.value !is WireState.Attached || id == null || id !in memberships) { notice = "请在连接可用的会员频道中导出"; publish(); return }
+                exporting = true; notice = null; publish()
+                val requestEpoch = epoch; val world = rt.world; val services = mutableServices.value!!
+                val context = buildJsonObject { put("server", services.server); put("principalId", rt.principal); put("channelId", id); put("boot", services.boot)
+                    put("clientVersion", BuildConfig.VERSION_NAME); put("device", Build.MODEL); put("androidApi", Build.VERSION.SDK_INT) }
+                rt.exportJob = rt.scope.launch {
+                    try { val file = exportWorkspaceReport(services, id, this@AppGraph.context.cacheDir, event.performance, telemetry, context)
+                        commands.send(Exported(requestEpoch, world, file.name, null)) }
+                    catch (failure: Exception) { if (failure !is CancellationException) commands.send(Exported(requestEpoch, world, null, failure.message)) }
+                }
+            }
+            is Exported -> if (event.epoch == epoch && event.world == runtime?.world) {
+                runtime?.exportJob = null; exporting = false; notice = event.name?.let { "已导出到频道文件：$it" } ?: "导出失败：${event.error}"
+                telemetry.event(if (event.error == null) "export.finished" else "export.failed", if (event.error == null) "info" else "error")
+                publish()
+            }
             Upgrade -> runtime?.update?.start()
-            is Update -> if (event.epoch == epoch) { upgrade = event.value; publish() }
+            is Update -> if (event.epoch == epoch) { if (upgrade?.phase != event.value.phase) telemetry.event("node_update.phase", data = buildJsonObject { put("phase", event.value.phase) }); upgrade = event.value; publish() }
             Reconnect -> {
                 val rt = runtime
                 if (rt != null && mutableState.value.phase == WorkspacePhase.Incompatible) {
@@ -208,6 +239,7 @@ class AppGraph(private val context: Context) {
                     AndroidKeyValueStore(context.getSharedPreferences("identity_${accountNamespace(currentLogin.server, currentLogin.account)}", Context.MODE_PRIVATE))) }.getOrNull()
                 val login = currentLogin.copy(password = "", busy = identity != null, error = null)
                 preferences.forgetBootstrap(login.server, login.account)
+                telemetry.switchOwner(null); telemetry.event("identity.logout")
                 tearDown()
                 mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = login)
                 if (identity != null) {
@@ -223,7 +255,7 @@ class AppGraph(private val context: Context) {
                 error = event.failure?.let { "本机会话已清理，节点退出未确认：$it" }))
             is Expired -> if (event.epoch == epoch && runtime != null) {
                 preferences.forgetBootstrap(mutableState.value.login.server, mutableState.value.login.account)
-                runtime!!.identity.cookieJar.clear(); tearDown()
+                runtime!!.identity.cookieJar.clear(); telemetry.switchOwner(null); telemetry.event("identity.expired", "warn"); tearDown()
                 mutableState.value = WorkspaceState(phase = WorkspacePhase.Login, login = mutableState.value.login.copy(password = "", busy = false, error = "会话已失效，请重新登录"))
             }
             is Observed -> if (event.epoch == epoch && event.world == runtime?.world && event.id == route?.channel) {
@@ -274,6 +306,7 @@ class AppGraph(private val context: Context) {
         val requestEpoch = epoch
         val principalId = auth.principal["id"].string()
         require(principalId.isNotEmpty()) { "服务器未返回账号身份" }
+        telemetry.switchOwner("${auth.server}\n$principalId"); telemetry.event("identity.confirmed")
         val namespace = accountNamespace(auth.server, principalId)
         preferences.saveAccount(auth.server, auth.account)
         val database = AtollDatabase.open(context, "ledger-$namespace.db")
@@ -317,12 +350,14 @@ class AppGraph(private val context: Context) {
     }
 
     private suspend fun transport(state: WireState) {
+        telemetry.event("wire.state", data = buildJsonObject { put("state", state.javaClass.simpleName); if (state is WireState.Attached) put("generation", state.generation) })
         val rt = runtime ?: return
         if (state is WireState.Attached) {
             val boot = state.receipt["boot"].string()
             val previous = preferences.get(rt.namespace, "boot")
             if (boot.isNotEmpty() && previous != null && previous != boot) {
                 rt.gate.connection(WireState.Connecting)
+                rt.exportJob?.cancel(); rt.exportJob = null; exporting = false
                 rt.pty.close(); rt.pty = PtyClient(mutableServices.value!!.server, mutableServices.value!!.httpClient)
                 stopControllers(); rt.hub.stop(); rt.store.clear()
                 preferences.clearWorld(rt.namespace)
@@ -521,7 +556,7 @@ class AppGraph(private val context: Context) {
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
-            timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty())
+            timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting)
     }
 
     private suspend fun stopControllers() {
@@ -533,7 +568,7 @@ class AppGraph(private val context: Context) {
         runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
-        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null; upgrade = null
+        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null; upgrade = null; exporting = false
     }
     private fun fallback(id: String) = ChannelRecord(id, id, null, id)
     private fun cachedTree(records: Collection<ChannelRecord>) = buildJsonObject {
@@ -559,7 +594,7 @@ class AppGraph(private val context: Context) {
     private data class DevelopmentAuth(val server: String, val account: String, val token: String)
     private data class Auth(val server: String, val account: String, val principal: JsonObject, val identity: IdentityClient)
     private class Runtime(val namespace: String, val principal: String, val identity: IdentityClient, val wire: Wire,
-        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal, var update: NodeUpdateMonitor? = null)
+        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal, var update: NodeUpdateMonitor? = null, var exportJob: Job? = null)
     private sealed interface Event
     private data object Restore : Event
     private data class Form(val value: LoginViewState) : Event
@@ -578,6 +613,8 @@ class AppGraph(private val context: Context) {
     private data class Terminal(val open: Boolean) : Event
     private data object Reconnect : Event
     private data object Upgrade : Event
+    private data class Export(val performance: Boolean) : Event
+    private data class Exported(val epoch: Long, val world: Long, val name: String?, val error: String?) : Event
     private data class Update(val epoch: Long, val value: NodeUpdateValue) : Event
     private data class Follow(val value: Boolean) : Event
     private data object ScopeToggle : Event
