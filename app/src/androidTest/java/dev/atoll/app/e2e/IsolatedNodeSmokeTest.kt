@@ -247,10 +247,12 @@ class IsolatedNodeSmokeTest {
         step("members") { click("成员"); waitFor(hasText("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("关闭") }
         step("channel-details") { menu("频道详情"); waitFor(hasText("危险操作")); click("关闭") }
         step("create-child") {
+            val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
+            val qualifiedName = "$parentName.$child"
             menu("新建子频道"); replace("频道名称", child)
             runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText("创建频道")) }
             click("创建频道"); click("进入新频道")
-            waitFor(hasText(child)); compose.waitUntil(40_000) { graph.state.value.route?.channel != config.channel }
+            waitFor(hasText(qualifiedName)); compose.waitUntil(40_000) { graph.state.value.route?.channel != config.channel }
         }
         step("retire-child") {
             menu("频道详情"); click("危险操作")
