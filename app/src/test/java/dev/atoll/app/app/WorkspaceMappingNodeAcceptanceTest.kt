@@ -61,7 +61,7 @@ class WorkspaceMappingNodeAcceptanceTest {
                     val answer=withTimeout(10000) { done.await() }
                     val turn=terminalTurn!!
                     assertTrue("Live processing must have reached the mapper",processing)
-                    assertTrue(answer.text.contains("MAPPER_OK"));assertNull(answer.status);assertTrue(answer.latest)
+                    assertTrue(answer.text.contains("MAPPER_OK"));assertEquals(MessageStatus.Completed,answer.status);assertTrue(answer.latest)
                     val stages=turn.provisional.mapNotNull { row ->
                         (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }?.get("text").string().takeIf(String::isNotBlank)
                     }

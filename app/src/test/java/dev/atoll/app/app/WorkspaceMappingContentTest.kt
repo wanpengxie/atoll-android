@@ -34,6 +34,76 @@ class WorkspaceMappingContentTest {
             row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"Working"}}"""),parent="q")).last()
         assertEquals(dev.atoll.app.ui.screens.MessageStatus.Processing,pending.status)
     }
+    private fun call(seq: Long,id: String,parent: String,type: String,sender: String,audience: String): Row {
+        val base=row(seq,id,"request",buildJsonObject { put("text","$id request\nFull details") },type,parent,sender)
+        return base.copy(envelope=Envelope(JsonObject(base.envelope.json+("audience" to buildJsonArray { add(audience) }))))
+    }
+    @Test fun collaborationPreorderAndRemainingCallsMatchWebWithoutDuplicatingThreadMessages() {
+        val messages=mapped(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"thinking"}}"""),parent="q"),
+            call(3,"child","q","agent.ask","agent:a","agent:b"),
+            call(4,"grandchild","child","human.ask","agent:b","human:h"),
+            call(5,"system","q","system.member.list","agent:a","system"),
+            call(6,"human","grandchild","human.message","human:h","agent:b"),
+            call(7,"describe","q","actor.describe","agent:a","agent:b"),
+            row(8,"system-result","response",json("""{"status":"failed","error_code":"forbidden","detail":"Denied"}"""),"system.member.list","system","system"),
+            row(9,"grandchild-result","response",json("""{"status":"completed","text":"Decision answer"}"""),"human.ask","grandchild","human:h"),
+            row(10,"task","event",json("""{"task_id":"task-1","phase":"started","title":"Check facts","kind":"agent"}"""),"agent.task","child"),
+            row(11,"answer","response",json("""{"status":"completed","text":"Done"}"""),parent="q"))
+        assertEquals(2,messages.size)
+        val answer=messages.last();assertEquals("Done",answer.text)
+        val calls=answer.relatedCalls
+        assertEquals(listOf("child","grandchild","system","human","describe"),calls.map { it.id })
+        assertEquals(listOf(true,true,false,false,false),calls.map { it.conversation })
+        assertEquals(listOf(1,2,1,1,1),calls.map { it.depth })
+        assertEquals("child request\nFull details",calls.first().request)
+        assertEquals(listOf("agent:b"),calls.first().recipients)
+        assertEquals("Check facts",calls.first().subTasks.single().title)
+        assertEquals("Decision answer",calls[1].text)
+        assertEquals(dev.atoll.app.ui.screens.MessageStatus.Failed,calls[2].status)
+        assertEquals("forbidden",calls[2].result!!.errorCode)
+        assertEquals("还没有终态。",calls.last().text)
+        assertEquals(1,answer.trail!!.records.size)
+        assertEquals(dev.atoll.app.ui.screens.ProcessKind.Stage,answer.trail!!.records.single().kind)
+    }
+    @Test fun peerAsksAreConversationNodesAndPendingRelatedCallsRemainVisibleWithoutRootProgress() {
+        val messages=mapped(row(1,"q","request",json("""{"text":"question"}"""),"human.note"),
+            call(2,"peer","q","agent.ask","agent:a","peer:channel"),
+            call(3,"peer-info","q","actor.describe","agent:a","peer:channel"))
+        assertEquals(2,messages.size)
+        assertEquals(listOf(true,false),messages.last().relatedCalls.map { it.conversation })
+        assertEquals(listOf("", "还没有终态。"),messages.last().relatedCalls.map { it.text })
+    }
+    @Test fun supersededEmptyTurnsDoNotLeaveCallsButProvisionalOnlyCallsUseTheRemainingList() {
+        val request=row(1,"q","request",json("""{"text":"question"}"""))
+        val child=call(2,"child","q","agent.ask","agent:a","agent:b")
+        val terminal=row(4,"answer","response",json("""{"status":"completed","merged_into":"batch"}"""),parent="q")
+        assertTrue(mapped(request,child,terminal).single().relatedCalls.isEmpty())
+        val progress=row(3,"p","response",json("""{"status":"processing"}"""),parent="q")
+        val messages=mapped(request,child,progress,terminal)
+        assertEquals(1,messages.size);assertNull(messages.single().status)
+        assertEquals("child",messages.single().relatedCalls.single().id)
+        assertFalse(messages.single().relatedCalls.single().conversation)
+    }
+    @Test fun humanRequestsForThisReaderRetainVisibleApprovalTargetsInsteadOfReadOnlyRelatedNodes() {
+        for(type in listOf("human.ask","human.approve")) {
+            val replica=ChannelReplica("c","human:self")
+            replica.apply(RowBatch("c",listOf(row(1,"q","request",json("""{"text":"question"}""")),
+                row(2,"p","response",json("""{"status":"processing"}"""),parent="q"),
+                call(3,"approval","q",type,"agent:a","human:self")),Origin.LIVE))
+            val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.MINE,selfId="human:self"))
+            val messages=TimelineMapper().map(snapshot,"human:self",emptyList()).filterIsInstance<UiEntry.Message>()
+            assertTrue(messages.all { message -> message.value.relatedCalls.none { it.id=="approval" } })
+            val request=messages.single { timelineMessageTarget(snapshot,it.key)?.envelope?.id=="approval" }
+            val target=timelineMessageTarget(snapshot,request.key)!!
+            assertEquals(type,target.envelope.type)
+            assertEquals(messages.indexOf(request),timelineFocusIndex(messages,timelineMessageTargets(snapshot),replica.snapshot(),"approval"))
+            val facts=dev.atoll.app.tasks.selectTaskFacts(replica.snapshot(),selfId="human:self")
+            val fact=facts.single { it.id==target.envelope.id }
+            assertEquals("approval",fact.kind);assertTrue(fact.actionableBySelf);assertEquals("waiting",fact.state)
+            assertNotNull(fact.turn)
+        }
+    }
     @Test fun attachmentsCombineListedFilesAndResourceLinksWithoutDuplicateCards() {
         val body=json("""{"attachments":[{"resource_id":"daemon://d/c/a.pdf","name":"Chosen PDF","mime":"application/pdf","size":42}],"files":[{"id":"ignored"}],"content":[{"type":"resource_link","uri":"daemon://d/c/a.pdf","name":"duplicate"},{"type":"resource_link","uri":" oss://s/c/image.png ","mimeType":"image/png","size":-1},{"type":"resource_link","uri":"  "}]}""")
         val cards=messageAttachments(body)
@@ -219,14 +289,17 @@ class WorkspaceMappingContentTest {
         assertTrue(record.outputText.toByteArray().size<=4096);assertFalse(record.toString().contains("never-project-me"))
         assertTrue(answer.trail!!.running)
     }
-    @Test fun nestedToolRequestsFoldIntoTheAnswerTrailInsteadOfFullMessageBubbles() {
+    @Test fun nestedToolRequestsHaveOneRelatedCallInsteadOfDuplicateBubblesOrRootTrailRecords() {
         val request=row(2,"call","request",json("""{"command":"ls"}"""),"workspace.bash","q","agent:a")
         val tool=request.copy(envelope=Envelope(JsonObject(request.envelope.json+("audience" to buildJsonArray { add("tool:w") }))))
         val messages=mapped(row(1,"q","request",json("""{"text":"question"}""")),tool,
             row(3,"tool-reply","response",json("""{"status":"completed","output":"files"}"""),"workspace.bash","call","tool:w"),
             row(4,"a","response",json("""{"status":"completed","text":"done"}"""),parent="q"))
-        assertEquals(2,messages.size);assertEquals("call:call",messages.last().trail!!.records.single().id)
-        assertEquals(json("""{"command":"ls"}"""),messages.last().trail!!.records.single().input)
+        assertEquals(2,messages.size);assertNull(messages.last().trail)
+        val call=messages.last().relatedCalls.single()
+        assertEquals("call",call.id);assertFalse(call.conversation)
+        assertTrue(call.request.contains("\"command\":\"ls\""))
+        assertEquals(json("""{"output":"files"}"""),call.result!!.value)
     }
 
     @Test fun attachedAndOrphanTasksUseStableAgentIdentityAndRetainReturnMessages() {

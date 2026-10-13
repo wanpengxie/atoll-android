@@ -19,6 +19,34 @@ class TaskCommandsTest {
     private fun event(id: String,type: String="agent.ask",sender: String="me",channel: String="c")=Envelope(buildJsonObject {
         put("id","timer:$id");put("correlation_id","timer:$id");put("audience",JsonArray(listOf(JsonPrimitive(sender))));put("channel_id",channel);put("kind","event");put("type",type);put("ts",10);put("sender",buildJsonObject { put("id",sender);put("kind",if (sender=="me") "human" else sender) });put("payload",buildJsonObject { put("body",buildJsonObject {}) })
     })
+    @Test fun nestedHumanRequestsKeepActionableApprovalFactsAndResolveTheirOwnRequestId()=runBlocking<Unit> {
+        newSingleThreadContext("nested-approval-test").use { dispatcher -> withContext(dispatcher) {
+            for(type in listOf("human.ask","human.approve")) {
+                val wire=TaskTestWire();val vm=TasksViewModel(services(wire),"c",dispatcher=dispatcher)
+                val replica=ChannelReplica("c","me")
+                fun row(seq: Long,id: String,kind: String,msgType: String,parent: String,sender: String,audience: String,body: JsonObject)=Row("c",seq,Envelope(buildJsonObject {
+                    put("id",id);put("kind",kind);put("type",msgType);put("channel_id","c");put("parent_id",parent)
+                    put("sender",buildJsonObject { put("id",sender);put("kind",if(sender=="me") "human" else "agent") })
+                    put("audience",buildJsonArray { add(audience) });put("payload",buildJsonObject { put("body",body) })
+                }))
+                replica.apply(RowBatch("c",listOf(
+                    row(1,"root","request","agent.ask","","me","agent:a",obj("""{"text":"Work"}""")),
+                    row(2,"progress","response","agent.ask","root","agent:a","me",obj("""{"status":"processing"}""")),
+                    row(3,"approval","request",type,"root","agent:a","me",obj("""{"title":"Please decide","detail":"Details"}"""))
+                ),Origin.LIVE))
+                try {
+                    vm.update(replica.snapshot(),selfId="me",writable=true)
+                    val fact=withTimeout(5000) { vm.state.first { it.items.any { item -> item.id=="approval" } }.items.single { it.id=="approval" } }
+                    assertTrue(fact.actionableBySelf);assertTrue(TaskAction.APPROVE in fact.actions)
+                    if(type=="human.approve") assertTrue(TaskAction.REJECT in fact.actions)
+                    vm.execute(fact,TaskAction.APPROVE,note="Reviewed",text="Answer")
+                    val payload=wire.requests.single { it.first==Up.RESOLVE }.second
+                    assertEquals("approval",payload.text("req_id"))
+                    assertEquals(if(type=="human.ask") "Answer" else "approve",payload.text(if(type=="human.ask") "text" else "decision"))
+                } finally { vm.close() }
+            }
+        } }
+    }
     @Test fun timersFollowExactFeedIdentityAndSurviveChannelModelsOnlyInTheSameSession()=runBlocking<Unit> {
         newSingleThreadContext("timer-test").use { dispatcher -> withContext(dispatcher) {
             val wire=TaskTestWire();val session=AutomationSession("");val vm=TasksViewModel(services(wire),"c",automation=session,now={100},dispatcher=dispatcher)
