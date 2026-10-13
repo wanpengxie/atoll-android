@@ -22,5 +22,9 @@
             android:name="dev.atoll.app.tasks.TasksDemoActivity"
             android:exported="true"
             android:label="Tasks demo" />
+        <activity
+            android:name="dev.atoll.app.waiting.WaitingDemoActivity"
+            android:exported="true"
+            android:label="Waiting demo" />
     </application>
 </manifest>
