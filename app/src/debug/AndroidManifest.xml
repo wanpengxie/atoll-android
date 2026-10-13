@@ -26,5 +26,9 @@
             android:name="dev.atoll.app.waiting.WaitingDemoActivity"
             android:exported="true"
             android:label="Waiting demo" />
+        <activity
+            android:name="dev.atoll.app.roster.RosterDemoActivity"
+            android:exported="true"
+            android:label="Roster demo" />
     </application>
 </manifest>
