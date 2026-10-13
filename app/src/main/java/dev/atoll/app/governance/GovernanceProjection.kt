@@ -33,6 +33,15 @@ fun governanceCopyableChannels(channels: List<JsonObject>,memberships: Set<Strin
 internal fun currentChannelRow(state: GovernanceState)=state.directory.profile.takeIf { it.directoryId()==state.channel } ?: state.directory.channels.firstOrNull { it.directoryId()==state.channel } ?: Envelope.EMPTY
 internal fun currentChannel(state: GovernanceState)=currentChannelRow(state).declared()
 internal fun channelName(state: GovernanceState)=currentChannel(state).text("qualified_name").ifEmpty { currentChannel(state).text("name").ifEmpty { state.channel } }
+
+/** The first real name stays fixed for this confirmation; an ID is never a name fallback. */
+internal data class RetirementTarget(val channel: String,val name: String)
+internal fun retirementTarget(state: GovernanceState,selected: RetirementTarget? = null):RetirementTarget? {
+    if (selected?.channel == state.channel) return selected
+    val current=currentChannel(state)
+    val name=current.text("qualified_name").ifBlank { current.text("name") }
+    return name.takeIf(String::isNotBlank)?.let { RetirementTarget(state.channel,it) }
+}
 internal fun descriptionBody(state: GovernanceState)=state.channelView?.obj("description")?.get("body") as? JsonObject
 internal fun descriptionEditable(state: GovernanceState)=descriptionBody(state)?.let { !it.bool("readonly") } == true
 fun validateGovernanceChannelName(name: String):String = if (name.trim().matches(Regex("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"))) "" else "名称须为 1–63 位小写字母、数字或连字符，且不能以连字符开头或结尾"
