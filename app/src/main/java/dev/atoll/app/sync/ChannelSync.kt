@@ -23,13 +23,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -51,7 +52,9 @@ data class PagingResult(val nextBeforeSeq: Long, val hasOlder: Boolean, val rows
 
 /**
  * One channel's single writer. SyncHub is the only wire subscriber and calls accept.
- * Subscribe to batches before start(); start emits the local window before network work.
+ * open() registers a reader atomically with its cache read: CACHE is always first,
+ * and no live/page commit can slip between that read and subsequent delivery.
+ * Synchronization runs whether or not the channel has a reader.
  * Network waits run outside the mailbox, so a refill never blocks live persistence.
  * Durable coverage (including its lower intervals) is the refill continuation cursor.
  */
@@ -64,13 +67,11 @@ class ChannelSync(
     private val job = SupervisorJob(parentScope.coroutineContext[Job])
     private val scope = CoroutineScope(parentScope.coroutineContext + job + Dispatchers.Default)
     private val commands = Channel<Command>(256)
-    private val mutableBatches = MutableSharedFlow<RowBatch>(extraBufferCapacity = 32)
-    val batches: SharedFlow<RowBatch> = mutableBatches.asSharedFlow()
+    private val readers = mutableSetOf<Channel<RowBatch>>()
     private val mutableState = MutableStateFlow(SyncState())
     val state: StateFlow<SyncState> = mutableState.asStateFlow()
 
     private lateinit var cached: CachedChannel
-    private var opened = false
     private var generation = 0L
     private var connected = false
     private var needsInitialTail = false
@@ -99,9 +100,10 @@ class ChannelSync(
                     }
                 }
             } finally {
-                commands.cancel()
+                commands.close()
                 networkJob?.cancel()
                 flushJob?.cancel()
+                readers.forEach { it.cancel() }
                 val closed = CancellationException("Channel sync closed")
                 fetching?.older?.reply?.completeExceptionally(closed)
                 olderQueue.forEach { it.reply.completeExceptionally(closed) }
@@ -110,7 +112,17 @@ class ChannelSync(
         }
     }
 
-    suspend fun start() = acknowledge { Start(it) }
+    /** Each collector gets a fresh bounded cache window, then ordered updates. */
+    fun open(): Flow<RowBatch> = flow {
+        val reader = Channel<RowBatch>(16)
+        try {
+            commands.send(Open(reader))
+            for (batch in reader) emit(batch)
+        } finally {
+            reader.cancel()
+            commands.trySend(CloseReader(reader))
+        }
+    }
     suspend fun retry() = acknowledge { Retry(it) }
     suspend fun markRead(seq: Long) { require(seq >= 0); acknowledge { Read(seq, it) } }
     suspend fun loadOlder(beforeSeq: Long, limit: Int = 200): PagingResult {
@@ -134,16 +146,12 @@ class ChannelSync(
 
     private suspend fun handle(command: Command) {
         when (command) {
-            is Start -> {
-                if (!opened) {
-                    val rows = store.rows(channelId, limit = 4500)
-                    mutableBatches.emit(RowBatch(channelId, rows, Origin.CACHE))
-                    opened = true
-                }
-                error = null
-                connection(wire.state.value)
-                command.reply.complete(Unit)
+            is Open -> {
+                val rows = store.rows(channelId, limit = 4500)
+                readers += command.reader
+                deliver(command.reader, RowBatch(channelId, rows, Origin.CACHE))
             }
+            is CloseReader -> readers.remove(command.reader)
             is Retry -> { error = null; command.reply.complete(Unit) }
             is Read -> {
                 store.commit(channelId, meta = cached.meta.copy(readPosition = maxOf(cached.meta.readPosition, command.seq)))
@@ -153,7 +161,6 @@ class ChannelSync(
             is Connection -> connection(command.state)
             is Frame -> frame(command.frame)
             is Older -> {
-                check(opened) { "Start the channel before paging" }
                 olderQueue.addLast(command)
             }
             is Completed -> if (fetching?.number == command.fetch.number) {
@@ -189,6 +196,7 @@ class ChannelSync(
                     lastActivity = maxOf(cached.meta.lastActivity, meta.number("last_activity")),
                 ))
                 cached = store.channel(channelId)
+                if (meta.number("head_seq") == 0L && cached.coverage.isEmpty()) needsInitialTail = false
             }
         } else {
             connected = false
@@ -239,11 +247,11 @@ class ChannelSync(
         val inserted = store.commit(channelId, rows)
         liveRows.clear()
         cached = store.channel(channelId)
-        if (opened && inserted.isNotEmpty()) mutableBatches.emit(RowBatch(channelId, inserted, Origin.LIVE))
+        if (inserted.isNotEmpty()) publishBatch(RowBatch(channelId, inserted, Origin.LIVE))
     }
 
     private suspend fun schedule() {
-        if (!opened || fetching != null) return
+        if (fetching != null) return
         // User paging takes the next page slot, rather than waiting for a whole refill.
         while (olderQueue.isNotEmpty()) {
             val older = olderQueue.removeFirst()
@@ -253,7 +261,7 @@ class ChannelSync(
                 val range = cached.coverage.lastOrNull { before - 1 in it.low..it.high } ?: break
                 val rows = store.rows(channelId, before, older.limit).filter { it.seq >= range.low }
                 if (rows.isNotEmpty()) {
-                    mutableBatches.emit(RowBatch(channelId, rows, Origin.CACHE, olderThanWindow = true))
+                    publishBatch(RowBatch(channelId, rows, Origin.CACHE, olderThanWindow = true))
                     older.reply.complete(PagingResult(rows.first().seq, rows.first().seq > 1, rows.size, Origin.CACHE))
                     break
                 }
@@ -281,6 +289,7 @@ class ChannelSync(
     private fun fetch(before: Long, purpose: String, older: Older? = null) {
         val fetch = Fetch(++requestNumber, before, purpose, older)
         val requestGeneration = generation
+        val priority = if (readers.isEmpty()) "background" else "foreground"
         fetching = fetch
         networkJob = scope.launch {
             try {
@@ -291,7 +300,7 @@ class ChannelSync(
                     put("byte_limit", 256 * 1024)
                     put("generation", requestGeneration)
                     put("purpose", purpose)
-                    put("priority", "foreground")
+                    put("priority", priority)
                 })
                 commands.send(Completed(fetch, page, null))
             } catch (failure: Exception) {
@@ -323,7 +332,7 @@ class ChannelSync(
             cached = store.channel(channelId)
             if (fetch.purpose == "initial-tail") needsInitialTail = false
             val rows = if (fetch.older != null) page.rows.distinctBy { it.seq }.sortedBy { it.seq } else inserted
-            if (rows.isNotEmpty()) mutableBatches.emit(RowBatch(channelId, rows, Origin.HISTORY, fetch.older != null))
+            if (rows.isNotEmpty()) publishBatch(RowBatch(channelId, rows, Origin.HISTORY, fetch.older != null))
             fetch.older?.reply?.complete(PagingResult(page.nextBeforeSeq, page.hasOlder, rows.size, Origin.HISTORY))
             // A malformed scan cannot turn into an infinite auto-refill loop.
             if (fetch.purpose == "hydrate" && coverage.isEmpty()) error = "History page supplied no scan coverage"
@@ -334,16 +343,33 @@ class ChannelSync(
     }
 
     private fun publish() {
-        mutableState.value = SyncState(cached = opened, connected = connected, generation = generation,
+        mutableState.value = SyncState(cached = true, connected = connected, generation = generation,
             headSeq = cached.meta.headSeq, loading = fetching != null,
             current = connected && !needsInitialTail && error == null && tailGap(cached.coverage, cached.meta.headSeq) == null,
             error = error)
     }
 
+    private suspend fun publishBatch(batch: RowBatch) {
+        for (reader in readers.toList()) deliver(reader, batch)
+    }
+
+    private suspend fun deliver(reader: Channel<RowBatch>, batch: RowBatch) {
+        try {
+            reader.send(batch)
+        } catch (_: CancellationException) {
+            // A stopped collector cancels its channel and releases any blocked send.
+            currentCoroutineContext().ensureActive()
+            readers.remove(reader)
+        } catch (_: kotlinx.coroutines.channels.ClosedSendChannelException) {
+            readers.remove(reader)
+        }
+    }
+
     private sealed interface Command {
         fun fail(failure: Throwable) {}
     }
-    private data class Start(val reply: CompletableDeferred<Unit>) : Command { override fun fail(failure: Throwable) { reply.completeExceptionally(failure) } }
+    private data class Open(val reader: Channel<RowBatch>) : Command { override fun fail(failure: Throwable) { reader.close(failure) } }
+    private data class CloseReader(val reader: Channel<RowBatch>) : Command
     private data class Retry(val reply: CompletableDeferred<Unit>) : Command { override fun fail(failure: Throwable) { reply.completeExceptionally(failure) } }
     private data class Read(val seq: Long, val reply: CompletableDeferred<Unit>) : Command { override fun fail(failure: Throwable) { reply.completeExceptionally(failure) } }
     private data class Connection(val state: WireState) : Command

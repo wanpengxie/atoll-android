@@ -184,19 +184,50 @@ class ChannelSyncTest {
     }
 
     @Test fun unopenedChannelsAreCachedWithOneWireSubscription() = runBlocking {
-        val fixture = Fixture(head = 0)
+        val fixture = Fixture(head = 3)
         try {
             fixture.hub.channel("other")
             withTimeout(10_000) { fixture.wire.frames.subscriptionCount.first { it > 0 } }
             assertEquals(1, fixture.wire.frames.subscriptionCount.value)
+            // Both writers synchronize without any timeline collector or start call.
+            repeat(2) {
+                val call = fixture.wire.call()
+                when (call.payload["channel_id"].string()) {
+                    "c" -> call.reply.complete(page(1, 3, head = 3))
+                    "other" -> call.reply.complete(page(48, 49, head = 49, channel = "other"))
+                    else -> error("Unexpected channel")
+                }
+            }
+            fixture.store.awaitRows("c") { it.size == 3 }
+            fixture.store.awaitRows("other") { it.size == 2 }
             fixture.wire.feed(row(50, "other"))
             fixture.wire.frames.emit(DownFrame.Checkpoint("other", 50, 52, 1))
-            fixture.store.awaitRows("other") { it.size == 1 }
+            fixture.store.awaitRows("other") { it.size == 3 }
             withTimeout(10_000) {
                 fixture.hub.channel("other").state.first { it.headSeq == 52L }
             }
-            assertEquals(listOf(CoverageRange(50, 52)), fixture.store.channel("other").coverage)
+            assertEquals(listOf(CoverageRange(48, 52)), fixture.store.channel("other").coverage)
             assertTrue(fixture.wire.calls.tryReceive().isFailure)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun coldOpenAlwaysStartsWithCacheAndClosingItDoesNotStopSync() = runBlocking {
+        val fixture = Fixture(head = 5)
+        try {
+            // Initial background sync finishes before the first reader exists.
+            fixture.wire.call().reply.complete(page(1, 5, head = 5))
+            fixture.store.awaitRows("c") { it.size == 5 }
+            val sync = fixture.hub.channel("c")
+            val first = withTimeout(10_000) { sync.open().first() }
+            assertEquals(Origin.CACHE, first.origin)
+            assertEquals((1L..5).toList(), first.rows.map { it.seq })
+            // first() canceled its collection. The writer remains alive.
+            fixture.wire.feed(row(6))
+            fixture.wire.frames.emit(DownFrame.Checkpoint("c", 6, 6, 1))
+            fixture.store.awaitRows("c") { it.size == 6 }
+            val reopened = withTimeout(10_000) { sync.open().first() }
+            assertEquals(Origin.CACHE, reopened.origin)
+            assertEquals((1L..6).toList(), reopened.rows.map { it.seq })
         } finally { fixture.stop() }
     }
 
@@ -238,8 +269,7 @@ class ChannelSyncTest {
         private var collector: Job? = null
         suspend fun start() {
             sync = hub.channel("c")
-            collector = scope.launch(start = CoroutineStart.UNDISPATCHED) { sync.batches.collect { received.send(it) } }
-            sync.start()
+            collector = scope.launch(start = CoroutineStart.UNDISPATCHED) { sync.open().collect { received.send(it) } }
             withTimeout(10_000) { wire.frames.subscriptionCount.first { it > 0 } }
         }
         suspend fun batch(): RowBatch = withTimeout(10_000) { received.receive() }
@@ -271,7 +301,7 @@ class ChannelSyncTest {
         private fun row(seq: Long, channel: String = "c") = Row(channel, seq, Envelope(buildJsonObject {
             put("id", "$channel-$seq"); put("channel_id", channel); put("kind", "event"); put("type", "notice")
         }))
-        private fun page(low: Long, high: Long, head: Long, rows: List<Row> = (low..high).map { row(it) }) =
+        private fun page(low: Long, high: Long, head: Long, channel: String = "c", rows: List<Row> = (low..high).map { row(it, channel) }) =
             HistoryPage(rows, buildJsonObject {
                 put("head_seq", head); put("scan_low_seq", low); put("scan_high_seq", high)
                 put("next_before_seq", low); put("has_older", low > 1)
