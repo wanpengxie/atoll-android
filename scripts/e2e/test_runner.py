@@ -14,6 +14,26 @@ from support import EmulatorLock, Failure, URL, load_node, validate_url
 
 
 class RunnerTest(unittest.TestCase):
+    def test_custom_ui_class_dry_run_keeps_variant_and_origin_guards(self):
+        name = 'dev.atoll.app.ui.MessageContentUiTest'
+        with patch('instrumented.load_node', side_effect=AssertionError('no metadata')):
+            with contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(0, instrumented.main(['--class', name, '--build-type', 'benchmark', '--dry-run']))
+            record = json.loads(output.getvalue())
+            self.assertEqual(name, record['class'])
+            self.assertEqual('connectedBenchmarkAndroidTest', record['task'])
+            self.assertEqual(URL, record['url'])
+            self.assertEqual([], record['steps'])
+            for args in [['--class', name, '--url', 'http://localhost:18080'],
+                         ['--class', name, '--serial', 'e5ca3495'], ['--class', 'bad,name']]:
+                with self.assertRaises(Failure): instrumented.main(args)
+
+    def test_only_explicit_class_skips_smoke_summary_validation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            instrumented.validate_run_artifacts(root, 'dev.atoll.app.ui.MessageContentUiTest')
+            with self.assertRaises(Failure): instrumented.validate_run_artifacts(root)
+
     def test_gradle_success_requires_all17_current_variant_steps(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
