@@ -40,6 +40,8 @@ data class WorkspaceState(
     val timeline: TimelineSnapshot? = null,
     val roster: List<ActorRecord> = emptyList(),
     val boot: String = "",
+    val newerUnloaded: Boolean = false,
+    val rosterCurrent: Boolean = false,
 )
 
 /** Feature packages share authentication/transport without reaching into the manager's state. */
@@ -63,7 +65,8 @@ class AppGraph(private val context: Context) {
     private val controllers = mutableMapOf<String, ChannelController>()
     private val channelStates = mutableMapOf<String, ChannelRuntimeState>()
     private val watchers = mutableMapOf<String, Job>()
-    private val rosterLoading = mutableSetOf<String>()
+    private val rosterLoading = mutableMapOf<String, Long>()
+    private val rosterGenerations = mutableMapOf<String, Long>()
     private val actorRosters = mutableMapOf<String, List<ActorRecord>>()
     private val accesses = mutableMapOf<String, ChannelAccess>()
     private val backStack = ArrayDeque<AppRoute?>()
@@ -168,9 +171,13 @@ class AppGraph(private val context: Context) {
                 publish(); maybeRequestedRoute()
             }
             is Roster -> if (event.epoch == epoch && event.world == runtime?.world) {
-                rosterLoading.remove(event.channel)
-                actorRosters[event.channel] = event.actors
-                controllers[event.channel]?.roster(event.actors)
+                if (rosterLoading[event.channel] == event.generation) rosterLoading.remove(event.channel)
+                if (event.generation == (runtime?.gate?.state?.value as? WireState.Attached)?.generation && event.success) {
+                    actorRosters[event.channel] = event.actors
+                    rosterGenerations[event.channel] = event.generation
+                    controllers[event.channel]?.roster(event.actors)
+                }
+                publish()
             }
             is Controller -> if (event.epoch == epoch && event.world == runtime?.world) { channelStates[event.id] = event.value; publish() }
             is Navigate -> {
@@ -361,7 +368,7 @@ class AppGraph(private val context: Context) {
                 rt.pty.close(); rt.pty = PtyClient(mutableServices.value!!.server, mutableServices.value!!.httpClient)
                 stopControllers(); rt.hub.stop(); rt.store.clear()
                 preferences.clearWorld(rt.namespace)
-                records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear()
+                records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); rosterLoading.clear(); accesses.clear(); surfaces.clear()
                 route = route?.copy(tab = "conversation", focus = null); backStack.clear()
                 rt.world++
                 rt.hub = SyncHub(rt.gate, rt.store, rt.scope)
@@ -372,6 +379,7 @@ class AppGraph(private val context: Context) {
             mutableServices.value = mutableServices.value?.copy(boot = boot, pty = rt.pty)
             rt.gate.connection(state)
             applyMemberships(state.receipt)
+            route?.channel?.let { loadRoster(it, force = true) }
             maybeRequestedRoute()
             if (route != null && route!!.channel !in memberships) navigate(route, false, force = true)
         } else rt.gate.connection(state)
@@ -514,13 +522,15 @@ class AppGraph(private val context: Context) {
 
     private fun loadRoster(id: String, force: Boolean = false) {
         val rt = runtime ?: return
-        if (!force && id in actorRosters) return
-        if (!rosterLoading.add(id)) return
+        val generation = (rt.gate.state.value as? WireState.Attached)?.generation ?: return
+        if (!force && rosterGenerations[id] == generation) return
+        if (rosterLoading[id] == generation) return
+        rosterLoading[id] = generation
         val requestEpoch = epoch
         val requestWorld = rt.world
         rt.scope.launch {
-            try { commands.send(Roster(requestEpoch, requestWorld, id, actorRecords(rt.obs.channelActors(id)))) }
-            catch (failure: Exception) { if (failure !is CancellationException) commands.send(Roster(requestEpoch, requestWorld, id, emptyList())) }
+            try { commands.send(Roster(requestEpoch, requestWorld, id, actorRecords(rt.obs.channelActors(id)), generation)) }
+            catch (failure: Exception) { if (failure !is CancellationException) commands.send(Roster(requestEpoch, requestWorld, id, emptyList(), generation, success = false)) }
         }
     }
 
@@ -556,7 +566,9 @@ class AppGraph(private val context: Context) {
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
-            timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting)
+            timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty(), exporting = exporting,
+            newerUnloaded = channelState?.newerUnloaded == true,
+            rosterCurrent = (rt.gate.state.value as? WireState.Attached)?.generation?.let { rosterGenerations[route?.channel] == it } == true)
     }
 
     private suspend fun stopControllers() {
@@ -568,7 +580,7 @@ class AppGraph(private val context: Context) {
         runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
-        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null; upgrade = null; exporting = false
+        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); rosterGenerations.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null; upgrade = null; exporting = false
     }
     private fun fallback(id: String) = ChannelRecord(id, id, null, id)
     private fun cachedTree(records: Collection<ChannelRecord>) = buildJsonObject {
@@ -604,7 +616,7 @@ class AppGraph(private val context: Context) {
     private data class TransportFrame(val epoch: Long, val frame: DownFrame) : Event
     private data class Tree(val epoch: Long, val world: Long, val records: List<ChannelRecord>) : Event
     private data class TreeDone(val epoch: Long, val world: Long, val records: List<ChannelRecord>?, val failure: String?) : Event
-    private data class Roster(val epoch: Long, val world: Long, val channel: String, val actors: List<ActorRecord>) : Event
+    private data class Roster(val epoch: Long, val world: Long, val channel: String, val actors: List<ActorRecord>, val generation: Long, val success: Boolean = true) : Event
     private data class Controller(val epoch: Long, val world: Long, val id: String, val value: ChannelRuntimeState) : Event
     private data class Navigate(val route: AppRoute, val push: Boolean, val restoreSurface: Boolean = false) : Event
     private data object Back : Event

@@ -13,6 +13,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
+import dev.atoll.app.waiting.WaitingDock
+import dev.atoll.app.waiting.editorBinding
 import dev.atoll.app.terminal.TerminalScreen
 import dev.atoll.app.terminal.TerminalDevice
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -33,6 +35,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val graph = viewModel.graph
     val services by graph.services.collectAsStateWithLifecycle()
     val features = viewModel.session(services)
+    val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value
+    val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
+    var selectedMessage by remember { mutableStateOf<String?>(null) }
     var recentOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
@@ -142,6 +147,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.OpenTerminal -> graph.terminal(true)
                                     Item.CloseTerminal -> graph.terminal(false)
                                     Item.ExportPerformance -> graph.export(true)
+                                    is ChannelMenuAction.Process -> selectedMessage = action.messageId
+                                    Item.Waiting -> waiting?.setCollapsed(false)
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
@@ -151,9 +158,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 contentOverride = content,
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
-                            if (features != null && !terminal) AtollComposer(features.composer,
+                            if (features != null && !terminal) {
+                            if (waiting != null) WaitingDock(waiting)
+                            AtollComposer(features.composer, editing = waitingState?.let { waiting?.editorBinding(it) },
                                 onPickChannelFiles = { pickingFile = true },
                                 onPreviewAttachment = { reference -> features.files(reference.channelId).open(reference); graph.files(true) })
+                            }
                             }
                             if (pickingFile && features != null) FilePicker(features.files(state.route!!.channel),
                                 onPick = { reference -> features.composer.addAttachments(listOf(reference)); pickingFile = false },
@@ -167,6 +177,15 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     }
                 }
                 if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
+                selectedMessage?.let { key ->
+                    val target = state.timeline?.let { timelineMessageTarget(it, key) }
+                    AlertDialog(onDismissRequest = { selectedMessage = null }, title = { Text("消息操作") },
+                        text = { Column {
+                            Text(target?.envelope?.let(::messageText).orEmpty(), maxLines = 5)
+                            val ownRequest = target?.turn?.takeIf { it.request.id == target.envelope.id && it.request.senderId == services?.selfIds?.get(state.route?.channel) }
+                            if (ownRequest != null && waiting != null) TextButton({ waiting.requestEdit(ownRequest.requestId); selectedMessage = null }, enabled = !state.newerUnloaded) { Text("编辑") }
+                        } }, confirmButton = { TextButton({ selectedMessage = null }) { Text("关闭") } })
+                }
                 if (recentOpen && features != null) {
                     val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
                     AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },

@@ -13,6 +13,12 @@ import dev.atoll.app.files.FileHistory
 import dev.atoll.app.files.FilesViewModel
 import dev.atoll.app.net.AndroidKeyValueStore
 import dev.atoll.app.terminal.TerminalPreferences
+import dev.atoll.app.model.TimelineSnapshot
+import dev.atoll.app.waiting.WaitingViewModel
+import dev.atoll.app.waiting.createWaitingViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 
 /** Feature models survive channel switches and rotation, and end with the checked server world. */
 class SessionFeatures(private val context: Context, val services: WorkspaceServices) : ViewModelStoreOwner {
@@ -26,6 +32,15 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
     })[ComposerViewModel::class.java]
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val usageSeq = mutableMapOf<Pair<String, String>, Long>()
+    private val mutableWaiting = MutableStateFlow<WaitingViewModel?>(null)
+    val waiting = mutableWaiting.asStateFlow()
+    fun waiting(snapshot: TimelineSnapshot): WaitingViewModel {
+        val current = mutableWaiting.value
+        if (current?.channelId == snapshot.channelId) return current
+        current?.setActive(false); current?.close()
+        return createWaitingViewModel(services, snapshot.channelId, snapshot, composer).also { mutableWaiting.value = it }
+    }
+    init { scope.launch { combine(waiting, composer.submissions) { waiting, submissions -> waiting to submissions }.collect { (waiting, submissions) -> waiting?.updateSubmissions(submissions) } } }
     init { scope.launch(start = CoroutineStart.UNDISPATCHED) { services.wire.frames.collect { frame ->
         if (frame is DownFrame.Feed) {
             val row = frame.row
@@ -42,5 +57,5 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         override fun <T : ViewModel> create(modelClass: Class<T>): T = FilesViewModel(services.wire, services.httpClient,
             services.server, channel, context.cacheDir, fileHistory) as T
     })["files:$channel", FilesViewModel::class.java]
-    fun clear() { scope.cancel(); viewModelStore.clear() }
+    fun clear() { mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
 }
