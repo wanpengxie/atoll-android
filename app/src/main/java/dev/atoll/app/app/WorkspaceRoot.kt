@@ -13,6 +13,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
+import dev.atoll.app.compose.ComposerActor
+import dev.atoll.app.compose.TimelineMessageActions
 import dev.atoll.app.waiting.WaitingDock
 import dev.atoll.app.waiting.editorBinding
 import dev.atoll.app.tasks.ApprovalCard
@@ -56,6 +58,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
     val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
+    val actionRoster = remember(state.roster) { state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) } }
     val roster = features?.roster?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     var rosterOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var actorOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
@@ -236,6 +239,16 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         ApprovalCard(approval, taskState.actorNames, busy = command != null,
                                             error = taskState.commandStates.filterKeys { it.startsWith("${approval.key}:") }.values.firstOrNull { it.error.isNotEmpty() }?.error.orEmpty(),
                                             onResolve = { action, text, note -> tasks.perform { execute(approval, action, note, text) } })
+                                    } else if (target != null && features != null) {
+                                        val self = services?.selfIds?.get(state.route!!.channel).orEmpty()
+                                        TimelineMessageActions(message, target.envelope, target.turn, self, actionRoster,
+                                            writable = composerWritable(conversation.channel.access, self),
+                                            online = state.navigation.connection == ConnectionPhase.OPEN,
+                                            newerUnloaded = state.newerUnloaded, safeEditActors = waitingState?.safeEditActors.orEmpty(),
+                                            editingTargetId = waitingState?.edit?.session?.targetId.orEmpty(),
+                                            onReply = features.composer::setReply, onEdit = { waiting?.requestEdit(it) },
+                                            onStop = waiting?.let { owner -> { id -> owner.stop(id) } },
+                                            busyActors = waitingState?.busyActors.orEmpty(), content = default)
                                     } else default()
                                 },
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
