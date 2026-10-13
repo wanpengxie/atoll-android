@@ -43,6 +43,7 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 val signature = ComposerChannel(route.channel, services.selfIds[route.channel].orEmpty(), roster,
                     state.navigation.channels.firstOrNull { it.id == route.channel }?.let { composerWritable(it.access, services.selfIds[route.channel].orEmpty()) } == true,
                     state.conversation?.actorFilters.orEmpty())
+                features.roster(route.channel).updateAccess(signature.writable, signature.self)
                 if (signature != composerChannel) {
                     composerChannel = signature
                     features.composer.setChannel(signature.id, signature.self, signature.roster, signature.writable, signature.filters)

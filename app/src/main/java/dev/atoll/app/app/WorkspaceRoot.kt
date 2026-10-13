@@ -20,6 +20,8 @@ import dev.atoll.app.tasks.TasksScreen as NativeTasksScreen
 import dev.atoll.app.tasks.CreateTaskDialog
 import dev.atoll.app.tasks.UiFormsHost
 import dev.atoll.app.tasks.ActivityCenterScreen
+import dev.atoll.app.roster.RosterPanel
+import dev.atoll.app.roster.ActorDetail
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.serialization.json.*
@@ -47,6 +49,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
     val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
+    val roster = features?.roster?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
+    var rosterOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
+    var actorOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
@@ -168,6 +173,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.Waiting -> waiting?.setCollapsed(false)
                                     Item.NewTask -> tasks?.beginCreation()
                                     Item.Running -> activityOpen = true
+                                    Item.Members -> { actorOpen = false; rosterOpen = true }
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
@@ -207,6 +213,13 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     }
                 }
                 if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
+                if (rosterOpen && roster != null) Dialog(onDismissRequest = { rosterOpen = false; actorOpen = false; roster.clearSelection() },
+                    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+                    Surface(Modifier.fillMaxSize()) {
+                        if (actorOpen) ActorDetail(roster, Modifier.safeDrawingPadding(), onClose = { actorOpen = false; roster.clearSelection() })
+                        else RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = { rosterOpen = false }, onSelect = { actorOpen = true })
+                    }
+                }
                 selectedMessage?.let { key ->
                     val target = messageTargets[key]
                     AlertDialog(onDismissRequest = { selectedMessage = null }, title = { Text("消息操作") },
