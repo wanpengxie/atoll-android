@@ -2,10 +2,11 @@ package dev.atoll.app.compose
 
 import dev.atoll.app.core.Envelope
 import dev.atoll.app.model.Turn
+import dev.atoll.app.waiting.WaitingRules
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 
-data class TimelineActions(val reply: ReplyTarget? = null, val editTargetId: String = "")
+data class TimelineActions(val reply: ReplyTarget? = null, val editTargetId: String = "", val stopTargetId: String = "")
 
 /** Keep row affordances aligned with the composer and safe editor's owner contracts. */
 object TimelineActionPolicy {
@@ -25,6 +26,7 @@ object TimelineActionPolicy {
             selfId.isNotEmpty() && envelope.senderId == selfId && text.isNotBlank() && writable && online && !newerUnloaded &&
             turn.request.audience.singleOrNull() in safeEditActors &&
             roster.any { it.id == turn.request.audience.singleOrNull() && it.kind == "agent" } && hasReplace
-        return TimelineActions(reply, if (editable) turn!!.requestId else "")
+        val stoppable = isRequest && turn != null && online && !newerUnloaded && WaitingRules.interrupt(turn, writable) != null
+        return TimelineActions(reply, if (editable) turn!!.requestId else "", if (stoppable) turn!!.requestId else "")
     }
 }

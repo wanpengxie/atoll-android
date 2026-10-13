@@ -59,6 +59,25 @@ class WaitingViewModelTest {
     }
     private suspend fun WaitingViewModel.editing() { requestEdit("target"); withTimeout(2_000) { state.first { it.edit.phase == EditPhase.EDITING } } }
 
+    @Test fun timelineStopUsesDeclaredActorRequestAndDetachedWindowCannotStop() = runBlocking<Unit> {
+        val wire = Wire(); val port = Port(wire)
+        val base = WaitingRulesTest().turn(status = "processing", controls = buildJsonArray { add(buildJsonObject { put("word", "agent.interrupt") }) })
+        val running = base.copy(request = Envelope(JsonObject(base.request.json + ("type" to JsonPrimitive("agent.ask")))))
+        val item = TimelineEntry("turn", 1, turn = running)
+        val snapshot = TimelineSnapshot("c", 1, listOf(PresentationItem("turn", item, 1, 2, "agent:a", 0, "", 0, false, "turn", false, "1")), emptyList(), emptyList(), 1, 2)
+        val viewModel = vm(wire, port, snapshot)
+        try {
+            viewModel.stop("target")
+            assertEquals(Envelope.EMPTY, port.calls.single { it.first == "agent.interrupt" }.second)
+            viewModel.updateSnapshot(snapshot, newerUnloaded = true)
+            viewModel.stop("target")
+            assertEquals(1, port.calls.count { it.first == "agent.interrupt" })
+            viewModel.updateSnapshot(snapshot.copy(items = listOf(snapshot.items.single().copy(entry = item.copy(turn = running.copy(terminal = running.request))))))
+            viewModel.stop("target")
+            assertEquals(1, port.calls.count { it.first == "agent.interrupt" })
+        } finally { viewModel.close() }
+    }
+
     @Test fun receiverAcceptanceBeforeLocalJournalReturnReleasesExactlyOnceWithoutReopening() = runBlocking<Unit> {
         val wire = Wire(); val port = Port(wire); port.signalBeforeAccept = true
         val viewModel = vm(wire, port)

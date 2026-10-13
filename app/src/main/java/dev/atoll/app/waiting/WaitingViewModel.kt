@@ -24,7 +24,7 @@ data class WaitingGroup(val actorId: String, val name: String, val rows: List<Wa
 data class WaitingUiState(val groups: List<WaitingGroup> = emptyList(), val collapsed: Boolean = false,
     val edit: EditState = EditState(), val warningTarget: Turn? = null, val warning: String = "", val error: String = "", val online: Boolean = false,
     /** Shared by timeline edit entries; the dock remains the owner of capability probing. */
-    val safeEditActors: Set<String> = emptySet())
+    val safeEditActors: Set<String> = emptySet(), val busyActors: Set<String> = emptySet())
 
 /** One writer, independent actor I/O. No queue reconstruction or network work in composition. */
 class WaitingViewModel(
@@ -152,6 +152,12 @@ class WaitingViewModel(
         rebuild()
     }
     fun insert(targetId: String) = enqueue { turn(targetId)?.let { target -> actions(target).insert?.let { control(target, it) } } }
+    fun stop(targetId: String) = enqueue {
+        if (!active || detached || !mutable.value.online || mutable.value.edit.session != null) return@enqueue
+        val target = turn(targetId) ?: return@enqueue
+        val stop = WaitingRules.interrupt(target, writable) ?: return@enqueue
+        control(target, stop)
+    }
     fun extra(targetId: String, word: String) = enqueue { turn(targetId)?.let { target -> actions(target).extras.find { it.word == word }?.let { control(target, it) } } }
     fun cancel(targetId: String) = enqueue {
         val target = turn(targetId) ?: return@enqueue
@@ -356,7 +362,7 @@ class WaitingViewModel(
             }, paused, actor in busy || editing?.actorId == actor)
         }
         mutable.value = mutable.value.copy(groups = groups,
-            safeEditActors = manifests.filterValues(WaitingRules::leaseSupported).keys.toSet())
+            safeEditActors = manifests.filterValues(WaitingRules::leaseSupported).keys.toSet(), busyActors = busy.toSet())
     }
     override fun close() {
         enqueue {

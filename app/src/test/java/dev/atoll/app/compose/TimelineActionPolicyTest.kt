@@ -46,4 +46,16 @@ class TimelineActionPolicyTest {
         assertEquals("", actions(turn.request, turn.copy(terminal = envelope("done", "agent:a", "response", "completed"))).editTargetId)
         assertEquals("", actions(envelope("ask", "human:b"), turn).editTargetId)
     }
+    @Test fun stopUsesCurrentReceiverDeclarationAndDoesNotRequireProbedRosterOrLease() {
+        val base = turn()
+        val stop = base.provisional.single().envelope
+        val body = JsonObject(stop.body + ("controls" to buildJsonArray { add(buildJsonObject { put("word", "agent.interrupt") }) }))
+        val running = base.copy(provisional = listOf(Row("c", 2, Envelope(buildJsonObject { put("payload", buildJsonObject { put("body", body) }) }))))
+        assertEquals("ask", actions(running.request, running, safe = emptySet()).stopTargetId)
+        assertEquals("", actions(running.request, running, online = false).stopTargetId)
+        assertEquals("", actions(running.request, running, detached = true).stopTargetId)
+        assertEquals("", actions(running.request, running, writable = false).stopTargetId)
+        assertEquals("", actions(base.request, base).stopTargetId)
+        assertEquals("", actions(envelope("partial", "agent:a", "response", "processing"), running).stopTargetId)
+    }
 }
