@@ -241,12 +241,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                             onResolve = { action, text, note -> tasks.perform { execute(approval, action, note, text) } })
                                     } else if (target != null && features != null) {
                                         val self = services?.selfIds?.get(state.route!!.channel).orEmpty()
+                                        val source = timelineTaskSource(state.route!!.channel, target)
                                         TimelineMessageActions(message, target.envelope, target.turn, self, actionRoster,
                                             writable = composerWritable(conversation.channel.access, self),
                                             online = state.navigation.connection == ConnectionPhase.OPEN,
                                             newerUnloaded = state.newerUnloaded, safeEditActors = waitingState?.safeEditActors.orEmpty(),
                                             editingTargetId = waitingState?.edit?.session?.targetId.orEmpty(),
                                             onReply = features.composer::setReply, onEdit = { waiting?.requestEdit(it) },
+                                            onCreateTask = if (taskState?.creationReady == true && tasks != null && source != null) ({ _, _ -> tasks.beginCreation(source) }) else null,
                                             onStop = waiting?.let { owner -> { id -> owner.stop(id) } },
                                             busyActors = waitingState?.busyActors.orEmpty(), content = default)
                                     } else default()
@@ -304,11 +306,11 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             Text(target?.envelope?.let(::messageText).orEmpty(), maxLines = 5)
                             val ownRequest = target?.turn?.takeIf { it.request.id == target.envelope.id && it.request.senderId == services?.selfIds?.get(state.route?.channel) }
                             if (ownRequest != null && waiting != null) TextButton({ waiting.requestEdit(ownRequest.requestId); selectedMessage = null }, enabled = !state.newerUnloaded) { Text("编辑") }
-                            if (target != null && tasks != null) TextButton({
-                                tasks.beginCreation(buildJsonObject { put("channelId", state.route!!.channel); put("view", "conversation"); put("objectType", "turn");
-                                    put("objectId", target.turn?.requestId ?: target.envelope.id); put("requestId", target.turn?.requestId ?: target.envelope.id) })
-                                selectedMessage = null
-                            }, enabled = taskState?.creationReady == true) { Text("创建任务") }
+                            if (target != null && tasks != null) {
+                                val source = timelineTaskSource(state.route!!.channel, target)
+                                TextButton({ source?.let(tasks::beginCreation); selectedMessage = null },
+                                    enabled = taskState?.creationReady == true && source != null) { Text("创建任务") }
+                            }
                         } }, confirmButton = { TextButton({ selectedMessage = null }) { Text("关闭") } })
                 }
                 if (tasks != null && taskState?.creating == true && state.route?.tab != "tasks") CreateTaskDialog(tasks, tasks::endCreation)
