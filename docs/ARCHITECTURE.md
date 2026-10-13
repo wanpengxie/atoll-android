@@ -83,7 +83,10 @@ UI actions --> net (submit/resolve/cancel/resource frames) --> node --> back as 
     observe, unobserve, channel_meta, history_before, history_cancel
   - down: receipt (answers a ref), error (ref optional), feed
     `{channel_id, seq, envelope, source, generation}` (frames of another
-    generation are dropped, as the web does), checkpoint `{channel_id, scan_low_seq,
+    generation are dropped, as the web does; `DownFrame.Feed` keeps its
+    generation, and a consumer passes a frame only once it has handled the
+    Attached of that generation (boot check included): older -> drop,
+    newer -> wait for that Attached), checkpoint `{channel_id, scan_low_seq,
     scanned_seq, generation}`, page_end `{head_seq, oldest_seq, newest_seq,
     scan_low_seq, scan_high_seq, next_before_seq, rows, bytes, has_older}`,
     observe_ended, memberships
