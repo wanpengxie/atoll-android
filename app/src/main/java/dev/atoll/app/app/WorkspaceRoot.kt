@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
@@ -108,6 +109,13 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val attachmentHandler = rememberAttachmentHandler(state.route?.channel.orEmpty(),
+        onPreview = { reference -> features?.files(reference.channelId)?.let { files ->
+            files.open(reference); graph.files(true)
+        } },
+        onDownload = { reference, destination -> features?.files(reference.channelId)?.download(context, reference, destination) },
+        downloading = { state.route?.channel?.let { features?.files(it)?.state?.value?.download != null } == true })
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
     LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; activityOpen = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
@@ -146,7 +154,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             if (state.channelError != null) StatusPage("频道读取失败", state.channelError!!, "重试", { graph.retryChannel(state.route!!.channel) })
                             else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
                         } else {
-                            val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0))
+                            val headerCount = timelineHeaderCount(conversation)
+                            val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + headerCount).coerceAtLeast(0))
                             var following by remember { mutableStateOf(state.browsePosition?.following != false) }
                             var initialized by remember { mutableStateOf(false) }
                             var autoScrolling by remember { mutableStateOf(false) }
@@ -154,7 +163,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             var pickingFile by remember { mutableStateOf(false) }
                             var focusApplied by remember(state.route?.tab, state.route?.focus) { mutableStateOf(false) }
                             var focusMissing by remember(state.route?.focus) { mutableStateOf(false) }
-                            val bottomIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0)
+                            val bottomIndex = (conversation.entries.lastIndex + headerCount).coerceAtLeast(0)
                             val latestBottomIndex by rememberUpdatedState(bottomIndex)
                             DisposableEffect(listState) { onDispose { graph.telemetry.scrolling.set(false) } }
                             suspend fun scrollCentre(index: Int) {
@@ -233,7 +242,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         following = false; graph.follow(false)
                                     } else if (index >= 0) {
                                         autoScrolling = true
-                                        try { withFrameNanos { }; listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0, position!!.offset) }
+                                        try { withFrameNanos { }; listState.scrollToItem(index + headerCount, position!!.offset) }
                                         finally { autoScrolling = false }
                                         following = false; graph.follow(false)
                                     } else { scrollEnd(); following = true; graph.follow(true) }
@@ -333,6 +342,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         features.files(state.route!!.channel).openLink(link); graph.files(true)
                                     } else runCatching { uriHandler.openUri(link) } },
                                 contentOverride = content,
+                                onAttachment = attachmentHandler.takeIf { features != null },
                                 messageContent = { message, default ->
                                     val target = messageTargets[message.id]
                                     val approval = taskState?.items?.firstOrNull { it.kind == "approval" && it.id == target?.envelope?.id }
@@ -380,7 +390,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 val index = conversation.entries.indexOfFirst { messageTargets[it.key]?.let { target -> target.turn?.requestId == key || target.envelope.id == key } == true }
                                 focusMissing = index < 0
                                 if (index >= 0) {
-                                    scrollCentre(index + if (conversation.hasOlder) 1 else 0)
+                                    scrollCentre(index + headerCount)
                                     focusApplied = true; initialized = true; following = false; graph.follow(false)
                                 }
                             }

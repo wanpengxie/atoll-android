@@ -21,6 +21,10 @@
 
   Long builds: `workspace.bash` answers after `yield_ms`; read on with
   `workspace.poll`.
+- The user's own phone may be plugged into mbp. Every adb and Gradle
+  device command must target the emulator only: `export ANDROID_SERIAL=emulator-5554`
+  (Gradle connected*/install*/uninstall* tasks otherwise run on every device).
+  Never install, run or uninstall anything on another device.
 - Emulator (`emulator-5554`) is shared: take the lock first
   (`mkdir ~/atoll-build/emulator.lock` succeeds = yours; `rmdir` when done).
   It must resolve tailnet names, so it runs with MagicDNS first; if it is
