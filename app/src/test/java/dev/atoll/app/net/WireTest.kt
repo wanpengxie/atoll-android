@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit
 
 class WireTest {
     private fun obj(text: String) = Json.parseToJsonElement(text).jsonObject
-    private class Fixture(timeout: Long = 30_000, reconnect: Long = 500) : AutoCloseable {
+    private class Fixture(timeout: Long = 30_000, reconnect: Long = 500, startImmediately: Boolean = true, private val firstLive: Long? = null) : AutoCloseable {
         val server = MockWebServer()
         val inbound = LinkedBlockingQueue<JsonObject>()
         val sockets = CopyOnWriteArrayList<WebSocket>()
@@ -25,6 +25,7 @@ class WireTest {
             server.start()
             upgrade()
             wire = Wire(server.url("/").toString(), OkHttpClient(), "Test phone", receiptTimeoutMs = timeout, reconnectBaseMs = reconnect)
+            if (startImmediately) wire.start()
         }
         fun upgrade() { server.enqueue(MockResponse().withWebSocketUpgrade(object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) { sockets.add(webSocket) }
@@ -33,6 +34,7 @@ class WireTest {
                 inbound.add(frame)
                 if (frame["frame_type"].string() == Up.ATTACH && acknowledgeAttach) {
                     send("receipt", frame["ref"].string(), """{"session":"screen-1","label":"Test phone","contract_version":5,"memberships":[],"history_meta":[]}""", webSocket)
+                    firstLive?.let { seq -> send("feed", payload = """{"channel_id":"c","seq":$seq,"generation":1,"envelope":{"id":"first","payload":{"body":{}}}}""", socket = webSocket) }
                 }
             }
         })) }
@@ -224,6 +226,19 @@ class WireTest {
             runCurrent()
             assertEquals("closed", (queued.await() as WireException).code)
             assertTrue(wire.state.value is WireState.SignedOut)
+        }
+    }
+
+    @Test fun explicitStartLetsSubscribersReceiveTheFirstLiveRow() = runBlocking<Unit> {
+        Fixture(startImmediately = false, firstLive = 7).use { f ->
+            delay(50)
+            assertEquals(0, f.server.requestCount)
+            val first = async(start = CoroutineStart.UNDISPATCHED) { withTimeout(5_000) { f.wire.frames.filterIsInstance<DownFrame.Feed>().first() } }
+            f.wire.start()
+            f.wire.start()
+            f.attached()
+            assertEquals(7L, first.await().row.seq)
+            assertEquals(1, f.server.requestCount)
         }
     }
 

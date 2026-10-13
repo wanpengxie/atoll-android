@@ -35,6 +35,7 @@ class Wire(
     private var generation = 0L
     private var counter = 0L
     private var attachRef = ""
+    private var started = false
     private var stopped = false
     private var reconnectAttempt = 0
     private var reconnectJob: Job? = null
@@ -54,8 +55,12 @@ class Wire(
             try { for (command in commands) command() }
             finally { scope.cancel() }
         }
-        enqueue { connect() }
     }
+
+    /** Subscribe to frames first; then start the initial attach/live stream. */
+    fun start() { enqueue {
+        if (!started && !stopped) { started = true; connect() }
+    } }
 
     override suspend fun request(type: String, payload: JsonObject): JsonObject {
         val result = CompletableDeferred<JsonObject>()
@@ -94,7 +99,7 @@ class Wire(
 
     /** Foreground recovery always re-attaches to obtain a fresh history/live seam. */
     fun reconnectNow() { enqueue {
-        if (!stopped) {
+        if (started && !stopped) {
             reconnectAttempt = 0
             reconnectJob?.cancel(); reconnectJob = null
             socket?.cancel(); socket = null
