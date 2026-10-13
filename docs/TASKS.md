@@ -206,6 +206,9 @@ Each package owns its files; live checks run on our test node.
   the release APK from the final main.
 - Accepted deviation: #31 long-press uses the platform's own timeout/slop
   instead of web's 500 ms / 8 px constants.
+- Accepted deviation: #29 copying a message with both streamed text and a
+  structured result copies both (text, blank line, JSON fence); web copies
+  only the terminal's textOf, which is the JSON.
 
 ## Status (lead keeps this current)
 
