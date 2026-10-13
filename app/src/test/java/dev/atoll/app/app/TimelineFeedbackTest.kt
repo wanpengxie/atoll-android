@@ -22,9 +22,28 @@ class TimelineFeedbackTest {
         val settled = timelineFeedback(view, empty, atStart = true, current = true, newerUnloaded = false)
         assertEquals(TimelineEmptyKind.Channel, settled.emptyKind)
         assertTrue(settled.emptySettled)
-        assertNotEquals(TimelineEmptyKind.Channel, timelineFeedback(view, empty, false, true, false).emptyKind)
-        assertNotEquals(TimelineEmptyKind.Channel, timelineFeedback(view, empty, true, false, false).emptyKind)
-        assertNotEquals(TimelineEmptyKind.Channel, timelineFeedback(view, empty, true, true, true).emptyKind)
+        assertFalse(timelineFeedback(view, empty, false, true, false).emptySettled)
+        assertFalse(timelineFeedback(view, empty, true, false, false).emptySettled)
+        assertFalse(timelineFeedback(view, empty, true, true, true).emptySettled)
+    }
+
+    @Test fun emptyAllViewPreparesUntilItsScanIsConfirmed() {
+        val all = view.copy(mineOnly = false)
+        val empty = ChannelReplica("c").snapshot()
+        val pending = listOf(
+            timelineFeedback(all, null, false, false, false),
+            timelineFeedback(all, empty, false, true, false),
+            timelineFeedback(all, empty, true, false, false),
+            timelineFeedback(all.copy(loadingOlder = true), empty, true, true, false),
+            timelineFeedback(all, empty, true, true, true),
+        )
+        pending.forEach { preparing ->
+            assertEquals(TimelineEmptyKind.Channel, preparing.emptyKind)
+            assertFalse(preparing.emptySettled)
+        }
+        val confirmed = timelineFeedback(all, empty, true, true, false)
+        assertEquals(TimelineEmptyKind.Channel, confirmed.emptyKind)
+        assertTrue(confirmed.emptySettled)
     }
 
     @Test fun mineAndActorEmptyResultsKeepChannelProvenance() {

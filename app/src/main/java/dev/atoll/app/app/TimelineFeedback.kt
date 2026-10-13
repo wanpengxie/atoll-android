@@ -9,7 +9,7 @@ internal fun timelineFeedback(view: ConversationViewState, source: TimelineSourc
     val settled = source != null && atStart && current && !view.loadingOlder && !newerUnloaded
     val actorFiltered = view.mineOnly && view.actorFilters.isNotEmpty()
     val kind = if (view.entries.isNotEmpty()) null else when {
-        settled && source!!.timeline.isEmpty() && source.narration.isEmpty() -> TimelineEmptyKind.Channel
+        source == null || source.timeline.isEmpty() && source.narration.isEmpty() -> TimelineEmptyKind.Channel
         actorFiltered -> TimelineEmptyKind.ActorFilter
         view.mineOnly -> TimelineEmptyKind.Mine
         else -> null
