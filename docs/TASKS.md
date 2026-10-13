@@ -90,10 +90,59 @@ Paths: `app/src/main/java/dev/atoll/app/ui/**`,
 `app/src/main/java/dev/atoll/app/MainActivity.kt`, `app/src/main/res/**`,
 `app/src/test/java/dev/atoll/app/ui/**`.
 
-## Next (queued; refined after the parity inventory)
-Integration (AppGraph: wire -> sync -> model -> ui), composer and agent
-controls (ask/steer/insert/replace/interrupt/dismiss/edit), waiting dock,
-files (browser, preview, download, upload), terminal (pty), members and
-governance, tasks, automation and timers, activity, approvals, agent
-options and context, running drawer, starred, recent, unread and
-notifications, registration, settings.
+## Wave 2 (queue; heaviest first; a free worker takes the next)
+
+Every task maps to sections of `docs/PARITY.md`; done = those items work
+on the emulator against the real node (screenshots in the report) and the
+JVM tests for its logic pass. UI follows `ui/theme` and `ui/components`
+from W1-ui. Each new local table lives in the task's own package and its
+own Room database file (no edits to `store/`).
+
+1. **W2-integrate** (critical path; starts when wave 1 is merged) —
+   `app/AppGraph`, ViewModels: login -> attach -> channel list (names from
+   ObsClient's channel tree, memberships, access states) -> channel screen
+   with the live timeline (sync -> model -> ui), scope 与我相关/全部 and
+   actor filters (persisted per channel), read positions and unread
+   (`src/model/notification-policy.js`), agent activity timers on the rail,
+   jump-to-bottom / new-items pill, routing and deep links, mobile channel
+   drawer, version-incompatible screen. PARITY §1, §2, §3 (list
+   behaviour), §15.
+2. **W2-composer** — editor, recipient pill and @menu with the delivery
+   priority, slash commands (static and dynamic from actor.describe),
+   reply mode, attachments (device upload via resource create + PUT
+   /files, pick from channel files), model/agent selector (agent.options,
+   agent.context, agent.select), send states and a durable outbox
+   (retry, expiry), drafts. PARITY §4. Package `compose/`.
+3. **W2-files** — `net/FileTransfer` (`/files` GET/PUT/HEAD, inline,
+   ETag), files browser (devices, breadcrumbs, sort, mkdir, upload,
+   download, delete, load more), preview (image, video, audio, PDF,
+   Markdown, HTML, text with highlighting and line jump, sniffing,
+   limits), preview stack, recent reads, file picker, `oss://` via
+   storage.get_url, file links from messages. PARITY §7.2, §8.1–8.2, §6
+   recent. Package `files/`.
+4. **W2-terminal** — `/pty` client (one socket, JSON control frames,
+   4-byte stream id binary frames, reconnect, session ids per
+   channel+device) and the terminal view (VT emulation, keyboard, resize,
+   theme). PARITY §0 pty. Package `terminal/`.
+5. **W2-waiting-edit** — waiting dock (grouping, insert/cancel/dismiss,
+   insert all/cancel all, labels) and the edit flow (hold -> replace /
+   unhold, background-task warning). PARITY §4 edit, §5. Package
+   `waiting/`.
+6. **W2-roster** — `net/ObsClient` (all /obs endpoints, 401 -> sign-out),
+   roster panel, actor detail (describe, invoke a word), member config
+   (get, placeholders, entry edit, config edit, merged values). PARITY §10.
+   Package `roster/`.
+7. **W2-governance** — channel details (members, settings, devices, danger
+   zone), new channel modal with progress, space admin (actor
+   descriptions, devices, global keys). PARITY §12, §13. Package
+   `governance/`.
+8. **W2-tasks** — port `src/model/feature-tasks.js`; tasks view (tabs,
+   filters, groups, waiting actions), task detail, create task, timed
+   actions, activity center, approval cards (resolve), ui.form modal with
+   secret fields. PARITY §9, §11, §14, §3 approvals. Package `tasks/`.
+9. **W2-content** — Markdown extras: code highlighting with line numbers,
+   math, Mermaid, images, structured JSON results tree, folding long
+   bodies, process panel (§7.1), running/starred drawers (§6). Package
+   `ui/` (owner of W1-ui).
+10. **W2-misc** — perf export, diagnostics, node upgrade block (root),
+    registration, logout, settings. PARITY §16, §1, §2 upgrade.
