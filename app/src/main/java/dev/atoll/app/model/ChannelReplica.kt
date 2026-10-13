@@ -11,6 +11,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
     private val requests = mutableMapOf<String, Row>()
     private val responses = mutableMapOf<String, TreeMap<Long, Row>>()
     private val pointers = mutableMapOf<String, MutableSet<String>>()
+    private val parentReferences = hashSetOf<String>()
     private val roots = mutableMapOf<String, String>()
     private val entries = mutableMapOf<String, TimelineEntry>()
     private val children = mutableMapOf<String, TreeMap<Long, String>>()
@@ -21,6 +22,36 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
     private val presentation = TimelinePresentation()
     private var revision = 0L
     private var projectionVersion = 0L
+    private var cachedSnapshot: ReplicaSnapshot? = null
+    private var cachedTimeline: TimelineSnapshot? = null
+    private var cachedOptions: TimelineOptions? = null
+    private var cachedNow = Long.MIN_VALUE
+    private val pendingChangedIds = linkedSetOf<String>()
+    private var pendingStructure = true
+    private var relation: ConversationRelationIndex? = null
+    private val taskRows = TreeMap<Long, Row>()
+    private var cachedTaskSteps: List<Envelope> = emptyList()
+    private var cachedRunningTasks: List<BackgroundTask> = emptyList()
+    private var tasksDirty = true
+    private var cachedRestarts: Map<String, Long> = emptyMap()
+    private var restartsDirty = true
+    private val deadlines = TreeMap<Long, MutableSet<String>>()
+    private val requestDeadlines = mutableMapOf<String, Long>()
+    /** The UI can schedule its next expiry refresh at this instant; null means none. */
+    var nextTimelineExpiryAt: Long? = null
+        private set
+
+    // Private live view is consumed synchronously. Published snapshots never expose it.
+    private val source = object : TimelineSource {
+        override val channelId get() = this@ChannelReplica.channelId
+        override val revision get() = this@ChannelReplica.revision
+        override val projectionVersion get() = this@ChannelReplica.projectionVersion
+        override val lastSeq get() = this@ChannelReplica.rows.lastKeyOrZero()
+        override val rows: Collection<Row> get() = this@ChannelReplica.rows.values
+        override val timeline: Collection<TimelineEntry> get() = this@ChannelReplica.timeline.values
+        override val narration: Collection<Row> get() = this@ChannelReplica.narration.values
+        override val envelopesById: Map<String, Envelope> get() = byId
+    }
     val rowCount: Int get() = rows.size
 
     fun apply(batch: RowBatch): ModelChange {
@@ -29,17 +60,20 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
         var structural = false
         val changed = linkedSetOf<String>()
         for (incoming in batch.rows) {
+            if (invalidRow(incoming) || duplicateEnvelope(incoming.envelope)) continue
             val row = incoming.copy(envelope = Envelope(freezeJson(incoming.envelope.json) as JsonObject))
             val envelope = row.envelope
-            if (row.channelId != channelId || row.seq <= 0 || rows.containsKey(row.seq)) continue
-            val known = byId[envelope.id]
-            if (envelope.id.isNotEmpty() && known != null && !(envelope.kind == "request" && !requests.containsKey(envelope.id) && closures.containsKey(envelope.id)) && !(envelope.kind == "request" && requests[envelope.id]?.let { !rows.containsKey(it.seq) } == true)) continue
             rows[row.seq] = row
             accepted++
             revision++
+            if (relation?.admit(envelope) == true) pendingStructure = true
+            if (envelope.type == "agent.task") { taskRows[row.seq] = row; tasksDirty = true }
             if (!projectable(envelope)) continue
+            if (envelope.id in parentReferences) pendingStructure = true
+            if (envelope.parentId.isNotEmpty()) parentReferences.add(envelope.parentId)
             byId[envelope.id] = envelope
             projectionVersion++
+            if (restartFact(envelope)) { restartsDirty = true; pendingStructure = true }
             when {
                 envelope.visibility == "system" -> { narration[row.seq] = row; structural = true; changed.add(envelope.id) }
                 envelope.kind == "request" && envelope.id.isNotEmpty() -> {
@@ -55,7 +89,34 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
                 else -> { timeline[row.seq] = TimelineEntry("standalone", row.seq, envelope = envelope); changed.add(envelope.id); structural = true }
             }
         }
+        pendingChangedIds.addAll(changed)
+        pendingStructure = pendingStructure || structural
         return ModelChange(accepted, java.util.Collections.unmodifiableSet(changed), structural, projectionVersion)
+    }
+
+    private fun invalidRow(row: Row) = row.channelId != channelId || row.seq <= 0 || rows.containsKey(row.seq)
+    private fun duplicateEnvelope(envelope: Envelope): Boolean {
+        if (envelope.id.isEmpty() || !byId.containsKey(envelope.id)) return false
+        return !readmittingTrimmedRequest(envelope)
+    }
+    private fun readmittingTrimmedRequest(envelope: Envelope): Boolean {
+        if (envelope.kind != "request") return false
+        val request = requests[envelope.id]
+        return request == null && closures.containsKey(envelope.id) || request != null && !rows.containsKey(request.seq)
+    }
+    private fun restartFact(envelope: Envelope): Boolean {
+        val type = if (envelope.kind == "response") requests[envelope.parentId]?.envelope?.type else envelope.type
+        return type in setOf("system.member.restart", "system.member.restart_all")
+    }
+    private fun noteDeadline(turn: Turn) {
+        requestDeadlines.remove(turn.requestId)?.let { deadline ->
+            deadlines[deadline]?.let { ids -> if (ids.remove(turn.requestId) && ids.isEmpty()) deadlines.remove(deadline) }
+        }
+        val deadline = turn.request.expiresAt.takeIf { it != 0L } ?: turn.request.body.number("expires_at")
+        if (turn.terminal == null && deadline > 0) {
+            requestDeadlines[turn.requestId] = deadline
+            deadlines.getOrPut(deadline) { hashSetOf() }.add(turn.requestId)
+        }
     }
 
     private fun rootOf(request: Envelope): String {
@@ -70,6 +131,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
     }
 
     private fun putRequest(row: Row, changed: MutableSet<String>) {
+        pendingStructure = true
         val id = row.envelope.id
         val previous = requests.put(id, row)
         previous?.envelope?.parentId?.let { pointers[it]?.remove(id) }
@@ -116,6 +178,7 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
         val provisional = ordered.filterNot { it.envelope.isTerminal }
         val turn = Turn(request.envelope, request.seq, frozen(provisional), terminal?.envelope, terminal?.seq ?: 0,
             maxOf(request.seq, ordered.maxOfOrNull { it.seq } ?: 0), proof != null && terminal === proof)
+        noteDeadline(turn)
         return TimelineEntry("turn", request.seq, turn = turn)
     }
 
@@ -184,6 +247,10 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
         revision++
         if (removed.any { projectable(it.envelope) }) projectionVersion++
         refold()
+        relation = relation?.let { old -> ConversationRelationIndex(old.selfId).also { index -> rows.values.forEach { index.admit(it.envelope) } } }
+        pendingStructure = true
+        tasksDirty = true
+        restartsDirty = true
         return removed.size
     }
 
@@ -194,10 +261,13 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
 
     private fun refold() {
         byId.clear(); requests.clear(); responses.clear(); pointers.clear(); roots.clear(); entries.clear(); children.clear(); timeline.clear(); narration.clear()
+        deadlines.clear(); requestDeadlines.clear(); taskRows.clear(); parentReferences.clear()
         val changed = mutableSetOf<String>()
         for (row in rows.values) {
             val envelope = row.envelope
+            if (envelope.type == "agent.task") taskRows[row.seq] = row
             if (!projectable(envelope)) continue
+            if (envelope.parentId.isNotEmpty()) parentReferences.add(envelope.parentId)
             byId[envelope.id] = envelope
             when {
                 envelope.visibility == "system" -> narration[row.seq] = row
@@ -214,8 +284,37 @@ class ChannelReplica(val channelId: String, val selfId: String = "") {
         requests.keys.toList().forEach { refresh(it, changed) }
     }
 
-    fun snapshot(): ReplicaSnapshot = ReplicaSnapshot(channelId, revision, projectionVersion, rows.lastKeyOrZero(), frozen(rows.values), frozen(timeline.values), frozen(narration.values), frozenMap(byId))
-    fun timeline(options: TimelineOptions = TimelineOptions(selfId = selfId)): TimelineSnapshot = presentation.project(snapshot(), options)
+    fun snapshot(): ReplicaSnapshot {
+        cachedSnapshot?.takeIf { it.revision == revision }?.let { return it }
+        return ReplicaSnapshot(channelId, revision, projectionVersion, rows.lastKeyOrZero(), frozen(rows.values), frozen(timeline.values), frozen(narration.values), frozenMap(byId)).also { cachedSnapshot = it }
+    }
+
+    fun timeline(options: TimelineOptions = TimelineOptions(selfId = selfId)): TimelineSnapshot {
+        val key = options.copy(now = 0)
+        val expiryChanged = options.now < cachedNow || nextTimelineExpiryAt?.let { options.now >= it } == true
+        cachedTimeline?.takeIf { it.revision == projectionVersion && cachedOptions == key && !expiryChanged }?.let { return it }
+        if (relation?.selfId != options.selfId) {
+            relation = ConversationRelationIndex(options.selfId).also { index -> rows.values.forEach { index.admit(it.envelope) } }
+            pendingStructure = true
+        }
+        if (restartsDirty) { cachedRestarts = RequestLifecycle.memberRestarts(source); restartsDirty = false }
+        if (tasksDirty) {
+            cachedTaskSteps = frozen(taskRows.values.map { it.envelope })
+            cachedRunningTasks = BackgroundTasks.runningBackgroundTasks(object : TimelineSource by source { override val rows: Collection<Row> get() = taskRows.values })
+            tasksDirty = false
+        }
+        val facts = ProjectionFacts(if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relation!!.ids else null, cachedRestarts, cachedTaskSteps, cachedRunningTasks)
+        val contentOnly = !pendingStructure && cachedOptions == key && !expiryChanged
+        val changedEntries = pendingChangedIds.mapNotNull { id -> entries[id]?.seq?.let { timeline[it] } }
+        val result = presentation.project(source, options, facts = facts, changedEntries = if (contentOnly && changedEntries.size == pendingChangedIds.size) changedEntries else null)
+        pendingChangedIds.clear()
+        pendingStructure = false
+        cachedOptions = key.copy(actorFilter = key.actorFilter.toSet(), timelinePlaced = key.timelinePlaced.toSet(), localEchoes = frozen(key.localEchoes))
+        cachedTimeline = result
+        cachedNow = options.now
+        nextTimelineExpiryAt = deadlines.higherKey(options.now)
+        return result
+    }
 
     private fun compactTerminal(row: Row): Row {
         val body = row.envelope.body

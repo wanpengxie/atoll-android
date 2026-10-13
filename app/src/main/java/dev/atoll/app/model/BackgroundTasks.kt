@@ -22,14 +22,14 @@ object BackgroundTasks {
             "${envelope.senderId}\u0000$task"
         }
     }
-    fun subTaskEnds(state: ReplicaSnapshot): Map<String, Envelope> {
+    fun subTaskEnds(state: TimelineSource): Map<String, Envelope> {
         val steps = state.rows.map { it.envelope }.filter { it.type == "agent.task" }
         val identity = subTaskIdentity(steps)
         val ends = mutableMapOf<String, Envelope>()
         for (step in steps) if (step.body.text("phase") in setOf("completed", "failed")) ends[identity(step)] = step
         return frozenMap(ends)
     }
-    fun runningBackgroundTasks(state: ReplicaSnapshot, actorId: String = ""): List<BackgroundTask> {
+    fun runningBackgroundTasks(state: TimelineSource, actorId: String = ""): List<BackgroundTask> {
         val steps = state.rows.map { it.envelope }.filter { it.type == "agent.task" }
         val identity = subTaskIdentity(steps)
         val tasks = linkedMapOf<String, BackgroundTask>()

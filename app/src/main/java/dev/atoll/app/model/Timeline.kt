@@ -50,17 +50,36 @@ data class TimelineEntry(
         listOfNotNull(turn.request, turn.terminal) + turn.provisional.map { it.envelope } + thread.flatMap { it.envelopes() }
 }
 
-data class ReplicaSnapshot(
-    val channelId: String,
-    val revision: Long,
-    val projectionVersion: Long,
-    val lastSeq: Long,
-    val rows: List<Row>,
-    val timeline: List<TimelineEntry>,
-    val narration: List<Row>,
-    /** Includes compact closure request placeholders, to suppress stale local echoes. */
-    val envelopesById: Map<String, Envelope>,
+/** Synchronous projection inputs. A live implementation stays private to the replica. */
+interface TimelineSource {
+    val channelId: String
+    val revision: Long
+    val projectionVersion: Long
+    val lastSeq: Long
+    val rows: Collection<Row>
+    val timeline: Collection<TimelineEntry>
+    val narration: Collection<Row>
+    val envelopesById: Map<String, Envelope>
+}
+
+data class ProjectionFacts(
+    val relatedIds: Set<String>?,
+    val restarts: Map<String, Long>,
+    val taskSteps: List<Envelope>,
+    val runningTasks: List<BackgroundTask>,
 )
+
+data class ReplicaSnapshot(
+    override val channelId: String,
+    override val revision: Long,
+    override val projectionVersion: Long,
+    override val lastSeq: Long,
+    override val rows: List<Row>,
+    override val timeline: List<TimelineEntry>,
+    override val narration: List<Row>,
+    /** Includes compact closure request placeholders, to suppress stale local echoes. */
+    override val envelopesById: Map<String, Envelope>,
+) : TimelineSource
 
 data class ModelChange(val accepted: Int, val changedIds: Set<String>, val structureChanged: Boolean, val projectionVersion: Long)
 

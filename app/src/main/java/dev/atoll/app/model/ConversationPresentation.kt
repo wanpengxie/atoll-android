@@ -21,7 +21,7 @@ data class TimelineOptions(
 
 object ConversationPresentation {
     private val selfOperations = setOf("terminal.command", "terminal.session")
-    fun relatedEnvelopeIds(state: ReplicaSnapshot, selfId: String): Set<String> {
+    fun relatedEnvelopeIds(state: TimelineSource, selfId: String): Set<String> {
         val seeds = mutableSetOf<String>()
         val correlations = mutableSetOf<String>()
         for (row in state.rows) {
@@ -41,7 +41,7 @@ object ConversationPresentation {
         }
         return java.util.Collections.unmodifiableSet(related)
     }
-    fun conversationRelation(state: ReplicaSnapshot, selfId: String): (Envelope) -> Boolean {
+    fun conversationRelation(state: TimelineSource, selfId: String): (Envelope) -> Boolean {
         val related = relatedEnvelopeIds(state, selfId)
         val byEnvelope = mutableMapOf<String, Boolean>()
         for (entry in state.timeline) {
@@ -52,9 +52,9 @@ object ConversationPresentation {
     }
     private fun matchesConversation(entry: TimelineEntry, related: Set<String>) = entry.envelopes().any { it.type !in selfOperations } && entry.envelopes().any { it.id in related }
     private fun waiting(turn: Turn, restarts: Map<String, Long>, options: TimelineOptions) = turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, restarts, options.now) in setOf(Lifecycle.PENDING, Lifecycle.WAITING)
-    fun selectTimelineItems(state: ReplicaSnapshot, options: TimelineOptions = TimelineOptions()): List<TimelineEntry> {
-        val restarts = RequestLifecycle.memberRestarts(state)
-        val related = if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relatedEnvelopeIds(state, options.selfId) else null
+    fun selectTimelineItems(state: TimelineSource, options: TimelineOptions = TimelineOptions(), facts: ProjectionFacts? = null): List<TimelineEntry> {
+        val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
+        val related = facts?.relatedIds ?: if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relatedEnvelopeIds(state, options.selfId) else null
         val filtered = state.timeline.mapNotNull { entry ->
             val envelope = entry.turn?.request ?: entry.envelope ?: return@mapNotNull null
             // Detached process rows wait until history admits their parent. Human prose and approvals survive.
@@ -77,7 +77,7 @@ object ConversationPresentation {
         val transientTail = mutableMapOf<String, TimelineEntry>()
         for (entry in filtered) if (isTransient(entry)) transientTail["${entry.envelope?.senderId}:${entry.envelope?.type}"] = entry
         val selected = filtered.filter { !isTransient(it) || transientTail["${it.envelope?.senderId}:${it.envelope?.type}"] === it }
-        val items = attachSubTasks(selected, state).toMutableList()
+        val items = attachSubTasks(selected, state, facts?.taskSteps).toMutableList()
         if (options.showNarration && state.narration.isNotEmpty()) {
             val first = state.narration.first().seq
             val index = items.indexOfFirst { it.seq > first }.takeIf { it >= 0 } ?: items.size
@@ -91,8 +91,9 @@ object ConversationPresentation {
     }
     private fun isTransient(entry: TimelineEntry) = entry.kind == "standalone" && (entry.envelope?.body?.flag("transient") == true || entry.envelope?.type == "mock.channel.pulse")
 
-    private fun attachSubTasks(items: List<TimelineEntry>, state: ReplicaSnapshot): List<TimelineEntry> {
-        val steps = state.rows.map { it.envelope }.filter { it.type == "agent.task" }
+    private fun attachSubTasks(items: List<TimelineEntry>, state: TimelineSource, taskSteps: List<Envelope>? = null): List<TimelineEntry> {
+        val steps = taskSteps ?: state.rows.map { it.envelope }.filter { it.type == "agent.task" }
+        if (steps.isEmpty()) return items
         val byRequest = steps.filter { it.parentId.isNotEmpty() }.groupBy { it.parentId }
         val holders = mutableMapOf<String, Int>()
         items.forEachIndexed { index, entry ->
@@ -101,7 +102,7 @@ object ConversationPresentation {
         val attached = mutableMapOf<Int, MutableList<Envelope>>()
         for ((request, index) in holders) attached.getOrPut(index) { mutableListOf() }.addAll(byRequest.getValue(request))
         val identity = BackgroundTasks.subTaskIdentity(steps)
-        val ends = BackgroundTasks.subTaskEnds(state)
+        val ends = steps.filter { it.body.text("phase") in setOf("completed", "failed") }.associateBy(identity)
         for (list in attached.values) for (key in list.map(identity).distinct()) ends[key]?.let { end -> if (end !in list) list.add(end) }
         fun orphan(entry: TimelineEntry) = entry.kind == "standalone" && entry.envelope?.type == "agent.task" && entry.envelope.parentId !in holders
         fun key(envelope: Envelope) = if (envelope.parentId.isNotEmpty()) "request:${envelope.parentId}" else "call:${envelope.body.text("call_id").ifEmpty { envelope.id }}"
@@ -140,35 +141,35 @@ object ConversationPresentation {
     }
     private fun subTaskRevision(steps: List<Envelope>) = "${steps.count { it.body.text("phase") != "progress" }}.${(steps.filter { it.body.text("phase") == "progress" }.maxOfOrNull { it.ts } ?: 0) / 15000}"
 
-    fun project(state: ReplicaSnapshot, options: TimelineOptions = TimelineOptions()): TimelineSnapshot {
-        val entries = selectTimelineItems(state, options)
-        val items = entries.mapIndexed { index, entry ->
-            val envelope = entry.turn?.request ?: entry.envelope
-            val timestamp = envelope?.ts ?: 0
-            val nextTimestamp = entries.getOrNull(index + 1)?.let { it.turn?.request?.ts ?: it.envelope?.ts } ?: 0
-            val day = dayOf(timestamp, options.zoneId)
-            val previous = entries.getOrNull(index - 1)
-            val previousTimestamp = previous?.turn?.request?.ts ?: previous?.envelope?.ts ?: 0
-            val previousAuthor = previous?.turn?.terminal?.senderId ?: previous?.turn?.request?.senderId ?: previous?.envelope?.senderId.orEmpty()
-            val continuation = previous != null && conversational(previous) && conversational(entry) && envelope?.senderId?.isNotEmpty() == true && envelope.senderId == previousAuthor && timestamp - previousTimestamp in 0..300000
-            val bounds = bounds(entry)
-            val text = envelope?.body?.text("text")?.ifEmpty { envelope.body.text("body") }.orEmpty()
-            val layout = when {
-                entry.kind == "narration" || entry.envelope?.let(ConversationVisibility::weakNoticeEvent) == true -> "compact"
-                envelope != null && (ConversationVisibility.attachments(envelope.body).isNotEmpty() || "```" in text || text.length > 1200) -> "rich"
-                entry.turn != null -> if (entry.turn.terminal == null) "reserved" else "normal"
-                text.length < 120 -> "compact"
-                else -> "normal"
-            }
-            PresentationItem(entry.id, entry, bounds.first, bounds.second,
-                entry.turn?.request?.audience?.firstOrNull() ?: entry.turn?.terminal?.senderId ?: envelope?.senderId.orEmpty(),
-                timestamp, day, if (timestamp > 0 && nextTimestamp > 0 && day != dayOf(nextTimestamp, options.zoneId)) nextTimestamp else 0,
-                continuation, layout, entry.turn?.terminal != null || entry.kind == "narration" || entry.turn == null && envelope?.body?.flag("transient") != true,
-                "${bounds.second}:${entry.copy(subTasks = emptyList()).hashCode()}${entry.subTaskRevision.takeIf { it.isNotEmpty() }?.let { ":$it" }.orEmpty()}")
+    fun project(state: TimelineSource, options: TimelineOptions = TimelineOptions(), facts: ProjectionFacts? = null): TimelineSnapshot {
+        val entries = selectTimelineItems(state, options, facts)
+        val items = entries.mapIndexed { index, entry -> presentationItem(entry, entries.getOrNull(index - 1), entries.getOrNull(index + 1), options) }
+        val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
+        val waitingTurns = state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } }.filter { waiting(it, restarts, options) }.sortedBy { it.requestSeq }
+        return TimelineSnapshot(state.channelId, state.projectionVersion, frozen(items), frozen(waitingTurns), (facts?.runningTasks ?: BackgroundTasks.runningBackgroundTasks(state)), entries.firstOrNull()?.seq ?: 0, entries.lastOrNull()?.seq ?: 0)
+    }
+    internal fun presentationItem(entry: TimelineEntry, previous: TimelineEntry?, next: TimelineEntry?, options: TimelineOptions): PresentationItem {
+        val envelope = entry.turn?.request ?: entry.envelope
+        val timestamp = envelope?.ts ?: 0
+        val nextTimestamp = next?.let { it.turn?.request?.ts ?: it.envelope?.ts } ?: 0
+        val day = dayOf(timestamp, options.zoneId)
+        val previousTimestamp = previous?.turn?.request?.ts ?: previous?.envelope?.ts ?: 0
+        val previousAuthor = previous?.turn?.terminal?.senderId ?: previous?.turn?.request?.senderId ?: previous?.envelope?.senderId.orEmpty()
+        val continuation = previous != null && conversational(previous) && conversational(entry) && envelope?.senderId?.isNotEmpty() == true && envelope.senderId == previousAuthor && timestamp - previousTimestamp in 0..300000
+        val bounds = bounds(entry)
+        val text = envelope?.body?.text("text")?.ifEmpty { envelope.body.text("body") }.orEmpty()
+        val layout = when {
+            entry.kind == "narration" || entry.envelope?.let(ConversationVisibility::weakNoticeEvent) == true -> "compact"
+            envelope != null && (ConversationVisibility.attachments(envelope.body).isNotEmpty() || "```" in text || text.length > 1200) -> "rich"
+            entry.turn != null -> if (entry.turn.terminal == null) "reserved" else "normal"
+            text.length < 120 -> "compact"
+            else -> "normal"
         }
-        val restarts = RequestLifecycle.memberRestarts(state)
-        val waitingTurns = state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } }.filter { waiting(it, restarts, options) }
-        return TimelineSnapshot(state.channelId, state.projectionVersion, frozen(items), frozen(waitingTurns), BackgroundTasks.runningBackgroundTasks(state), entries.firstOrNull()?.seq ?: 0, entries.lastOrNull()?.seq ?: 0)
+        return PresentationItem(entry.id, entry, bounds.first, bounds.second,
+            entry.turn?.request?.audience?.firstOrNull() ?: entry.turn?.terminal?.senderId ?: envelope?.senderId.orEmpty(),
+            timestamp, day, if (timestamp > 0 && nextTimestamp > 0 && day != dayOf(nextTimestamp, options.zoneId)) nextTimestamp else 0,
+            continuation, layout, entry.turn?.terminal != null || entry.kind == "narration" || entry.turn == null && envelope?.body?.flag("transient") != true,
+            "${bounds.second}:${entry.copy(subTasks = emptyList()).hashCode()}${entry.subTaskRevision.takeIf { it.isNotEmpty() }?.let { ":$it" }.orEmpty()}")
     }
     private fun dayOf(timestamp: Long, zone: ZoneId) = if (timestamp <= 0) "" else Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate().toString()
     private fun conversational(entry: TimelineEntry) = entry.kind == "standalone" && entry.envelope?.let { !ConversationVisibility.weakNoticeEvent(it) } == true || entry.kind == "turn" && entry.turn?.request?.type !in setOf("human.ask", "human.approve")
