@@ -30,10 +30,11 @@ class ComposerViewModel(
     private val now: () -> Long = System::currentTimeMillis,
     private val actorQueries: ActorQueries = WireActorQueries(wire),
     private val releaseResources: () -> Unit = {},
+    private val serverBoot: String = "",
 ) : ViewModel(), AutoCloseable {
     private val scope = CoroutineScope(SupervisorJob() + dispatcher)
     private val writeAccess = MutableStateFlow<Map<String, Boolean>>(emptyMap())
-    val engine = OutboxEngine(wire, outbox, outboxDispatcher, now, mayTransmit = { writeAccess.value[it] == true })
+    val engine = OutboxEngine(wire, outbox, outboxDispatcher, now, mayTransmit = { writeAccess.value[it] == true && (serverBoot.isEmpty() || (wire.state.value as? WireState.Attached)?.receipt?.text("boot") == serverBoot) })
     private val mutable = MutableStateFlow(ComposerUiState())
     val state: StateFlow<ComposerUiState> = mutable.asStateFlow()
     val submissions = engine.submissions

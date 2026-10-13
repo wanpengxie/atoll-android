@@ -24,6 +24,6 @@ fun createComposerViewModel(
     val database = ComposerDatabase.open(context)
     return ComposerViewModel(owner, services.wire, RoomOutboxRepository(owner, database),
         ChannelAttachmentUploader { id -> FileRepository(id, services.wire, services.httpClient, services.server, context.applicationContext.cacheDir) },
-        releaseResources = database::close,
+        releaseResources = database::close, serverBoot = boot,
     ).also { it.setChannel(channelId, services.selfIds[channelId].orEmpty(), roster, writable) }
 }
