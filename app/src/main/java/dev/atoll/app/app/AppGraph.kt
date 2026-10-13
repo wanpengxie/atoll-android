@@ -109,7 +109,6 @@ class AppGraph(private val context: Context) {
     }
 
     fun login(form: LoginViewState) { post(Login(form)) }
-    fun changeLogin(form: LoginViewState) { post(Form(form)) }
     fun logout() { post(Logout) }
     fun openChannel(id: String) { post(Navigate(AppRoute(id), push = true, restoreSurface = true)) }
     fun channelCreated(id: String, parent: String, name: String, boot: String, enter: Boolean = false) { post(CreatedChannel(id, parent, name, boot, enter)) }
@@ -154,7 +153,6 @@ class AppGraph(private val context: Context) {
                 else if (account.isEmpty()) mutableState.value = mutableState.value.copy(phase = WorkspacePhase.Login)
                 else authenticate(server, account)
             }
-            is Form -> mutableState.value = mutableState.value.copy(login = event.value.copy(busy = mutableState.value.login.busy))
             is Login -> {
                 if (mutableState.value.login.busy) return
                 val error = identityFormError(event.form)
@@ -636,7 +634,6 @@ class AppGraph(private val context: Context) {
         val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal, var update: NodeUpdateMonitor? = null, var exportJob: Job? = null)
     private sealed interface Event
     private data object Restore : Event
-    private data class Form(val value: LoginViewState) : Event
     private data class Login(val form: LoginViewState) : Event
     private data class Authenticated(val epoch: Long, val auth: Auth?, val failure: Exception?, val restoring: Boolean) : Event
     private data class TransportState(val epoch: Long, val state: WireState) : Event

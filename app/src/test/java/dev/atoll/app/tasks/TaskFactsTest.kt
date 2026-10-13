@@ -28,6 +28,10 @@ class TaskFactsTest {
         assertEquals("### Diagram ```mermaid graph TD A-->B ```",compactWorkTitle(fact.title))
         assertEquals(text,fact.turn!!.request.body.text("text"))
     }
+    @Test fun listTitleFormattingProcessesABoundedPrefixOfLongBodies() {
+        val compact=compactWorkTitle("long body ".repeat(100_000))
+        assertTrue(compact.length<=513);assertTrue(compact.endsWith("…"))
+    }
     @Test fun tc1495CombinesLedgerTasksApprovalsRunsRecoveryAndLocalTimersWithNativeIdentity() {
         val replica = ChannelReplica(channel,"me")
         add(replica,1,envelope("approval","human.approve",json("""{"title":"发布生产","impact":"线上流量"}"""),audience=listOf("me"),sender="agent",expires=9999))
