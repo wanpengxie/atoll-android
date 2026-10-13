@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import urllib.parse
 
 from support import EmulatorLock, Failure, NoRedirect, STEPS, URL, load_node, ssh, validate_url
 
@@ -42,6 +43,33 @@ def verify_emulator(environment, lock):
     lock.event('emulator-verified', serial='emulator-5554')
 
 
+def wait_emulator_network(environment, lock):
+    # boot_completed also fires before the guest's usable network is ready.
+    # Check warm runs too: the host's successful curl does not test guest routing.
+    validate_url(URL)
+    target = urllib.parse.urlsplit(URL)
+    deadline = time.monotonic() + 120
+    attempts = 0
+    while time.monotonic() < deadline:
+        lock.check_owner()
+        if environment.get('ANDROID_SERIAL') != 'emulator-5554':
+            raise Failure('ANDROID_SERIAL must explicitly select emulator-5554')
+        attempts += 1
+        try:
+            probe = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'toybox', 'nc', '-z', '-w', '3',
+                                    target.hostname, str(target.port)], env=environment,
+                                   capture_output=True, text=True, timeout=8)
+            if probe.returncode == 0:
+                lock.event('emulator-network-ready', server=URL, attempts=attempts)
+                return
+            lock.event('emulator-network-wait', server=URL, attempt=attempts, exit_code=probe.returncode)
+        except subprocess.TimeoutExpired:
+            lock.event('emulator-network-wait', server=URL, attempt=attempts, exit_code=124)
+        time.sleep(2)
+    raise Failure('environment problem: emulator-5554 could not reach the test node at ' + URL +
+                  ' within 120s; no Gradle test was started')
+
+
 def ensure_emulator(environment, lock):
     if 'emulator-5554' not in device_states(environment, lock):
         emulator = Path.home() / 'Library/Android/sdk/emulator/emulator'
@@ -58,8 +86,12 @@ def ensure_emulator(environment, lock):
         boot = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'getprop', 'sys.boot_completed'],
                               env=environment, capture_output=True, text=True, timeout=15)
         if boot.returncode == 0 and boot.stdout.strip() == '1':
-            verify_emulator(environment, lock)
-            return
+            animation = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'getprop', 'init.svc.bootanim'],
+                                       env=environment, capture_output=True, text=True, timeout=15)
+            if animation.returncode == 0 and animation.stdout.strip() == 'stopped':
+                verify_emulator(environment, lock)
+                wait_emulator_network(environment, lock)
+                return
         time.sleep(2)
     raise Failure('emulator-5554 did not finish booting; lock retained')
 
