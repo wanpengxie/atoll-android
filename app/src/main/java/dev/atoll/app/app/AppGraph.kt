@@ -73,6 +73,7 @@ class AppGraph(private val context: Context) {
     private var foreground = true
     private var channelOpenedAt = 0L
     private var notice: String? = null
+    private var upgrade: NodeUpdateValue? = null
 
     init {
         scope.launch {
@@ -107,6 +108,7 @@ class AppGraph(private val context: Context) {
     fun foreground(value: Boolean) { post(Foreground(value)) }
     fun dismissNotice() { post(Notice(null)) }
     fun reconnect() { post(Reconnect) }
+    fun upgrade() { post(Upgrade) }
     fun notice(value: String) { post(Notice(value)) }
 
     private fun post(event: Event) { scope.launch { commands.send(event) } }
@@ -174,6 +176,8 @@ class AppGraph(private val context: Context) {
             is Terminal -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).terminal(event.open))
             }
+            Upgrade -> runtime?.update?.start()
+            is Update -> if (event.epoch == epoch) { upgrade = event.value; publish() }
             Reconnect -> {
                 val rt = runtime
                 if (rt != null && mutableState.value.phase == WorkspacePhase.Incompatible) {
@@ -285,6 +289,11 @@ class AppGraph(private val context: Context) {
         val pty = PtyClient(auth.server, http)
         runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope, pty, name = auth.principal["display_name"].string().ifEmpty { principalId })
         mutableServices.value = WorkspaceServices(auth.server, principalId, emptyMap(), gate, obs, http, pty = pty)
+        if (principalId == "root") {
+            val update = NodeUpdateMonitor(NodeUpdateClient(auth.server, http), gate, sessionScope, root = true)
+            runtime!!.update = update
+            sessionScope.launch { update.state.collect { commands.send(Update(requestEpoch, it)) } }
+        }
         preferences.get(namespace, "channels")?.let { saved -> runCatching { channelRecords(Json.parseToJsonElement(saved).jsonObject).forEach { records[it.id] = it } } }
         if (requestedRoute == null) {
             requestedRoute = preferences.get(namespace, "last-channel")?.takeIf { it.isNotEmpty() }?.let { AppRoute(it) }
@@ -505,7 +514,7 @@ class AppGraph(private val context: Context) {
                 unreadPhase = if (unread.pending) UnreadPhase.Recovering else if (unread.unknown) UnreadPhase.Unknown else UnreadPhase.Ready,
                 activity = state?.activity.orEmpty(), parentId = record.parent, depth = depth)
         }
-        val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.name, rt.principal == "root"), route?.channel)
+        val nav = ChannelNavigationViewState(channels, phase, AccountViewState(rt.principal, rt.name, rt.principal == "root"), route?.channel, upgrade = upgrade?.view())
         val channelState = channelStates[route?.channel]
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
@@ -521,10 +530,10 @@ class AppGraph(private val context: Context) {
     }
     private suspend fun tearDown(incrementEpoch: Boolean = true) {
         if (incrementEpoch) epoch++
-        runtime?.let { rt -> rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
+        runtime?.let { rt -> rt.update?.close(); rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
-        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null
+        records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null; upgrade = null
     }
     private fun fallback(id: String) = ChannelRecord(id, id, null, id)
     private fun cachedTree(records: Collection<ChannelRecord>) = buildJsonObject {
@@ -550,7 +559,7 @@ class AppGraph(private val context: Context) {
     private data class DevelopmentAuth(val server: String, val account: String, val token: String)
     private data class Auth(val server: String, val account: String, val principal: JsonObject, val identity: IdentityClient)
     private class Runtime(val namespace: String, val principal: String, val identity: IdentityClient, val wire: Wire,
-        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal)
+        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0, val name: String = principal, var update: NodeUpdateMonitor? = null)
     private sealed interface Event
     private data object Restore : Event
     private data class Form(val value: LoginViewState) : Event
@@ -568,6 +577,8 @@ class AppGraph(private val context: Context) {
     private data class Files(val open: Boolean) : Event
     private data class Terminal(val open: Boolean) : Event
     private data object Reconnect : Event
+    private data object Upgrade : Event
+    private data class Update(val epoch: Long, val value: NodeUpdateValue) : Event
     private data class Follow(val value: Boolean) : Event
     private data object ScopeToggle : Event
     private data class Filter(val id: String?) : Event

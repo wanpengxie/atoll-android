@@ -10,14 +10,15 @@ enum class UnreadPhase { Ready, Recovering, Unknown }
 enum class ConnectionPhase { OPEN, CONNECTING, RECONNECTING, CLOSED }
 @Immutable data class AgentActivityViewState(val id: String, val name: String, val startedAtMillis: Long)
 @Immutable data class AccountViewState(val id: String, val name: String = "已登录用户", val root: Boolean = false)
-@Immutable data class UpgradeViewState(val current: String, val latest: String = "最新版", val phase: String = "available", val detail: String = "") {
+@Immutable data class UpgradeViewState(val current: String, val latest: String = "最新版", val phase: String = "available", val detail: String = "", val available: Boolean = true) {
     fun label(connection: ConnectionPhase): String = when (phase) {
         "starting" -> "准备升级…"; "downloading" -> "正在下载…"; "verifying" -> "正在校验…"
         "installing" -> "正在安装…"; "restarting" -> if (connection == ConnectionPhase.OPEN) "正在重启…" else "正在重连…"
-        "failed" -> "升级失败，重试"; "unsupported", "unavailable" -> detail.ifEmpty { "当前节点升级能力不可用" }
+        "checking" -> "正在检查更新…"; "current" -> "已是最新版"
+        "failed" -> if (available) "升级失败，重试" else "检查更新失败"; "unsupported", "unavailable" -> detail.ifEmpty { "当前节点升级能力不可用" }
         else -> "升级到 $latest"
     }
-    val canStart get() = phase == "available" || phase == "failed"
+    val canStart get() = available && (phase == "available" || phase == "failed")
 }
 @Immutable data class ChannelNavigationViewState(val channels: List<ChannelViewState>, val connection: ConnectionPhase,
     val account: AccountViewState, val activeChannelId: String? = null, val upgrade: UpgradeViewState? = null)
