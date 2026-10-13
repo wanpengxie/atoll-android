@@ -78,21 +78,33 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         if (item.entry.kind=="narration") return source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
             .mapNotNull { row -> narrationText(row.envelope,names)?.let { UiEntry.Notice("${item.key}:${row.envelope.id}",it) } }.orEmpty()
         val result = mutableListOf<UiEntry>()
-        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null) {
+        val tasks = subTaskViews(item.entry.subTasks,names)
+        val tasksByRequest = tasks.groupBy { it.requestId.orEmpty() }
+        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList()) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
             if (turn == null) {
                 val envelope = entry.envelope ?: return
                 if (entry.kind == "narration" || ConversationVisibility.weakNoticeEvent(envelope)) result += UiEntry.Notice(key, weakNoticeText(envelope,names,time(envelope.ts)))
-                else message(envelope, "$key:message", continuation = continuation)
+                else if(envelope.type=="agent.task") message(envelope,"$key:message",text="",continuation=continuation,
+                    taskStates=tasks.ifEmpty { subTaskViews(listOf(envelope),names) })
+                else if(envelope.type=="agent.provider.run") {
+                    val summary=envelope.body["task_summary"].string()
+                    val returned=summary.takeIf(String::isNotBlank)?.let { SubTaskViewState("provider:${envelope.id}",
+                        dev.atoll.app.tasks.compactWorkTitle(it).replace(Regex("^#+\\s*"),"").replace(Regex("[*_`]"),"").take(80),
+                        names[envelope.senderId] ?: envelope.senderId,SubTaskKind.Other,SubTaskPhase.Completed,envelope.ts,
+                        requestId=envelope.parentId.takeIf(String::isNotEmpty),result=it) }
+                    message(envelope,"$key:message",text=prose(envelope.body),continuation=continuation,taskStates=listOfNotNull(returned))
+                } else message(envelope, "$key:message", continuation = continuation)
                 return
             }
             message(turn.request, "$key:request", continuation = continuation)
             val terminal = turn.terminal
+            val ownedTasks = tasksByRequest[turn.requestId].orEmpty()
             val streamed = turn.provisional.mapNotNull { row ->
                 (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
                     ?.get("text").string().takeIf(String::isNotBlank)
@@ -115,19 +127,19 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val visible = if (!superseded && !interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
                 val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
-                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result,trailState=trail.takeUnless { superseded })
+                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 val lost = lostReason
-                if (latest != null || lost.isNotEmpty()) {
+                if (latest != null || lost.isNotEmpty() || ownedTasks.isNotEmpty()) {
                     val response = latest ?: Envelope(JsonObject(turn.request.json + mapOf("kind" to JsonPrimitive("response"),
                         "sender" to buildJsonObject { put("id",turn.request.audience.firstOrNull().orEmpty());put("kind","agent") })))
                     val process = latest?.body?.get("process") as? JsonObject
                     val label = when (lost) { "restart" -> "未完成 · Agent 已重启";"expired" -> "未完成 · 已过期";else -> "" }
                     message(response, "$key:answer", (streamed + label).filter(String::isNotBlank).joinToString("\n\n"),
-                        if (lost.isNotEmpty()) null else if (turn.latestCoreStatus=="processing") MessageStatus.Processing else MessageStatus.Queued,
+                        if (lost.isNotEmpty() || latest==null) null else if (turn.latestCoreStatus=="processing") MessageStatus.Processing else MessageStatus.Queued,
                         process?.takeUnless { it["kind"].string()=="stage" && it["stage"].string()=="text" }?.get("text").string().takeIf(String::isNotBlank),
-                        trailState=trail)
+                        trailState=trail,taskStates=ownedTasks)
                 }
             }
             if (!superseded) entry.thread.filterNot { it in calls }.forEach { turn(it, "$key:${it.id}", false) }
@@ -296,4 +308,29 @@ private fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEnt
     val start=turn.provisional.firstOrNull { it.envelope.status=="processing" }?.envelope?.ts ?: turn.request.ts
     return ProgressTrailViewState(dev.atoll.app.tasks.compactWorkTitle(prose(turn.request.body)).ifEmpty { "过程记录" },
         records.sortedBy { it.seq }.map { it.value },running,start,time(start))
+}
+
+/** Same sender/task identity as the web tree; resumed calls do not create extra leaves. */
+private fun subTaskViews(steps: List<Envelope>,names: Map<String,String>):List<SubTaskViewState> {
+    if(steps.isEmpty()) return emptyList()
+    val identity=BackgroundTasks.subTaskIdentity(steps)
+    val tasks=linkedMapOf<String,SubTaskViewState>()
+    for(e in steps) {
+        val body=e.body;val key=identity(e);val previous=tasks[key]
+        val phase=body["phase"].string();val text=body["text"].string().trim()
+        val messages=if(phase=="message" && text.isNotEmpty()) previous?.messages.orEmpty()+text else previous?.messages.orEmpty()
+        val result=if(phase in setOf("completed","failed") && text.isNotEmpty()) text else previous?.result.orEmpty()
+        val task=SubTaskViewState(key,body["title"].string().ifEmpty { previous?.title.orEmpty().ifEmpty { "（未命名任务）" } },
+            names[e.senderId] ?: e.senderId,
+            if(body["kind"].string()=="shell") SubTaskKind.Shell else previous?.kind ?: SubTaskKind.Agent,
+            when(phase) { "completed" -> SubTaskPhase.Completed;"failed" -> SubTaskPhase.Failed;else -> previous?.phase ?: SubTaskPhase.Running },
+            if(previous==null || previous.startedAtMillis<=0) e.ts else if(e.ts>0) minOf(previous.startedAtMillis,e.ts) else previous.startedAtMillis,
+            requestId=previous?.requestId ?: e.parentId.takeIf(String::isNotEmpty),
+            latest=if(phase in setOf("progress","message") && text.isNotEmpty()) text.lineSequence().first().take(120) else previous?.latest.orEmpty(),
+            result=result,messages=messages)
+        tasks[key]=task
+    }
+    return tasks.values.map { task ->
+        if(task.result.isNotEmpty() && task.messages.lastOrNull()?.trim()==task.result.trim()) task.copy(messages=task.messages.dropLast(1)) else task
+    }
 }

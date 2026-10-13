@@ -172,4 +172,33 @@ class WorkspaceMappingContentTest {
         assertEquals(json("""{"command":"ls"}"""),messages.last().trail!!.records.single().input)
     }
 
+    @Test fun attachedAndOrphanTasksUseStableAgentIdentityAndRetainReturnMessages() {
+        fun task(seq: Long,id: String,body: JsonObject,parent: String="q")=row(seq,id,"event",body,"agent.task",parent)
+        val messages=mapped(row(1,"q","request",json("""{"text":"question"}""")),
+            task(2,"s",json("""{"call_id":"call-1","task_id":"worker","kind":"agent","phase":"started","title":"Research"}""")),
+            task(3,"m",json("""{"call_id":"call-2","task_id":"worker","phase":"message","text":"returned"}""")),
+            task(4,"e",json("""{"call_id":"call-2","task_id":"worker","phase":"completed","text":"returned"}""")),
+            row(5,"a","response",json("""{"status":"completed","text":"done"}"""),parent="q"))
+        val leaf=messages.last().subTasks.single()
+        assertEquals("agent:a"+'\u0000'+"worker",leaf.id);assertEquals("q",leaf.requestId)
+        assertEquals("returned",leaf.result);assertTrue(leaf.messages.isEmpty())
+        assertEquals(dev.atoll.app.ui.screens.SubTaskPhase.Completed,leaf.phase)
+        val orphan=mapped(task(1,"orphan",json("""{"call_id":"shell","kind":"shell","phase":"started","title":"Build"}"""),"")).single()
+        assertEquals("",orphan.text);assertEquals(dev.atoll.app.ui.screens.SubTaskKind.Shell,orphan.subTasks.single().kind)
+    }
+    @Test fun fourBackgroundTasksPopulateTheExistingFoldedTreeAsOneLogicalRow() {
+        val rows=(1L..4).map { seq -> row(seq,"task$seq","event",buildJsonObject {
+            put("task_id","worker$seq");put("call_id","call$seq");put("kind","agent");put("phase","started");put("title","Worker $seq")
+        },"agent.task") }
+        val messages=mapped(*rows.toTypedArray())
+        assertEquals(1,messages.size);assertEquals(4,messages.single().subTasks.size)
+    }
+    @Test fun providerReturnSummaryIsACompletedTaskLeafRatherThanRawJson() {
+        val message=mapped(row(1,"run","event",json("""{"text":"Summary reply","task_summary":"### Research returned"}"""),"agent.provider.run")).single()
+        assertEquals("Summary reply",message.text)
+        assertEquals("Research returned",message.subTasks.single().title)
+        assertEquals("### Research returned",message.subTasks.single().result)
+        assertEquals(dev.atoll.app.ui.screens.SubTaskPhase.Completed,message.subTasks.single().phase)
+    }
+
 }
