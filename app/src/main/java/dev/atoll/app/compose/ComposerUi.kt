@@ -32,7 +32,8 @@ import kotlinx.coroutines.*
 
 /** Host owns the channel-files picker and preview; selected resources enter addAttachments(). */
 @Composable
-fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, onPickChannelFiles: (() -> Unit)? = null, onPreviewAttachment: ((ComposerAttachment) -> Unit)? = null, showLocalEchoes: Boolean = true) {
+fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, onPickChannelFiles: (() -> Unit)? = null, onPreviewAttachment: ((ComposerAttachment) -> Unit)? = null, showLocalEchoes: Boolean = true, editing: ComposerEditBinding? = null) {
+    if (editing != null) { EditingComposer(editing, modifier.background(AtollColors.Input)); return }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
