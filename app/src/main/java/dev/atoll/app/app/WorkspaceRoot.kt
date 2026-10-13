@@ -154,7 +154,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             val access = state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.access
                             if (state.channelError != null) StatusPage("频道读取失败", state.channelError!!, "重试", { graph.retryChannel(state.route!!.channel) })
                             else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
-                        } else {
+                        } else key(browseViewKey(conversation.mineOnly, conversation.actorFilters)) {
+                            val readingView = browseViewKey(conversation.mineOnly, conversation.actorFilters)
                             val headerCount = timelineHeaderCount(conversation)
                             val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + headerCount).coerceAtLeast(0))
                             var following by remember { mutableStateOf(state.browsePosition?.following != false) }
@@ -215,7 +216,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         }
                                     }
                                 }.distinctUntilChanged().debounce(250).collect { position ->
-                                    position?.let { (key, offset, follow) -> graph.browse(channel, key, offset, follow) }
+                                    position?.let { (key, offset, follow) -> graph.browse(channel, readingView, key, offset, follow) }
                                 }
                             }
                             val latestConversation by rememberUpdatedState(conversation)

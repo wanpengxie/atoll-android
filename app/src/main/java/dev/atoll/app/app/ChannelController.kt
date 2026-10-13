@@ -50,6 +50,8 @@ class ChannelController(
     private var actors = emptyList<ActorRecord>()
     private val activity = linkedMapOf<String, AgentActivityViewState>()
     private var browsePosition: BrowsePosition? = null
+    private val viewKey get() = browseViewKey(options.mineOnly && selfId.isNotBlank(), options.actorFilters)
+    private val browseKey get() = "$id.browse.$viewKey"
     private var restoreNotice: String? = null
     private var readPosition = 0L
     private var unread = UnreadCount(pending = true)
@@ -89,7 +91,7 @@ class ChannelController(
                     preferences.put(namespace, "$id.baselined", "true")
                 }
                 options = preferences.options(namespace, id)
-                browsePosition = BrowsePosition.decode(preferences.get(namespace, "$id.browse"))
+                browsePosition = BrowsePosition.decode(preferences.get(namespace, browseKey))
                 queueUnread()
                 for (command in commands) {
                     try { handle(command) }
@@ -114,7 +116,7 @@ class ChannelController(
     suspend fun filter(actor: String?) { commands.send(Filter(actor)) }
     suspend fun loadOlder() { commands.send(LoadOlder) }
     suspend fun retry() { commands.send(Retry) }
-    suspend fun browse(key: String, offset: Int, following: Boolean) { commands.send(Browse(key, offset, following)) }
+    suspend fun browse(view: String, key: String, offset: Int, following: Boolean) { commands.send(Browse(view, key, offset, following)) }
     suspend fun jumpToBottom() { commands.send(Jump) }
     suspend fun visibleRows(keys: Set<String>) { commands.send(VisibleRows(keys)) }
     suspend fun localPlacement(echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { commands.send(LocalPlacement(echoes, placed)) }
@@ -174,11 +176,11 @@ class ChannelController(
             is VisibleRows -> markSeen(command.keys)
             is Browse -> {
                 val seq = rowSequences[command.key] ?: 0
-                if (seq > 0 && replica != null && foreground) {
+                if (command.view == viewKey && seq > 0 && replica != null && foreground) {
                     val value = BrowsePosition(command.key, seq, command.offset.coerceAtLeast(0), command.following)
                     if (value != browsePosition) {
                         browsePosition = value
-                        preferences.put(namespace, "$id.browse", value.encode())
+                        preferences.put(namespace, browseKey, value.encode())
                     }
                 }
             }
@@ -186,10 +188,9 @@ class ChannelController(
                 localEchoes = command.echoes; timelinePlaced = command.placed
                 project()
             }
-            ChangeScope -> { options = options.copy(mineOnly = !options.mineOnly); preferences.saveOptions(namespace, id, options); project() }
-            is Filter -> { options = options.copy(actorFilters = if (command.actor == null) emptySet() else
-                if (command.actor in options.actorFilters) options.actorFilters - command.actor else options.actorFilters + command.actor)
-                preferences.saveOptions(namespace, id, options); project() }
+            ChangeScope -> changeView(options.copy(mineOnly = !options.mineOnly))
+            is Filter -> changeView(options.copy(actorFilters = if (command.actor == null) emptySet() else
+                if (command.actor in options.actorFilters) options.actorFilters - command.actor else options.actorFilters + command.actor))
             LoadOlder -> {
                 if (older == null && replica != null) {
                     val before = replica!!.snapshot().rows.firstOrNull()?.seq ?: 0
@@ -217,6 +218,16 @@ class ChannelController(
         }
         updateFeedback()
         publish()
+    }
+
+    private suspend fun changeView(next: ChannelViewOptions) {
+        val previous = viewKey
+        options = next
+        preferences.saveOptions(namespace, id, options)
+        if (previous != viewKey) {
+            browsePosition = BrowsePosition.decode(preferences.get(namespace, browseKey))
+            if (replica != null) loadTail()
+        } else project()
     }
 
     private suspend fun loadTail(restoreBrowse: Boolean = true) {
@@ -384,7 +395,7 @@ class ChannelController(
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command
     private data object Jump : Command
     private data class VisibleRows(val keys: Set<String>) : Command
-    private data class Browse(val key: String, val offset: Int, val following: Boolean) : Command
+    private data class Browse(val view: String, val key: String, val offset: Int, val following: Boolean) : Command
     private data class LocalPlacement(val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Command
     private data object RefreshUnread : Command
     private data object ActivityExpiry : Command
