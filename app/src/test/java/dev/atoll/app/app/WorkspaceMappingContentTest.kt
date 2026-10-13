@@ -69,5 +69,28 @@ class WorkspaceMappingContentTest {
         assertEquals("partial answer\n\n✗ 已停止 · 发消息即继续",answer.text);assertNull(answer.result)
     }
 
+    @Test fun newestTurnDoesNotFoldAndAppendReusesOlderMappedResults() {
+        val replica=ChannelReplica("c","human:self")
+        fun pair(start: Long,id: String)=listOf(row(start,id,"request",json("""{"text":"question"}""")),
+            row(start+1,"a$id","response",json("""{"status":"completed","text":"answer"}"""),parent=id))
+        replica.apply(RowBatch("c",pair(1,"one")+pair(3,"two"),Origin.LIVE))
+        val mapper=TimelineMapper();val options=TimelineOptions(scope=ConversationScope.ALL,selfId="human:self")
+        fun project()=mapper.map(replica.timeline(options),"human:self",emptyList()).filterIsInstance<UiEntry.Message>().map { it.value }
+        val first=project();assertEquals(listOf(false,false,true,true),first.map { it.latest })
+        replica.apply(RowBatch("c",pair(5,"three"),Origin.LIVE));val next=project()
+        assertSame(first.first(),next.first());assertSame(first[1],next[1])
+        assertEquals(listOf(false,false,false,false,true,true),next.map { it.latest })
+        assertSame(next.first(),project().first())
+    }
+    @Test fun cacheTracksHistoryAvailabilityAndEffectiveSelfIdentity() {
+        val replica=ChannelReplica("c","human:self")
+        replica.apply(RowBatch("c",listOf(row(1,"q","request",json("""{"text":"question"}""")),
+            row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"thinking"}}"""),parent="q")),Origin.LIVE))
+        val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self"))
+        val mapper=TimelineMapper()
+        assertTrue(mapper.map(snapshot,"human:self",emptyList()).filterIsInstance<UiEntry.Message>().any { it.value.status!=null })
+        assertTrue(mapper.map(snapshot,"human:self",emptyList(),true).filterIsInstance<UiEntry.Message>().all { it.value.status==null })
+        assertFalse(mapper.map(snapshot,"someone-else",emptyList()).filterIsInstance<UiEntry.Message>().first().value.self)
+    }
 
 }
