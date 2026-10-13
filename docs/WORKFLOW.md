@@ -28,7 +28,12 @@
   `nohup ~/Library/Android/sdk/emulator/emulator -avd ash-browser -no-window -no-snapshot-load -no-snapshot-save -gpu host -dns-server 100.100.100.100,223.5.5.5 > ~/atoll-build/emulator.log 2>&1 &`.
   Never work around DNS in app code.
   Wait for the lock by retrying, not by messaging its holder:
-  `until mkdir ~/atoll-build/emulator.lock 2>/dev/null; do sleep 15; done`.
+  `until mkdir ~/atoll-build/emulator.lock 2>/dev/null; do sleep 15; done; echo $W > ~/atoll-build/emulator.lock/owner`.
+  A `workspace.bash` answer of "still running" means you do not have it yet.
+  Start every emulator command with
+  `[ "$(cat ~/atoll-build/emulator.lock/owner)" = $W ] || exit 1`.
+  The emulator also hosts other projects' apps: launch ours explicitly
+  (`am start -n dev.atoll.app/...`) and never uninstall or stop other packages.
   Hold it only for install + run + screenshots (about 10 minutes at most);
   develop and run JVM tests without it.
 - Workers do not message each other; anything shared goes through the lead.
