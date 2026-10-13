@@ -216,7 +216,8 @@ Each package owns its files; live checks run on our test node.
 | W4 #11/#52 interfaces | sol-4 | merged (afa9c03) |
 | W4 e2e emulator guard + on-demand emulator | sol-2 | merged (2f73e6c) |
 | W4 #34 approval receipts | sol-1 | reviewed (e25c158); merge after 17-step gate |
-| W4 #02, #10 | sol-3 | done; 17-step gate running |
+| W4 #02 (v2 false positive, test added) | sol-3 | merged |
+| W4 #10 | sol-3 | 17-step gate |
 | W4 #07 history, #11/#52 data, N2 | sol-3 | in progress |
 | W4 #19, #24 data | sol-1 | in progress (merge #24 with sol-4 renderer) |
 | W4 #24 renderer, #17 | sol-4 | in progress |
