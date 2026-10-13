@@ -52,6 +52,16 @@ class WorkspaceMappingContentTest {
         assertEquals("First explanation\n\nFinal answer",result.text)
         assertNull(result.status)
     }
+    @Test fun supersededEmptyAnswersDisappearButProducedStreamingTextSurvives() {
+        for (field in listOf("merged_into","preempted_by")) {
+            val request=row(1,"q","request",json("""{"text":"question"}"""))
+            val terminal=row(3,"a","response",buildJsonObject { put("status","completed");put(field,"successor") },parent="q")
+            assertEquals(1,mapped(request,terminal).size)
+            val stage=row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"keep this"}}"""),parent="q")
+            val answer=mapped(request,stage,terminal).last()
+            assertEquals("keep this",answer.text);assertNull(answer.result);assertNull(answer.status)
+        }
+    }
     @Test fun interruptedTurnKeepsAlreadyProducedTextWithoutAnErrorAckBubble() {
         val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),
             row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"partial answer"}}"""),parent="q"),

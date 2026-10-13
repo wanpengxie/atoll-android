@@ -85,18 +85,21 @@ class TimelineMapper {
                 (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
                     ?.get("text").string().takeIf(String::isNotBlank)
             }
+            val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
             if (terminal != null) {
                 val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
                 val answer = when {
                     turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
                     interrupted -> MappedResult("✗ 已停止 · 发消息即继续")
+                    superseded -> MappedResult()
                     else -> terminalResult(terminal, turn.request.type)
                 }
                 val finalText = terminal.body["text"].string().trim()
                 val tail = streamed.lastOrNull()?.trim()?.removeSuffix("…[truncated]").orEmpty()
-                val visible = if (!interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
+                val visible = if (!superseded && !interrupted && finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
                 val text = (visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
-                message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted) MessageStatus.Failed else null, resultState=answer.result)
+                if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
+                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 if (latest != null) {
@@ -106,7 +109,7 @@ class TimelineMapper {
                         process?.get("text").string().takeIf { it.isNotBlank() } ?: process?.get("stage").string().takeIf { it.isNotBlank() })
                 }
             }
-            entry.thread.forEach { turn(it, "$key:${it.id}", false) }
+            if (!superseded) entry.thread.forEach { turn(it, "$key:${it.id}", false) }
         }
         turn(item.entry, item.key, item.continuation)
         return result
