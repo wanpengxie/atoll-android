@@ -327,7 +327,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.CloseTerminal -> graph.terminal(false)
                                     Item.ExportPerformance -> graph.export(true)
                                     is ChannelMenuAction.Process -> {
-                                        val target = messageTargets[action.messageId]
+                                        val target = processTarget(action.messageId,messageTargets,state.timelineSource)
                                         val id = target?.turn?.requestId ?: target?.envelope?.id
                                         if (id != null) graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Turn, id))
                                     }
@@ -389,7 +389,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 if (focusApplied) return@LaunchedEffect
                                 val key = routeFocus?.takeIf { it.kind == FocusKind.Turn }?.key ?: return@LaunchedEffect
                                 following = false; graph.follow(false)
-                                val index = conversation.entries.indexOfFirst { messageTargets[it.key]?.let { target -> target.turn?.requestId == key || target.envelope.id == key } == true }
+                                val index = timelineFocusIndex(conversation.entries,messageTargets,state.timelineSource,key)
                                 focusMissing = index < 0
                                 if (index >= 0) {
                                     scrollCentre(index + headerCount)

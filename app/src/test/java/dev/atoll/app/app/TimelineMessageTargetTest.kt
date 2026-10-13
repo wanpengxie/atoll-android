@@ -25,7 +25,25 @@ class TimelineMessageTargetTest {
         assertTrue(targets.all { it != null })
         assertTrue(targets.any { it?.envelope?.id == "opaque:request:answer" && it.turn?.requestId == "opaque:request:answer" })
         assertTrue(targets.any { it?.envelope?.id == "progress:x" && it.turn?.requestId == "opaque:request:answer" })
-        assertTrue(targets.any { it?.envelope?.id == "nested:answer" && it.turn?.requestId == "nested:request" })
+        assertEquals(2,entries.size)
+        assertEquals("nested:request",entries.last().value.relatedCalls.single().id)
+        val nestedKey="${snapshot.items.single().key}:nested:request:answer"
+        val nested=timelineMessageTarget(snapshot,nestedKey)!!
+        assertEquals("nested:answer",nested.envelope.id);assertEquals("nested:request",nested.turn!!.requestId)
+        assertEquals(4L,nested.seq)
+        val index=timelineMessageTargets(snapshot)
+        val rootProcess=processTarget(entries.first().value.id,index,replica.snapshot())!!
+        assertEquals("opaque:request:answer",rootProcess.turn!!.requestId)
+        val rootAnswerProcess=processTarget(entries.last().value.id,index,replica.snapshot())!!
+        assertEquals("opaque:request:answer",rootAnswerProcess.turn!!.requestId)
+        val childProcess=processTarget("nested:request",index,replica.snapshot())!!
+        assertEquals("nested:request",childProcess.turn!!.requestId)
+        assertEquals(3L,childProcess.seq)
+        val rootIndex=timelineFocusIndex(entries,index,replica.snapshot(),"opaque:request:answer")
+        assertEquals(0,rootIndex)
+        assertEquals(rootIndex,timelineFocusIndex(entries,index,replica.snapshot(),"nested:request"))
+        assertEquals(rootIndex,timelineFocusIndex(entries,index,replica.snapshot(),"nested:answer"))
+        assertEquals(-1,timelineFocusIndex(entries,index,replica.snapshot(),"not-loaded"))
         assertNull(timelineMessageTarget(snapshot, "wrong:request"))
         val sequences = timelineRowSequences(snapshot)
         entries.forEach { entry ->
