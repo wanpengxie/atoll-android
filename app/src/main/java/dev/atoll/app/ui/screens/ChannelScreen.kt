@@ -184,6 +184,7 @@ fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAct
 
 @Composable
 private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit, modifier: Modifier) {
+    if (!state.identityReady) return
     Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         if (state.mineOnly) state.agents.forEach { agent ->
             Surface(shape = CircleShape, color = if (agent.id in state.actorFilters) AtollColors.Selected else AtollColors.Workspace,
