@@ -84,3 +84,18 @@ object SenderKind {
     const val TOOL = "tool"
     const val SYSTEM = "system"
 }
+
+/** Where a batch of rows came from. */
+enum class Origin { CACHE, HISTORY, LIVE }
+
+/**
+ * Rows of one channel handed from sync to the model, in ascending seq within
+ * the batch. [olderThanWindow] marks rows paged in below what the model holds
+ * (the reader scrolled up); otherwise they are at or above its window.
+ */
+data class RowBatch(
+    val channelId: String,
+    val rows: List<Row>,
+    val origin: Origin,
+    val olderThanWindow: Boolean = false,
+)
