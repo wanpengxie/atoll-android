@@ -290,7 +290,8 @@ class WaitingViewModel(
                 if (envelope.body.text("replaced_by") == session.replacementId && session.replacementId.isNotEmpty()) transition(EditMachine.accepted(mutable.value.edit, session.replacementId))
                 else transition(EditMachine.exit(mutable.value.edit, "已退出编辑：这条请求已结束"))
             } else if (envelope.senderId == session.actorId && envelope.isTerminal && envelope.type == "agent.interrupt" && envelope.status == "completed") {
-                transition(EditMachine.exit(mutable.value.edit, "已停止这个 Agent，编辑一并退出；改动没有发出，可以重新编辑"))
+                val outcome = if (session.replacementId.isNotEmpty()) "修改结果待确认" else "改动没有发出，可以重新编辑"
+                transition(EditMachine.exit(mutable.value.edit, "已停止这个 Agent，编辑一并退出；$outcome"))
             }
         }
         if (envelope.senderId.isNotEmpty() && (envelope.type == "agent.hold_expired" || envelope.isTerminal && envelope.type in setOf("agent.hold", "agent.unhold", "agent.interrupt"))) refreshContext(envelope.senderId)

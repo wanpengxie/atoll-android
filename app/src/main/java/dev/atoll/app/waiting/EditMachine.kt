@@ -76,7 +76,7 @@ internal object EditMachine {
     }
     fun disconnected(state: EditState): EditTransition = exit(state, if (state.phase == EditPhase.SUBMITTING) "已退出编辑：连接已断开，修改结果待确认" else "已退出编辑：连接已断开，改动没有发出")
     fun exit(state: EditState, notice: String = "已退出编辑"): EditTransition {
-        val session = state.session ?: return EditTransition(state.copy(notice = notice, error = ""))
+        val session = state.session ?: return EditTransition(state)
         // The request ID was chosen before sending. Even a lost hold ACK can be released by CAS.
         return EditTransition(EditState(notice = notice), listOf(EditEffect.Release(session)))
     }
