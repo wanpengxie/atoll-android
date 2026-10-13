@@ -1,58 +1,117 @@
 package dev.atoll.app.ui.screens
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.theme.AtollColors
+import kotlinx.coroutines.delay
 
+/** Compatibility entry point; live integration should pass the complete navigation state. */
 @Composable
 fun ChannelListScreen(channels: List<ChannelViewState>, connection: String, onOpen: (String) -> Unit,
-    onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSettings: () -> Unit = {}) {
-    var query by remember { mutableStateOf("") }
+    onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSettings: () -> Unit = {}, activeChannelId: String? = null) {
+    ChannelListScreen(ChannelNavigationViewState(channels,
+        ConnectionPhase.entries.firstOrNull { it.name == connection.uppercase() } ?: ConnectionPhase.OPEN,
+        AccountViewState("", "已登录用户"), activeChannelId = activeChannelId), onOpen, onCreate, onActivity, onSettings)
+}
+@Composable
+fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Unit,
+    onCreate: () -> Unit = {}, onActivity: () -> Unit = {}, onSpaceAdmin: () -> Unit = {},
+    onLogout: () -> Unit = {}, onUpgrade: () -> Unit = {}, onClose: (() -> Unit)? = null) {
+    var collapsed by remember { mutableStateOf(emptySet<String>()) }
+    val branches = state.channels.mapNotNull { it.parentId }.toSet()
+    val visible = visibleChannels(state.channels, collapsed)
+    val toggle: (String) -> Unit = { id -> collapsed = if (id in collapsed) collapsed - id else collapsed + id }
+    var upgradeConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.ChannelRail).safeDrawingPadding()) {
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, top = 10.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("ATOLL", style = MaterialTheme.typography.titleLarge, color = AtollColors.Accent, modifier = Modifier.weight(1f))
-            IconButton(onActivity) { Icon(Icons.Outlined.NotificationsNone, "活动中心") }
-            IconButton(onSettings) { Icon(Icons.Outlined.Settings, "设置") }
+        Row(Modifier.fillMaxWidth().heightIn(min = 58.dp).padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("ATOLL", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            val color = if (state.connection == ConnectionPhase.OPEN) AtollColors.Online else AtollColors.Warning
+            Box(Modifier.size(6.dp).background(color, CircleShape))
+            Text(state.connection.name, Modifier.padding(horizontal = 7.dp), color = AtollColors.Muted, fontSize = 9.sp)
+            if (onClose != null) TextButton(onClose, Modifier.size(44.dp)) { Text("×", color = AtollColors.Text, fontSize = 20.sp) }
         }
-        OutlinedButton(onActivity, Modifier.fillMaxWidth().padding(horizontal = 16.dp), shape = MaterialTheme.shapes.small) { Text("◉ 活动", style = MaterialTheme.typography.bodySmall) }
-        Text(connection, Modifier.padding(horizontal = 20.dp, vertical = 8.dp), color = AtollColors.Online, style = MaterialTheme.typography.bodySmall)
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), placeholder = { Text("搜索频道") }, singleLine = true,
-            leadingIcon = { Icon(Icons.Outlined.Search, null) })
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("我的频道", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Text(channels.size.toString(), color = AtollColors.Muted, style = MaterialTheme.typography.labelSmall)
+        HorizontalDivider(color = AtollColors.Line)
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)) {
+            item("activity") { OutlinedButton(onActivity, Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.small) { Text("◷ 活动", fontSize = 12.sp) } }
+            val members = state.channels.filter { it.access.member }
+            val others = state.channels.filterNot { it.access.member }
+            item("members-label") { RailCaption("我的频道", members.size) }
+            item("create") { TextButton(onCreate) { Text("＋ 新建频道", fontSize = 12.sp) } }
+            if (members.isEmpty()) item("members-empty") { RailEmpty("还没有加入频道") }
+            items(visible.filter { it.access.member }, key = { it.id }) { ChannelRow(it, state.activeChannelId == it.id, it.id in branches, it.id in collapsed, toggle, onOpen) }
+            item("space-label") { RailCaption("空间", others.size) }
+            if (others.isEmpty()) item("space-empty") { RailEmpty("没有可发现频道") }
+            items(visible.filterNot { it.access.member }, key = { it.id }) { ChannelRow(it, state.activeChannelId == it.id, it.id in branches, it.id in collapsed, toggle, onOpen) }
         }
-        TextButton(onCreate, Modifier.padding(start = 8.dp)) { Text("＋ 新建频道", style = MaterialTheme.typography.bodySmall) }
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(channels.filter { it.name.contains(query, ignoreCase = true) }, key = { it.id }) { channel ->
-                Row(Modifier.fillMaxWidth().clickable { onOpen(channel.id) }.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("#", color = AtollColors.Muted, style = MaterialTheme.typography.titleLarge)
-                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(channel.name, fontWeight = FontWeight.SemiBold)
-                        if (channel.description.isNotBlank()) Text(channel.description, style = MaterialTheme.typography.bodySmall, color = AtollColors.Muted, maxLines = 2)
-                        if (channel.running > 0) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(Modifier.size(6.dp).background(AtollColors.Online, CircleShape))
-                            Text("${channel.running} 个 Agent 运行中", style = MaterialTheme.typography.labelSmall, color = AtollColors.Online)
-                        }
-                    }
-                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(channel.updated, style = MaterialTheme.typography.labelSmall, color = AtollColors.Muted)
-                        if (channel.unread > 0) Badge { Text(channel.unread.toString()) }
-                    }
+        if (state.account.root) state.upgrade?.let { update ->
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                OutlinedButton({ upgradeConfirmation = true }, Modifier.fillMaxWidth(), enabled = update.canStart, shape = MaterialTheme.shapes.small) {
+                    Text(update.label(state.connection), fontSize = 12.sp)
                 }
-                HorizontalDivider(Modifier.padding(horizontal = 20.dp), color = AtollColors.Line)
+                Text("当前版本：${update.current}（只读）", fontSize = 10.sp, color = AtollColors.Muted)
+            }
+        }
+        HorizontalDivider(color = AtollColors.Line)
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(30.dp).background(AtollColors.Selected, MaterialTheme.shapes.medium), contentAlignment = Alignment.Center) {
+                Text(state.account.name.ifEmpty { state.account.id }.take(1).uppercase(), fontSize = 12.sp)
+            }
+            Column(Modifier.weight(1f).padding(start = 10.dp)) {
+                Text(state.account.name, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                Text(state.account.id, color = AtollColors.Muted, fontSize = 10.sp)
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                TextButton(onSpaceAdmin) { Text("空间管理", fontSize = 11.sp, color = AtollColors.Muted) }
+                TextButton(onLogout) { Text("退出", fontSize = 11.sp, color = AtollColors.Muted) }
+            }
+        }
+    }
+    if (upgradeConfirmation) state.upgrade?.let { update -> AlertDialog(onDismissRequest = { upgradeConfirmation = false },
+        title = { Text("升级到 ${update.latest}？") }, text = { Text("升级会重启 Atoll，并暂时中断当前连接和正在进行的工作。频道记录、任务和工作区数据会保留。") },
+        confirmButton = { TextButton({ upgradeConfirmation = false; onUpgrade() }) { Text("确认") } },
+        dismissButton = { TextButton({ upgradeConfirmation = false }) { Text("取消") } }) }
+}
+@Composable private fun RailCaption(text: String, count: Int) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 16.dp)) {
+        Text(text, fontSize = 12.sp, color = AtollColors.Muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        Text(count.toString(), fontSize = 10.sp, color = AtollColors.Muted)
+    }
+}
+@Composable private fun RailEmpty(text: String) { Text(text, Modifier.padding(horizontal = 8.dp, vertical = 12.dp), fontSize = 12.sp, color = AtollColors.Muted) }
+@Composable private fun ChannelRow(channel: ChannelViewState, selected: Boolean, branch: Boolean, collapsed: Boolean, onToggle: (String) -> Unit, onOpen: (String) -> Unit) {
+    // Each visible row owns its timer, so a tick never rebuilds the channel list.
+    val now by produceState(System.currentTimeMillis(), channel.activity.isNotEmpty()) {
+        if (channel.activity.isNotEmpty()) while (true) { value = System.currentTimeMillis(); delay(1000) }
+    }
+    Row(Modifier.fillMaxWidth().background(if (selected) AtollColors.Selected else AtollColors.ChannelRail, MaterialTheme.shapes.medium)
+        .clickable { onOpen(channel.id) }.padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Spacer(Modifier.width((channel.depth.coerceAtLeast(0) * 10).dp))
+        if (branch) TextButton({ onToggle(channel.id) }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) {
+            Text(if (collapsed) "›" else "⌄", color = AtollColors.Muted)
+        }
+        Text("#", fontSize = 12.sp, color = AtollColors.Muted)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(channel.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            if (channel.runningElapsed.isNotEmpty()) Text(channel.runningElapsed, fontSize = 10.sp, color = AtollColors.Online)
+            if (channel.activity.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                channel.activity.take(2).forEach { active -> Text("● ${active.name} ${activityDuration(active.startedAtMillis, now)}", fontSize = 10.sp, color = AtollColors.Online) }
+                if (channel.activity.size > 2) Text("+${channel.activity.size - 2}", fontSize = 10.sp, color = AtollColors.Muted)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (channel.access.label.isNotEmpty()) Text(channel.access.label, color = AtollColors.Muted, fontSize = 10.sp)
+            unreadLabel(channel.unread, channel.unreadPhase).takeIf { it.isNotEmpty() }?.let { label ->
+                if (channel.unreadPhase == UnreadPhase.Ready) Badge { Text(label) } else Text(label, color = AtollColors.Muted, fontSize = 12.sp)
             }
         }
     }
