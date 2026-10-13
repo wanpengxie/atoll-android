@@ -139,6 +139,22 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     }
                                 }.distinctUntilChanged().collect { (_, keys) -> graph.visibleRows(channel, keys) }
                             }
+                            val latestConversation by rememberUpdatedState(conversation)
+                            LaunchedEffect(listState, state.route?.tab) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
+                                var requestedBoundary: String? = null
+                                snapshotFlow {
+                                    val current = latestConversation
+                                    val nearStart = initialized && !autoScrolling && listState.isScrollInProgress &&
+                                        listState.firstVisibleItemIndex <= 12 && current.hasOlder && !current.loadingOlder
+                                    current.entries.firstOrNull()?.key.takeIf { nearStart }
+                                }.distinctUntilChanged().collect { boundary ->
+                                    if (boundary != null && boundary != requestedBoundary) {
+                                        requestedBoundary = boundary
+                                        graph.older()
+                                    }
+                                }
+                            }
                             LaunchedEffect(state.route?.tab, conversation.entries.lastOrNull()?.key, conversation.entries.size) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (!initialized || following) {
