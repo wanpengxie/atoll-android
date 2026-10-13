@@ -136,7 +136,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         val conversation = state.conversation
                         if (conversation == null) {
                             val access = state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.access
-                            StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
+                            if (state.channelError != null) StatusPage("频道读取失败", state.channelError!!, "重试", { graph.retryChannel(state.route!!.channel) })
+                            else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
                         } else {
                             val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0))
                             var following by remember { mutableStateOf(true) }
@@ -235,6 +236,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 else -> null
                             }
                             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                            state.channelError?.let { failure -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
+                                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(failure, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                    TextButton({ graph.retryChannel(state.route!!.channel) }) { Text("重试") }
+                                }
+                            } }
                             Box(Modifier.weight(1f)) {
                             ChannelScreen(conversation, ComposerViewState(""),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
