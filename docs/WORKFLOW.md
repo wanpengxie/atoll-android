@@ -23,6 +23,10 @@
   `workspace.poll`.
 - Emulator (`emulator-5554`) is shared: take the lock first
   (`mkdir ~/atoll-build/emulator.lock` succeeds = yours; `rmdir` when done).
+  It must resolve tailnet names, so it runs with MagicDNS first; if it is
+  down, the lead restarts it with:
+  `nohup ~/Library/Android/sdk/emulator/emulator -avd ash-browser -no-window -no-snapshot-load -no-snapshot-save -gpu host -dns-server 100.100.100.100,223.5.5.5 > ~/atoll-build/emulator.log 2>&1 &`.
+  Never work around DNS in app code.
 - Node for live tests: `https://tardis.tail6bc2a1.ts.net` (from mbp and the
   emulator). A local automation token is on tardis at
   `~/.atoll/server/atoll-token` (send as `Authorization: Bearer`). Everything
