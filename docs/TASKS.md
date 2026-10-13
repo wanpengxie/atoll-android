@@ -219,7 +219,8 @@ Each package owns its files; live checks run on our test node.
 | W4 #02 (v2 false positive, test added) | sol-3 | merged |
 | W4 #10 dismissable channel error | sol-3 | merged |
 | W4 #11 identity-ready | sol-3 | merged |
-| W4 N2, #52 data, #07 history | sol-3 | gating one by one |
+| W4 N2 process panel lifecycle | sol-3 | merged |
+| W4 #52 data, #07 history | sol-3 | gating one by one |
 | W4 #24 data | sol-1 | in progress (merge with sol-4 renderer) |
 | W4 #24 renderer, #17 | sol-4 | in progress |
 | W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
