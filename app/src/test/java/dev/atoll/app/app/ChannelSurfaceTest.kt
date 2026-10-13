@@ -12,6 +12,17 @@ class ChannelSurfaceTest {
         assertEquals(files, ChannelSurface.decode(tasks.encode()).selectTab(false))
         assertEquals("conversation", files.files(false).routeTab)
     }
+    @Test fun terminalDetachesBackToFilesAndItsFlagSurvivesChannelReturn() {
+        val files = ChannelSurface().files(true)
+        val terminal = files.terminal(true)
+        assertEquals("terminal", terminal.routeTab)
+        assertEquals(terminal, ChannelSurface.decode(terminal.encode()))
+        assertEquals(files, terminal.terminal(false))
+        assertEquals("terminal", terminal.selectTab(true).selectTab(false).routeTab)
+        assertFalse(terminal.files(true).terminalOpen)
+        assertEquals(files, ChannelSurface.decode("conversation:1"))
+        assertEquals(AppRoute("c", "terminal"), AppRoute.parse("atoll://channels/c/terminal"))
+    }
     @Test fun explicitDeepLinkSelectsItsSurfaceRatherThanAStoredFileChoice() {
         assertEquals("conversation", ChannelSurface.fromRoute("conversation").routeTab)
         assertEquals("files", ChannelSurface.fromRoute("files").routeTab)

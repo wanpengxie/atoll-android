@@ -14,6 +14,10 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
+import dev.atoll.app.terminal.TerminalScreen
+import dev.atoll.app.terminal.TerminalDevice
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
 import dev.atoll.app.files.FilePicker
 import dev.atoll.app.files.FilesScreen
 import dev.atoll.app.files.FilePaths
@@ -33,6 +37,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     AtollTheme {
         when (state.phase) {
             WorkspacePhase.Booting -> StatusPage("正在启动工作区…")
@@ -104,9 +109,20 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             var jump by remember { mutableStateOf(0) }
                             LaunchedEffect(jump) { if (jump > 0) { scrollEnd(); following = true; graph.follow(true) } }
-                            val files = if (state.route?.tab == "files") features?.files(state.route!!.channel) else null
+                            val files = if (state.route?.tab in setOf("files", "terminal")) features?.files(state.route!!.channel) else null
                             LaunchedEffect(files, state.route?.focus) {
-                                if (files != null) state.route?.focus?.let(files::openLink)
+                                if (files != null && state.route?.tab == "files") state.route?.focus?.let(files::openLink)
+                            }
+                            val terminal = state.route?.tab == "terminal"
+                            val content: (@Composable () -> Unit)? = when {
+                                terminal && files != null && features != null && services?.pty != null -> ({
+                                    val fileState by files.state.collectAsStateWithLifecycle()
+                                    TerminalScreen(services!!.pty!!, state.route!!.channel,
+                                        fileState.devices.map { TerminalDevice(it.id, it.name, it.online) }, features.terminalPreferences,
+                                        visible = lifecycle.isAtLeast(Lifecycle.State.STARTED), onClose = { graph.terminal(false) })
+                                })
+                                files != null -> ({ FilesScreen(files, onClose = { graph.files(false) }) })
+                                else -> null
                             }
                             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
                             Box(Modifier.weight(1f)) {
@@ -118,15 +134,17 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     "打开文件" -> graph.files(true)
                                     "关闭文件" -> graph.files(false)
                                     "最近阅读" -> recentOpen = true
+                                    "打开终端" -> graph.terminal(true)
+                                    "关闭终端" -> graph.terminal(false)
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
                                     else if (FilePaths.fromLink(state.route!!.channel, link) != null && features != null) {
                                         features.files(state.route!!.channel).openLink(link); graph.files(true)
                                     } else runCatching { uriHandler.openUri(link) } },
-                                contentOverride = files?.let { vm -> { FilesScreen(vm, onClose = { graph.files(false) }) } },
+                                contentOverride = content,
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
-                            if (features != null) AtollComposer(features.composer,
+                            if (features != null && !terminal) AtollComposer(features.composer,
                                 onPickChannelFiles = { pickingFile = true },
                                 onPreviewAttachment = { reference -> features.files(reference.channelId).open(reference); graph.files(true) })
                             }

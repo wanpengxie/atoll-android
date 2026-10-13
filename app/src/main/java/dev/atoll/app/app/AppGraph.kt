@@ -10,6 +10,7 @@ import dev.atoll.app.model.UnreadCount
 import dev.atoll.app.model.TimelineSnapshot
 import dev.atoll.app.net.*
 import dev.atoll.app.store.*
+import dev.atoll.app.terminal.PtyClient
 import dev.atoll.app.sync.SyncHub
 import dev.atoll.app.ui.screens.*
 import kotlinx.coroutines.*
@@ -41,7 +42,7 @@ data class WorkspaceState(
 
 /** Feature packages share authentication/transport without reaching into the manager's state. */
 data class WorkspaceServices(val server: String, val principalId: String, val selfIds: Map<String, String>,
-    val wire: WireClient, val obs: ObsClient, val httpClient: OkHttpClient, val boot: String = "")
+    val wire: WireClient, val obs: ObsClient, val httpClient: OkHttpClient, val boot: String = "", val pty: PtyClient? = null)
 
 /** Manual app wiring. The manager owns navigation/session facts; channel writers own folds. */
 class AppGraph(private val context: Context) {
@@ -95,6 +96,7 @@ class AppGraph(private val context: Context) {
     fun route(value: String?) { AppRoute.parse(value)?.let { post(Navigate(it, push = true)) } }
     fun tab(value: ChannelTab) { post(Tab(value)) }
     fun files(open: Boolean) { post(Files(open)) }
+    fun terminal(open: Boolean) { post(Terminal(open)) }
     fun back() { post(Back) }
     fun follow(value: Boolean) { post(Follow(value)) }
     fun scopeToggle() { post(ScopeToggle) }
@@ -155,6 +157,9 @@ class AppGraph(private val context: Context) {
             }
             is Files -> route?.let { current ->
                 saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).files(event.open))
+            }
+            is Terminal -> route?.let { current ->
+                saveSurface(current.channel, (surfaces[current.channel] ?: ChannelSurface.fromRoute(current.tab)).terminal(event.open))
             }
             Reconnect -> {
                 val rt = runtime
@@ -249,8 +254,9 @@ class AppGraph(private val context: Context) {
         val gate = GatedWireClient(wire)
         val hub = SyncHub(gate, store, sessionScope)
         val obs = ObsClient(auth.server, http) { post(Expired(requestEpoch)) }
-        runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope)
-        mutableServices.value = WorkspaceServices(auth.server, principalId, emptyMap(), gate, obs, http)
+        val pty = PtyClient(auth.server, http)
+        runtime = Runtime(namespace, principalId, auth.identity, wire, gate, hub, obs, database, store, sessionScope, pty)
+        mutableServices.value = WorkspaceServices(auth.server, principalId, emptyMap(), gate, obs, http, pty = pty)
         preferences.get(namespace, "channels")?.let { saved -> runCatching { channelRecords(Json.parseToJsonElement(saved).jsonObject).forEach { records[it.id] = it } } }
         if (requestedRoute == null) {
             requestedRoute = preferences.get(namespace, "last-channel")?.takeIf { it.isNotEmpty() }?.let { AppRoute(it) }
@@ -273,16 +279,18 @@ class AppGraph(private val context: Context) {
             val previous = preferences.get(rt.namespace, "boot")
             if (boot.isNotEmpty() && previous != null && previous != boot) {
                 rt.gate.connection(WireState.Connecting)
+                rt.pty.close(); rt.pty = PtyClient(mutableServices.value!!.server, mutableServices.value!!.httpClient)
                 stopControllers(); rt.hub.stop(); rt.store.clear()
                 preferences.clearWorld(rt.namespace)
                 records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear()
+                route = route?.copy(tab = "conversation", focus = null); backStack.clear()
                 rt.world++
                 rt.hub = SyncHub(rt.gate, rt.store, rt.scope)
                 rt.gate.subscribers.first { it > 0 }
                 loadTree(epoch)
             }
             if (boot.isNotEmpty()) preferences.put(rt.namespace, "boot", boot)
-            mutableServices.value = mutableServices.value?.copy(boot = boot)
+            mutableServices.value = mutableServices.value?.copy(boot = boot, pty = rt.pty)
             rt.gate.connection(state)
             applyMemberships(state.receipt)
             maybeRequestedRoute()
@@ -455,7 +463,7 @@ class AppGraph(private val context: Context) {
         val channelState = channelStates[route?.channel]
         val currentChannel = channels.firstOrNull { it.id == route?.channel }
         val contentAllowed = currentChannel?.access in setOf(ChannelAccess.MemberActive, ChannelAccess.Available, ChannelAccess.MemberStale, ChannelAccess.ObserverActive, ChannelAccess.ObserverStale)
-        val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true) }
+        val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true, terminalOpen = surfaces[route?.channel]?.terminalOpen == true) }
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
             timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty())
@@ -467,7 +475,7 @@ class AppGraph(private val context: Context) {
     }
     private suspend fun tearDown(incrementEpoch: Boolean = true) {
         if (incrementEpoch) epoch++
-        runtime?.let { rt -> stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
+        runtime?.let { rt -> rt.pty.close(); stopControllers(); rt.hub.stop(); rt.scope.cancel(); rt.wire.close(); withContext(Dispatchers.IO) { rt.database.close() } }
         runtime = null
         mutableServices.value = null
         records.clear(); memberships.clear(); channelStates.clear(); actorRosters.clear(); accesses.clear(); surfaces.clear(); rosterLoading.clear(); route = null; backStack.clear(); notice = null
@@ -496,7 +504,7 @@ class AppGraph(private val context: Context) {
     private data class DevelopmentAuth(val server: String, val account: String, val token: String)
     private data class Auth(val server: String, val account: String, val principal: JsonObject, val identity: IdentityClient)
     private class Runtime(val namespace: String, val principal: String, val identity: IdentityClient, val wire: Wire,
-        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var world: Long = 0)
+        val gate: GatedWireClient, var hub: SyncHub, val obs: ObsClient, val database: AtollDatabase, val store: RowStore, val scope: CoroutineScope, var pty: PtyClient, var world: Long = 0)
     private sealed interface Event
     private data object Restore : Event
     private data class Form(val value: LoginViewState) : Event
@@ -512,6 +520,7 @@ class AppGraph(private val context: Context) {
     private data object Back : Event
     private data class Tab(val value: ChannelTab) : Event
     private data class Files(val open: Boolean) : Event
+    private data class Terminal(val open: Boolean) : Event
     private data object Reconnect : Event
     private data class Follow(val value: Boolean) : Event
     private data object ScopeToggle : Event
