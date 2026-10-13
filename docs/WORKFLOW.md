@@ -48,7 +48,11 @@
   to the channel ledger, so never put the token on a command line or print
   it: read it on mbp at use time, e.g.
   `ATOLL_TOKEN=$(ssh xiewanpeng@100.99.232.10 cat .atoll/server/atoll-token) ./gradlew ...`.
-  Never commit it.
+  Never commit it. It is the node's shared root session (minted at node
+  start, also used by the local `atoll` TUI): never send logout or anything
+  else that ends a session with it, and never register accounts or change
+  principals/passwords on the real node. Test logout, registration and
+  upgrade against MockWebServer only.
 - Report a commit only after `git rev-parse HEAD` printed it; never a guessed or placeholder hash.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions
