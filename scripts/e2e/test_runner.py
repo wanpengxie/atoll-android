@@ -117,6 +117,51 @@ class RunnerTest(unittest.TestCase):
             self.assertLess(events.index('lock-acquired'), events.index('gradle-start'))
             self.assertLess(events.index('gradle-finished'), events.index('lock-released'))
 
+    def test_failed_gradle_captures_redacted_guest_logs_before_shutdown_and_release(self):
+        with tempfile.TemporaryDirectory() as tmp, patch('support.Path.home', return_value=Path(tmp)):
+            output = Path(tmp) / 'artifacts'
+            password, token = 'p' * 32, 'fake-private-token'
+            def adb(command, **kwargs):
+                self.assertEqual(['adb', '-s', 'emulator-5554', 'logcat', '-d'], command[:5])
+                self.assertEqual('emulator-5554', kwargs['env']['ANDROID_SERIAL'])
+                self.assertTrue((Path(tmp) / 'atoll-build/emulator.lock').exists())
+                text = 'FATAL EXCEPTION ' + password + '\n' if 'crash' in command else \
+                    '\n'.join(['old'] + ['lmk ' + token] * 3000)
+                return unittest.mock.Mock(stdout=text, stderr='', returncode=0)
+            def stop(environment, lock):
+                lock.check_owner()
+                destination = next(output.iterdir())
+                self.assertIn('[redacted]', (destination / 'logcat-crash.log').read_text())
+                self.assertEqual(3000, len((destination / 'logcat-main-system.log').read_text().splitlines()))
+            with patch('instrumented.load_node', return_value={'channel_id': 'c', 'codex_actor_id': 'agent:a'}), \
+                 patch('instrumented.ssh', side_effect=[password.encode(), token.encode()]), \
+                 patch('instrumented.urllib.request.build_opener'), patch('instrumented.ensure_emulator'), \
+                 patch('instrumented.run_gradle', return_value=1), patch('instrumented.stop_emulator', side_effect=stop), \
+                 patch('instrumented.subprocess.run', side_effect=adb) as capture, contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(1, instrumented.main(['--owner', 'sol-3', '--output', str(output)]))
+            self.assertEqual(2, capture.call_count)
+            self.assertEqual(['-b', 'crash'], capture.call_args_list[0].args[0][5:])
+            self.assertEqual(['-b', 'main', '-b', 'system', '-t', '3000'], capture.call_args_list[1].args[0][5:])
+            destination = next(output.iterdir())
+            for name in ('logcat-crash.log', 'logcat-main-system.log'):
+                text = (destination / name).read_text()
+                self.assertNotIn(password, text); self.assertNotIn(token, text)
+            events = [json.loads(line)['event'] for line in (destination / 'lock.jsonl').read_text().splitlines()]
+            self.assertEqual(2, events.count('failure-logcat-collected'))
+            self.assertLess(events.index('failure-logcat-collected'), events.index('lock-released'))
+            self.assertEqual(1, json.loads((destination / 'run.json').read_text())['exit_code'])
+
+    def test_failure_capture_requires_emulator_and_records_unavailable_logs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); lock = unittest.mock.Mock()
+            with patch('instrumented.subprocess.run') as adb:
+                with self.assertRaises(Failure): instrumented.capture_failure_logcat(root, {}, [], lock)
+                adb.assert_not_called()
+            with patch('instrumented.subprocess.run', side_effect=__import__('subprocess').TimeoutExpired('adb', 15)):
+                instrumented.capture_failure_logcat(root, {'ANDROID_SERIAL': 'emulator-5554'}, [], lock)
+            self.assertIn('TimeoutExpired', (root / 'logcat-crash.log').read_text())
+            self.assertIn('TimeoutExpired', (root / 'logcat-main-system.log').read_text())
+
     def test_cancel_retains_lock_and_queue_for_manual_inspection(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

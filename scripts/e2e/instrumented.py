@@ -175,6 +175,33 @@ def run_gradle(command, environment, log, secrets, lock):
         process.stdout.close()
 
 
+
+def capture_failure_logcat(destination, environment, secrets, lock):
+    lock.check_owner()
+    if environment.get('ANDROID_SERIAL') != 'emulator-5554':
+        raise Failure('ANDROID_SERIAL must explicitly select emulator-5554')
+    captures = [('logcat-crash.log', ['-b', 'crash']),
+                ('logcat-main-system.log', ['-b', 'main', '-b', 'system', '-t', '3000'])]
+    for filename, buffers in captures:
+        lock.check_owner()
+        try:
+            result = subprocess.run(['adb', '-s', 'emulator-5554', 'logcat', '-d'] + buffers,
+                                    env=environment, capture_output=True, text=True, timeout=15)
+            content = result.stdout
+            if filename == 'logcat-main-system.log':
+                content = '\n'.join(content.splitlines()[-3000:]) + '\n'
+            content += result.stderr
+            status = result.returncode
+        except (OSError, subprocess.TimeoutExpired) as error:
+            # A crashed/offline guest must not replace the original Gradle failure.
+            content = 'Logcat unavailable: ' + type(error).__name__ + '\n'
+            status = -1
+        for secret in secrets:
+            if secret: content = content.replace(secret, '[redacted]')
+        (destination / filename).write_text(content)
+        lock.event('failure-logcat-collected', file=filename, exit_code=status)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--url', default=URL)
@@ -235,6 +262,8 @@ def main(argv=None):
         # Capture/sanitize output here, so AGP/adb failure diagnostics cannot expose arguments.
         with (destination / 'gradle.log').open('w') as log:
             status = run_gradle(command, environment, log, [password, token], lock)
+        if status != 0:
+            capture_failure_logcat(destination, environment, [password, token], lock)
         # AGP collects additional outputs before it uninstalls the test packages.
         if additional.is_dir():
             shutil.copytree(additional, destination / 'app-artifacts')
