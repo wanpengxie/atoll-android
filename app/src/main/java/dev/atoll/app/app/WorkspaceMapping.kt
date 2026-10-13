@@ -11,7 +11,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 data class ChannelRecord(val id: String, val name: String, val parent: String?, val qualifiedName: String, val type: String = "group", val description: String = "", val open: Boolean? = null)
-data class ActorRecord(val id: String, val name: String, val kind: String)
+data class ActorRecord(val id: String, val name: String, val kind: String, val body: String = "")
 
 fun channelRecords(response: JsonObject): List<ChannelRecord> = response.objects("items").map { item ->
     val declared = item["declared"] as? JsonObject ?: item
@@ -26,7 +26,7 @@ fun actorRecords(response: JsonObject): List<ActorRecord> = response.objects("it
     val declared = item["declared"] as? JsonObject ?: item
     val id = declared["id"].string().ifEmpty { item["key"].string() }
     if ((declared["generated"] as? JsonPrimitive)?.booleanOrNull == true || id.isEmpty()) null
-    else ActorRecord(id, declared["name"].string().ifEmpty { id }, declared["kind"].string().ifEmpty { id.substringBefore(':') })
+    else ActorRecord(id, declared["name"].string().ifEmpty { id }, declared["kind"].string().ifEmpty { id.substringBefore(':') }, declared["body"]?.toString().orEmpty())
 }
 
 fun sortedChannels(records: Collection<ChannelRecord>): List<Pair<ChannelRecord, Int>> {

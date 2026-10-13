@@ -35,6 +35,8 @@ data class WorkspaceState(
     val notice: String? = null,
     val incompatible: String = "",
     val timeline: TimelineSnapshot? = null,
+    val roster: List<ActorRecord> = emptyList(),
+    val boot: String = "",
 )
 
 /** Feature packages share authentication/transport without reaching into the manager's state. */
@@ -456,7 +458,7 @@ class AppGraph(private val context: Context) {
         val conversation = channelState?.conversation?.takeIf { contentAllowed }?.let { value -> value.copy(channel = currentChannel ?: value.channel, filesOpen = surfaces[route?.channel]?.filesOpen == true) }
         mutableState.value = mutableState.value.copy(navigation = nav, route = route, conversation = conversation,
             firstOrigin = channelState?.firstOrigin, channelOpenedAt = channelOpenedAt, notice = notice,
-            timeline = channelState?.timeline?.takeIf { contentAllowed })
+            timeline = channelState?.timeline?.takeIf { contentAllowed }, roster = actorRosters[route?.channel].orEmpty(), boot = mutableServices.value?.boot.orEmpty())
     }
 
     private suspend fun stopControllers() {
