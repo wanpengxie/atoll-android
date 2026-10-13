@@ -158,7 +158,10 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
         pollers[id] = scope.launch {
             repeat(30) {
                 try {
-                    knownChannels = port.channels()
+                    val parent = creations.value.firstOrNull { it.requestId==id }?.parentId ?: return@launch
+                    val children = port.channels(parent)
+                    val ids = children.map { it.directoryId() }.toSet()
+                    knownChannels = knownChannels.filterNot { it.declared().text("parent_id")==parent || it.directoryId() in ids } + children
                     updateCreation(id) { it.converge(knownChannels, memberships) }
                     if (creations.value.firstOrNull { it.requestId == id }?.let { it.ready || it.failed } != false) return@launch
                 } catch (cancelled: CancellationException) { throw cancelled }

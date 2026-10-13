@@ -17,10 +17,11 @@ class GovernanceViewModelTest {
         var directoryCalls=0
         var channels=emptyList<JsonObject>()
         var channelsCalls=0
+        val channelParents=mutableListOf<String>()
         var reply: suspend (GovernanceCommand,()->Unit)->JsonObject={ _,accepted -> accepted();Envelope.EMPTY }
         override suspend fun execute(channel: String,command: GovernanceCommand,id: String,accepted: ()->Unit):JsonObject { commands.add(command);return reply(command,accepted) }
         override suspend fun directory(channel: String):GovernanceDirectory { directoryCalls++;return directory }
-        override suspend fun channels():List<JsonObject> { channelsCalls++;return channels }
+        override suspend fun channels(parent: String):List<JsonObject> { channelsCalls++;channelParents.add(parent);return channels }
         override suspend fun resource(channel: String,payload: JsonObject)=Envelope.EMPTY
     }
     private fun model(port:Port,frames:MutableSharedFlow<DownFrame>,dispatcher:CoroutineDispatcher)=GovernanceViewModel(port,"root",frames,now={ 10L },dispatcher=dispatcher).also { it.context("c","self",true,setOf("c")) }
@@ -53,6 +54,7 @@ class GovernanceViewModelTest {
             port.channels=listOf(json("""{"declared":{"id":"child-id"},"actual":{"measures":[{"name":"open","value":true}]}}"""))
             frames.emit(terminal(pending.requestId));runCurrent();assertFalse(vm.creations.value.single().ready)
             vm.context("c","self",true,setOf("c","child-id"));runCurrent()
+            assertTrue(port.channelParents.isNotEmpty());assertEquals(setOf("c"),port.channelParents.toSet())
             val complete=vm.creations.value.single();assertTrue(complete.ready);assertFalse(complete.uncertain);assertEquals("",complete.error)
         } finally { vm.close() }
     }
