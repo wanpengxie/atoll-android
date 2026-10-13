@@ -3,5 +3,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
         <profileable android:shell="true" />
+        <!-- Plain-text list for the emulator's own frame-time floor. -->
+        <activity
+            android:name="dev.atoll.app.ui.benchmark.TextListBaselineActivity"
+            android:exported="true"
+            android:label="Text list baseline" />
     </application>
 </manifest>
