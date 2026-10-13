@@ -221,6 +221,7 @@ Each package owns its files; live checks run on our test node.
 | W4 #07 history, #11/#52 data, N2 | sol-3 | in progress |
 | W4 #24 data | sol-1 | in progress (merge with sol-4 renderer) |
 | W4 #24 renderer, #17 | sol-4 | in progress |
-| R8 17-step on 2f73e6c, then #29, then release APK | sol-2 | queued |
+| W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
+| R8 17-step on 8fd496d, then release APK | sol-2 | rebuilding |
 
 Live checks use the own test node only (100.99.232.10:18080).
