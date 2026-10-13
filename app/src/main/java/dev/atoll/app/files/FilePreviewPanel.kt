@@ -10,6 +10,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.lazy.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -42,13 +43,13 @@ fun FilePreviewPanel(state: FilesState, onBack: () -> Unit, onClose: () -> Unit,
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
     Column(modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = if (state.canGoBack) onBack else onClose) { Text("‹ 返回") }
             Text(reference.name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
             if (onAttach != null) TextButton(onClick = { onAttach(reference) }) { Text("选择") }
             TextButton(onClick = { onDownload(reference) }, enabled = state.download == null) { Text("下载") }
         }
-        if (rich || loaded?.text != null) Row(Modifier.padding(horizontal = 12.dp)) {
+        if (rich || loaded?.text != null) Row(Modifier.height(44.dp).padding(horizontal = 12.dp)) {
             if (rich) {
                 TextButton(onClick = { source = false }) { Text("预览", color = if (!source) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
                 TextButton(onClick = { source = true }) { Text("源码", color = if (source) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -140,8 +141,12 @@ private fun SourcePreview(text: String, initialLine: Int, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     LaunchedEffect(target, lines) { if (target in 1..lines.size) list.scrollToItem(target - 1) }
     Column(modifier) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(jump, { jump = it.filter(Char::isDigit) }, label = { Text("跳到行") }, singleLine = true, modifier = Modifier.weight(1f))
+        Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            BasicTextField(jump, { jump = it.filter(Char::isDigit) }, singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = MaterialTheme.colorScheme.onSurface),
+                modifier = Modifier.weight(1f).height(44.dp), decorationBox = { field ->
+                    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) { Text("跳到行", style = MaterialTheme.typography.labelSmall); Spacer(Modifier.width(8.dp)); field() }
+                })
             TextButton(onClick = { target = jump.toIntOrNull() ?: 0; if (target in 1..lines.size) scope.launch { list.scrollToItem(target - 1) } }) { Text("跳转") }
             Text("${lines.size} 行", style = MaterialTheme.typography.labelSmall)
         }
@@ -149,8 +154,8 @@ private fun SourcePreview(text: String, initialLine: Int, modifier: Modifier) {
         LazyColumn(state = list, modifier = Modifier.fillMaxSize().horizontalScroll(rememberScrollState())) {
             itemsIndexed(lines) { index, line ->
                 Row(Modifier.fillMaxWidth().background(if (index + 1 == target) MaterialTheme.colorScheme.primaryContainer else Color.Transparent).padding(end = 16.dp, top = 2.dp, bottom = 2.dp)) {
-                    Text((index + 1).toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.width(60.dp).padding(end = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
-                    Text(remember(line) { highlightSource(line) }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
+                    Text((index + 1).toString(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall, modifier = Modifier.alignByBaseline().width(60.dp).padding(end = 12.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End)
+                    Text(remember(line) { highlightSource(line) }, modifier = Modifier.alignByBaseline(), fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

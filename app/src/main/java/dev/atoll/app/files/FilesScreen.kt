@@ -41,9 +41,10 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
             else { saveReference = ref; save.launch(ref.name) }
         }
     }
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 44.dp) {
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("文件 · ${state.channelName}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                 TextButton(onClick = { showRecent = true }) { Text("最近阅读") }
                 IconButton(onClick = onClose) { Icon(Icons.Default.Close, "关闭文件") }
@@ -55,7 +56,7 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
             if (state.selected != null) {
                 FilePreviewPanel(state, viewModel::backPreview, viewModel::closePreview, download, viewModel::openLink, onAttach, Modifier.weight(1f))
             } else {
-                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(44.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { viewModel.navigate(FilePaths.parent(state.directory)) }, enabled = state.directory.isNotEmpty()) { Icon(Icons.Default.ArrowBack, "返回上级目录") }
                     val parts = state.directory.trimEnd('/').split('/').filter { it.isNotEmpty() }
                     TextButton(onClick = { viewModel.navigate("") }) { Text(state.channelName) }
@@ -64,7 +65,7 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                         TextButton(onClick = { viewModel.navigate(parts.take(index + 1).joinToString("/", postfix = "/")) }) { Text(name) }
                     }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     var devicesExpanded by remember { mutableStateOf(false) }
                     Box(Modifier.weight(1f)) {
                         TextButton(onClick = { devicesExpanded = true }, enabled = state.devices.isNotEmpty()) {
@@ -80,11 +81,11 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                     IconButton(onClick = { if (state.devices.isEmpty()) viewModel.initialize() else viewModel.refresh() }) { Icon(Icons.Default.Refresh, "刷新") }
                 }
                 val channelRecent = recent.filter { it.channelId == viewModel.channelId }.take(8)
-                if (channelRecent.isNotEmpty()) Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (channelRecent.isNotEmpty()) Row(Modifier.height(44.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text("最近查看", style = MaterialTheme.typography.labelMedium)
                     channelRecent.forEach { reference -> TextButton(onClick = { viewModel.open(reference) }) { Text(reference.name, maxLines = 1) } }
                 }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 8.dp)) {
                     listOf(FileSort.NAME to "名称", FileSort.MODIFIED to "日期", FileSort.SIZE to "大小", FileSort.KIND to "种类").forEach { (key, label) ->
                         TextButton(onClick = { viewModel.sort(key) }, modifier = Modifier.weight(1f)) { Text(label + if (state.sort == key) if (state.descending) " ↓" else " ↑" else "", maxLines = 1) }
                     }
@@ -121,6 +122,7 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                 }
             }
         }
+    }
     }
     if (newFolder) AlertDialog(onDismissRequest = { newFolder = false }, title = { Text("新建文件夹") }, text = { OutlinedTextField(folderName, { folderName = it }, label = { Text("名称") }, singleLine = true) }, confirmButton = { TextButton(onClick = { viewModel.mkdir(folderName.trim()); folderName = ""; newFolder = false }, enabled = folderName.isNotBlank()) { Text("创建") } }, dismissButton = { TextButton(onClick = { newFolder = false }) { Text("取消") } })
     deleteTarget?.let { ref -> AlertDialog(onDismissRequest = { deleteTarget = null }, title = { Text("删除文件") }, text = { Text("确定删除“${ref.name}”吗？文件夹必须为空。") }, confirmButton = { TextButton(onClick = { viewModel.delete(ref); deleteTarget = null }) { Text("删除", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }) }
