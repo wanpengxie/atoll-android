@@ -80,6 +80,11 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                 if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                     TextButton(onOlder, enabled = !state.loadingOlder) { Text(if (state.loadingOlder) "正在加载历史…" else "加载更早消息", fontSize = 11.sp) }
                 } }
+                if (!state.hasOlder && !state.loadingOlder && state.entries.isNotEmpty()) {
+                    state.historyStartLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                        item("history-start", contentType = "history-status") { TimelineHistoryStart(label) }
+                    }
+                }
                 items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
                     is TimelineEntry.Day -> DaySeparator(entry.text)
                     is TimelineEntry.Notice -> WeakNotice(entry.text)
@@ -88,10 +93,11 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                         if (messageContent != null) messageContent(entry.value, default) else default()
                     }
                 } }
-                if (state.entries.isEmpty()) item("empty") { Column(Modifier.fillMaxWidth().padding(40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("开始一段对话", style = MaterialTheme.typography.titleMedium)
-                    Text("发送消息，与频道成员一起工作。", color = AtollColors.Muted, style = MaterialTheme.typography.bodySmall)
-                } }
+                if (state.entries.isEmpty()) state.emptyKind?.let { kind ->
+                    item("empty", contentType = "empty-feedback") {
+                        TimelineEmptyFeedback(kind, state.emptySettled, Modifier.fillParentMaxHeight(.52f))
+                    }
+                }
             }
             if (state.newMessages > 0 || listState.canScrollForward) {
                 Surface(Modifier.align(Alignment.BottomCenter).padding(8.dp), color = AtollColors.Workspace,

@@ -132,6 +132,51 @@ class MessageContentUiTest {
         compose.onNodeWithText("更新后的消息").assertIsDisplayed()
     }
 
+    @Test fun emptyChannelAndFilteredWindowsShowDifferentFeedback() {
+        val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "c0.android-test"),
+            hasOlder = false, emptyKind = TimelineEmptyKind.Channel))
+        compose.setContent { TestChannel(state.value) }
+        compose.onNodeWithText("正在准备频道内容…").assertIsDisplayed()
+        compose.onNodeWithText("这本账还没有可见条目").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(emptySettled = true) }
+        compose.onNodeWithText("这本账还没有可见条目").assertIsDisplayed()
+        screenshot("empty-channel")
+        compose.runOnIdle { state.value = state.value.copy(emptyKind = TimelineEmptyKind.Mine, emptySettled = false) }
+        compose.onNodeWithText("当前已加载的动态里没有符合筛选的往来").assertIsDisplayed()
+        compose.onNodeWithText("会继续读取更早内容，找到后自动显示。").assertIsDisplayed()
+        compose.onNodeWithText("这本账还没有可见条目").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(emptySettled = true) }
+        compose.onNodeWithText("这个频道里还没有与你相关的往来").assertIsDisplayed()
+        screenshot("empty-mine")
+        compose.runOnIdle { state.value = state.value.copy(emptyKind = TimelineEmptyKind.ActorFilter) }
+        compose.onNodeWithText("已扫描到频道开头，没有符合当前成员筛选的往来").assertIsDisplayed()
+        compose.onNodeWithText("这不表示频道为空；移除成员筛选可查看当前范围。").assertIsDisplayed()
+        screenshot("empty-actor-filter")
+        compose.runOnIdle { state.value = state.value.copy(emptyKind = null) }
+        compose.onNodeWithText("开始一段对话").assertDoesNotExist()
+        compose.onNodeWithText("这本账还没有可见条目").assertDoesNotExist()
+    }
+
+    @Test fun exhaustedHistoryMarkerAppearsOnlyAtConfirmedBoundary() {
+        val label = "已到频道开头，没有更早的符合筛选的往来"
+        val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "c0.android-test"),
+            entries = listOf(TimelineEntry.Message(MessageViewState("oldest", "root", "", "12:00"))),
+            hasOlder = false, historyStartLabel = label))
+        compose.setContent { TestChannel(state.value) }
+        compose.onNodeWithText(label).assertIsDisplayed()
+        screenshot("history-start")
+        compose.runOnIdle { state.value = state.value.copy(loadingOlder = true) }
+        compose.onNodeWithText(label).assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(loadingOlder = false, hasOlder = true) }
+        compose.onNodeWithText(label).assertDoesNotExist()
+        compose.onNodeWithText("加载更早消息").assertIsDisplayed()
+    }
+
+    @Composable private fun TestChannel(state: ConversationViewState) {
+        AtollTheme { ChannelScreen(state, ComposerViewState(), ChannelTab.Conversation,
+            onBack = {}, onTab = {}, onScope = {}, onActor = {}, onText = {}, onSend = {}, onOlder = {}, composerVisible = false) }
+    }
+
     private fun screenshot(name: String) {
         val directory = File(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output", "message-content")
