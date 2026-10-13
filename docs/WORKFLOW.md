@@ -25,6 +25,10 @@
   device command must target the emulator only: `export ANDROID_SERIAL=emulator-5554`
   (Gradle connected*/install*/uninstall* tasks otherwise run on every device).
   Never install, run or uninstall anything on another device.
+- The emulator is off by default (mbp memory is tight; the user may shut it
+  down). Whoever holds the lock starts it if it is not running and, when
+  the queue is empty at release, stops it (`adb -s emulator-5554 emu kill`).
+  `scripts/e2e/instrumented.py` does both.
 - Emulator (`emulator-5554`) is shared: take the lock first
   (`mkdir ~/atoll-build/emulator.lock` succeeds = yours; `rmdir` when done).
   It must resolve tailnet names, so it runs with MagicDNS first; if it is
