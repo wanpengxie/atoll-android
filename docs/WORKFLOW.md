@@ -49,6 +49,7 @@
   it: read it on mbp at use time, e.g.
   `ATOLL_TOKEN=$(ssh xiewanpeng@100.99.232.10 cat .atoll/server/atoll-token) ./gradlew ...`.
   Never commit it.
+- Report a commit only after `git rev-parse HEAD` printed it; never a guessed or placeholder hash.
 - Report back: what you built, what you tested (commands + results), what you
   did not, the branch name. Keep to the task's scope; raise design questions
   instead of guessing.
