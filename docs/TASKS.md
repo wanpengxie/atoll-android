@@ -222,7 +222,7 @@ Each package owns its files; live checks run on our test node.
 | W4 N2 process panel lifecycle | sol-3 | merged |
 | W4 #52 process panel controls | sol-3 | merged |
 | W4 #07 history (+ observer filters) | sol-3 | in progress |
-| W4 #24 data | sol-1 | in progress (merge with sol-4 renderer) |
+| W4 #24 related-call data + child focus | sol-1 | merged |
 | W4 #24 renderer | sol-4 | merged (data from sol-1 pending) |
 | W4 #17 continuation bubbles | sol-4 | in progress |
 | W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
