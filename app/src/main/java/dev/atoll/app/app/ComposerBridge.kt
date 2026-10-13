@@ -9,6 +9,10 @@ import kotlinx.serialization.json.JsonObject
 fun composerWritable(access: ChannelAccess, selfId: String): Boolean = selfId.isNotEmpty() &&
     access in setOf(ChannelAccess.MemberActive, ChannelAccess.MemberStale, ChannelAccess.MemberUnavailable)
 
+/** An old actor ID alone is insufficient after channel access becomes observer-only. */
+internal fun channelIdentityReady(confirmed: Boolean, access: ChannelAccess?, selfId: String): Boolean =
+    confirmed && access != null && composerWritable(access, selfId)
+
 data class ComposerUsage(val actor: String, val seq: Long, val value: JsonObject)
 data class ComposerTimelineFacts(val landed: Set<String>, val usage: List<ComposerUsage>)
 

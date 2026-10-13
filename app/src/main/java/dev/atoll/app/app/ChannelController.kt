@@ -302,14 +302,17 @@ class ChannelController(
         val model = replica ?: return
         timelineSource = model.snapshot()
         if (!newerUnloaded) updateActivityFacts(timelineSource!!)
-        val snapshot = model.timeline(TimelineOptions(scope = if (options.mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = options.actorFilters, newerUnloaded = newerUnloaded, showNarration = true,
+        val knownIdentity = selfId.isNotBlank()
+        val mineOnly = options.mineOnly && knownIdentity
+        val actorFilters = options.actorFilters.takeIf { knownIdentity }.orEmpty()
+        val snapshot = model.timeline(TimelineOptions(scope = if (mineOnly) ConversationScope.MINE else ConversationScope.ALL,
+            selfId = selfId, actorFilter = actorFilters, newerUnloaded = newerUnloaded, showNarration = true,
             localEchoes = if (newerUnloaded) emptyList() else localEchoes, timelinePlaced = timelinePlaced))
         timeline = snapshot
         rowSequences = timelineRowSequences(snapshot)
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
-            entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = options.mineOnly, actorFilters = options.actorFilters,
+            entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = mineOnly, actorFilters = actorFilters,
             loadingOlder = previous?.loadingOlder ?: false, hasOlder = !historyStartKnown,
             connection = if (syncState.connected) "已连接" else "离线缓存", waitingCount = 0,
             runningCount = if (newerUnloaded) 0 else snapshot.runningTasks.size)

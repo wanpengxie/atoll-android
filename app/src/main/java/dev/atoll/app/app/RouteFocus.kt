@@ -28,4 +28,4 @@ internal fun centredScrollDelta(itemOffset: Int, itemSize: Int, viewportStart: I
     return (itemOffset - target).toFloat()
 }
 
-enum class WorkspacePanel(val key: String) { Running("running"), Recent("recent"), Timers("timers"), Stars("stars") }
+enum class WorkspacePanel(val key: String) { Running("running"), Recent("recent"), Timers("timers"), Stars("stars"), Members("members"), Activity("activity") }
