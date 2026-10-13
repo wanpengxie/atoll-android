@@ -85,7 +85,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
         RichContentHost {
         when (state.phase) {
             WorkspacePhase.Booting -> StatusPage("正在启动工作区…")
-            WorkspacePhase.Login -> LoginScreen(state.login, graph::changeLogin, { graph.login(state.login) })
+            WorkspacePhase.Login -> LoginScreen(state.login, graph::login)
             WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "刷新页面", graph::reconnect)
             WorkspacePhase.Workspace -> {
                 BackHandler(state.route != null || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
