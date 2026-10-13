@@ -10,6 +10,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.atoll.app.compose.AtollComposer
@@ -108,6 +109,13 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    val context = LocalContext.current
+    val attachmentHandler = rememberAttachmentHandler(state.route?.channel.orEmpty(),
+        onPreview = { reference -> features?.files(reference.channelId)?.let { files ->
+            files.open(reference); graph.files(true)
+        } },
+        onDownload = { reference, destination -> features?.files(reference.channelId)?.download(context, reference, destination) },
+        downloading = { state.route?.channel?.let { features?.files(it)?.state?.value?.download != null } == true })
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
     LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; activityOpen = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
@@ -334,6 +342,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         features.files(state.route!!.channel).openLink(link); graph.files(true)
                                     } else runCatching { uriHandler.openUri(link) } },
                                 contentOverride = content,
+                                onAttachment = attachmentHandler.takeIf { features != null },
                                 messageContent = { message, default ->
                                     val target = messageTargets[message.id]
                                     val approval = taskState?.items?.firstOrNull { it.kind == "approval" && it.id == target?.envelope?.id }
