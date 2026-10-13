@@ -30,5 +30,9 @@
             android:name="dev.atoll.app.roster.RosterDemoActivity"
             android:exported="true"
             android:label="Roster demo" />
+        <activity
+            android:name="dev.atoll.app.governance.GovernanceDemoActivity"
+            android:exported="true"
+            android:label="Governance demo" />
     </application>
 </manifest>
