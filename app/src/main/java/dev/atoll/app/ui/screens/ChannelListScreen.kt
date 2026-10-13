@@ -10,6 +10,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.theme.AtollColors
@@ -46,7 +47,9 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
             val members = state.channels.filter { it.access.member }
             val others = state.channels.filterNot { it.access.member }
             item("members-label") { RailCaption("我的频道", members.size) }
-            item("create") { TextButton(onCreate) { Text("＋ 新建频道", fontSize = 12.sp) } }
+            item("create") { TextButton(onCreate, Modifier.fillMaxWidth().height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) { Text("＋ 新建频道", fontSize = 12.sp) }
+            } }
             if (members.isEmpty()) item("members-empty") { RailEmpty("还没有加入频道") }
             items(visible.filter { it.access.member }, key = { it.id }) { ChannelRow(it, state.activeChannelId == it.id, it.id in branches, it.id in collapsed, toggle, onOpen) }
             item("space-label") { RailCaption("空间", others.size) }
@@ -71,8 +74,8 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
                 Text(state.account.id, color = AtollColors.Muted, fontSize = 10.sp)
             }
             Column(horizontalAlignment = Alignment.End) {
-                TextButton(onSpaceAdmin) { Text("空间管理", fontSize = 11.sp, color = AtollColors.Muted) }
-                TextButton(onLogout) { Text("退出", fontSize = 11.sp, color = AtollColors.Muted) }
+                TextButton(onSpaceAdmin, Modifier.height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("空间管理", fontSize = 11.sp, color = AtollColors.Muted) }
+                TextButton(onLogout, Modifier.height(44.dp), contentPadding = PaddingValues(horizontal = 4.dp)) { Text("退出", fontSize = 11.sp, color = AtollColors.Muted) }
             }
         }
     }
@@ -82,7 +85,7 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
         dismissButton = { TextButton({ upgradeConfirmation = false }) { Text("取消") } }) }
 }
 @Composable private fun RailCaption(text: String, count: Int) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 16.dp)) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp)) {
         Text(text, fontSize = 12.sp, color = AtollColors.Muted, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
         Text(count.toString(), fontSize = 10.sp, color = AtollColors.Muted)
     }
@@ -94,15 +97,16 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
         if (channel.activity.isNotEmpty()) while (true) { value = System.currentTimeMillis(); delay(1000) }
     }
     Row(Modifier.fillMaxWidth().background(if (selected) AtollColors.Selected else AtollColors.ChannelRail, MaterialTheme.shapes.medium)
-        .clickable { onOpen(channel.id) }.padding(horizontal = 8.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Spacer(Modifier.width((channel.depth.coerceAtLeast(0) * 10).dp))
+        .heightIn(min = 44.dp).clickable { onOpen(channel.id) }
+        .padding(start = (8 + channel.depth.coerceAtLeast(0) * 12).dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         if (branch) TextButton({ onToggle(channel.id) }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) {
             Text(if (collapsed) "›" else "⌄", color = AtollColors.Muted)
-        }
+        } else Spacer(Modifier.width(44.dp))
         Text("#", fontSize = 12.sp, color = AtollColors.Muted)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Text(channel.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            if (channel.runningElapsed.isNotEmpty()) Text(channel.runningElapsed, fontSize = 10.sp, color = AtollColors.Online)
+            Text(channel.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (channel.runningElapsed.isNotEmpty()) Text(channel.runningElapsed, fontSize = 10.sp, color = AtollColors.Online, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (channel.activity.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 channel.activity.take(2).forEach { active -> Text("● ${active.name} ${activityDuration(active.startedAtMillis, now)}", fontSize = 10.sp, color = AtollColors.Online) }
                 if (channel.activity.size > 2) Text("+${channel.activity.size - 2}", fontSize = 10.sp, color = AtollColors.Muted)
