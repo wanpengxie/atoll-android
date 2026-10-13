@@ -144,7 +144,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val receipt = if(approval) "已回执 · 处理者："+(names[terminal.senderId] ?: terminal.senderId)+terminal.body["decision"].string().takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty() else ""
                 val text = (listOf(receipt) + visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
-                    message(terminal, "$key:answer", text, if (terminal.status=="failed" && !interrupted && !superseded) MessageStatus.Failed else null, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks)
+                    message(terminal, "$key:answer", text, if (interrupted) null else if (terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 val lost = lostReason
