@@ -1,7 +1,6 @@
 package dev.atoll.app.app
 
 import android.os.SystemClock
-import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -38,6 +37,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
+    LaunchedEffect(state.phase, state.route) { graph.telemetry.screen.set(state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     AtollTheme {
         when (state.phase) {
@@ -58,7 +58,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
                                 withFrameNanos { }
-                                Log.i("AtollPerf", "channel-list-visible elapsed_ms=${SystemClock.elapsedRealtime() - startedAt}")
+                                graph.performanceMark("channel-list-visible", SystemClock.elapsedRealtime() - startedAt)
                                 loggedList = true
                             }
                         }
@@ -76,6 +76,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             var pickingFile by remember { mutableStateOf(false) }
                             val bottomIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0)
                             val latestBottomIndex by rememberUpdatedState(bottomIndex)
+                            DisposableEffect(listState) { onDispose { graph.telemetry.scrolling.set(false) } }
                             suspend fun scrollEnd() {
                                 autoScrolling = true
                                 try {
@@ -94,13 +95,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 }
                                 if (!visibleLogged && conversation.entries.isNotEmpty()) {
                                     withFrameNanos { }
-                                    Log.i("AtollPerf", "timeline-visible channel=${state.route!!.channel} source=${if (state.firstOrigin == Origin.CACHE) "cache" else "network"} elapsed_ms=${SystemClock.elapsedRealtime() - state.channelOpenedAt}")
+                                    graph.performanceMark("timeline-visible", SystemClock.elapsedRealtime() - state.channelOpenedAt, state.route!!.channel, if (state.firstOrigin == Origin.CACHE) "cache" else "network")
                                     visibleLogged = true
                                 }
                             }
                             LaunchedEffect(listState) {
                                 snapshotFlow { Triple(listState.isScrollInProgress, listState.canScrollForward, listState.layoutInfo.visibleItemsInfo.lastOrNull()?.size ?: 0) }
                                     .distinctUntilChanged().collect { (scrolling, canForward, _) ->
+                                    graph.telemetry.scrolling.set(scrolling)
                                     if (initialized && !autoScrolling) {
                                         if (scrolling) { following = !canForward; graph.follow(following) }
                                         else if (!canForward) { following = true; graph.follow(true) }
@@ -137,6 +139,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     Item.Recent -> recentOpen = true
                                     Item.OpenTerminal -> graph.terminal(true)
                                     Item.CloseTerminal -> graph.terminal(false)
+                                    Item.ExportPerformance -> graph.export(true)
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
