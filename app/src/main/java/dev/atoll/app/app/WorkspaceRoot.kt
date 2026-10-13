@@ -47,6 +47,13 @@ import dev.atoll.app.ui.components.LocalMarkdownCache
 import dev.atoll.app.ui.components.MarkdownCache
 import dev.atoll.app.ui.components.RichContentHost
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.MutableStateFlow
+import dev.atoll.app.compose.LocalSubmission
+import dev.atoll.app.waiting.WaitingViewModel
+import dev.atoll.app.waiting.WaitingUiState
+import dev.atoll.app.tasks.TasksViewModel
+import dev.atoll.app.tasks.TasksState
+import dev.atoll.app.roster.RosterViewModel
 import androidx.compose.foundation.gestures.scrollBy
 
 @Composable
@@ -55,14 +62,27 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val graph = viewModel.graph
     val services by graph.services.collectAsStateWithLifecycle()
     val features = viewModel.session(services)
-    val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
-    val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
-    val localSubmissions = features?.composer?.submissions?.collectAsStateWithLifecycle()?.value.orEmpty()
+    // Keep subscription call sites present while the session/channel owners change.
+    // Safe-call composable invocations would shift later slots on login/logout.
+    val emptyWaiting = remember { MutableStateFlow<WaitingViewModel?>(null) }
+    val emptyWaitingState = remember { MutableStateFlow(WaitingUiState()) }
+    val emptySubmissions = remember { MutableStateFlow<List<LocalSubmission>>(emptyList()) }
+    val waitingOwner by (features?.waiting ?: emptyWaiting).collectAsStateWithLifecycle()
+    val waiting = waitingOwner?.takeIf { it.channelId == state.route?.channel }
+    val observedWaitingState by (waiting?.state ?: emptyWaitingState).collectAsStateWithLifecycle()
+    val waitingState = observedWaitingState.takeIf { waiting != null }
+    val localSubmissions by (features?.composer?.submissions ?: emptySubmissions).collectAsStateWithLifecycle()
     val localById = remember(localSubmissions) { localSubmissions.associateBy { it.messageId } }
-    val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
-    val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
+    val emptyTasks = remember { MutableStateFlow<TasksViewModel?>(null) }
+    val emptyTaskState = remember { MutableStateFlow(TasksState()) }
+    val taskOwner by (features?.tasks ?: emptyTasks).collectAsStateWithLifecycle()
+    val tasks = taskOwner?.takeIf { it.channelId == state.route?.channel }
+    val observedTaskState by (tasks?.state ?: emptyTaskState).collectAsStateWithLifecycle()
+    val taskState = observedTaskState.takeIf { tasks != null }
     val actionRoster = remember(state.roster) { state.roster.map { ComposerActor(it.id, it.name, it.kind, it.body) } }
-    val roster = features?.roster?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
+    val emptyRoster = remember { MutableStateFlow<RosterViewModel?>(null) }
+    val rosterOwner by (features?.roster ?: emptyRoster).collectAsStateWithLifecycle()
+    val roster = rosterOwner?.takeIf { it.channelId == state.route?.channel }
     var rosterOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var actorOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     var governanceOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
@@ -198,12 +218,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             val content: (@Composable () -> Unit)? = when {
                                 state.route?.tab == "tasks" && tasks != null -> ({ NativeTasksScreen(tasks, onSource = { taskSourceLink(it)?.let(graph::route) },
                                     onTurn = { graph.route(taskSourceLink(buildJsonObject { put("channelId", state.route!!.channel); put("requestId", it) })!!) }) })
-                                terminal && files != null && features != null && services?.pty != null -> ({
+                                terminal && files != null && features != null && services?.pty != null -> ({ key(files) {
                                     val fileState by files.state.collectAsStateWithLifecycle()
                                     TerminalScreen(services!!.pty!!, state.route!!.channel,
                                         fileState.devices.map { TerminalDevice(it.id, it.name, it.online) }, features.terminalPreferences,
                                         visible = lifecycle.isAtLeast(Lifecycle.State.STARTED), onClose = { graph.terminal(false) })
-                                })
+                                } })
                                 state.route?.tab in setOf("files", "resources") && services != null && features != null -> ({
                                     val self = services!!.selfIds[state.route!!.channel].orEmpty()
                                     FilesResourcesSurface(services!!, state.route!!.channel, files, state.route?.tab == "resources",
@@ -343,7 +363,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         })
                     } }
                 }
-                if (recentOpen && features != null) {
+                if (recentOpen && features != null) key(features) {
                     val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
                     AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },
                         text = { Column(Modifier.heightIn(max = 400.dp)) {
