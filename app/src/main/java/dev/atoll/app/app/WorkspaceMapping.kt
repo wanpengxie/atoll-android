@@ -5,6 +5,9 @@ import dev.atoll.app.core.string
 import dev.atoll.app.model.*
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.components.ResultViewState
+import dev.atoll.app.ui.components.MappedResult
+import dev.atoll.app.ui.components.resultBusiness
+import dev.atoll.app.ui.components.terminalResult
 import dev.atoll.app.ui.screens.TimelineEntry as UiEntry
 import kotlinx.serialization.json.*
 import kotlinx.coroutines.CancellationException
@@ -173,14 +176,12 @@ fun messageText(envelope: Envelope): String {
     val content = body.objects("content").filter { it["type"].string() == "text" }.map { it["text"].string() }.filter(String::isNotBlank)
     if (content.isNotEmpty()) return content.joinToString("\n\n")
     if (envelope.status == "failed") return body["detail"].string().ifEmpty { body["reason"].string().ifEmpty { body["error_code"].string() } }
-    val result = messageBusiness(body)
+    val result = resultBusiness(body)
     return if (result.isEmpty()) "" else "```json\n$result\n```"
 }
 
 internal fun JsonObject.objects(key: String) = (this[key] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
 internal fun JsonObject.longValue(key: String) = (this[key] as? JsonPrimitive)?.longOrNull ?: 0L
-
-private data class MappedResult(val text: String = "", val result: ResultViewState? = null)
 
 /** Listed attachments take precedence over files, then append non-duplicate resource links. */
 internal fun messageAttachments(body: JsonObject): List<MessageAttachmentViewState> {
@@ -200,36 +201,6 @@ internal fun messageAttachments(body: JsonObject): List<MessageAttachmentViewSta
     val linked = body.objects("content").filter { it["type"].string() == "resource_link" && it["uri"].string().isNotBlank() }
         .map { attachment(it, true) }.filter { it.resourceId !in listedIds }
     return listed + linked
-}
-
-private fun messageBusiness(body: JsonObject): JsonObject = JsonObject(body.filterKeys {
-    it !in ConversationVisibility.terminalTransportFields && it !in setOf("attachments", "files")
-        && !(it == "content" && body.objects("content").any { block -> block["type"].string() in setOf("text", "resource_link") })
-})
-
-/** Match web StructuredResult; protocol bookkeeping never becomes business JSON. */
-private fun terminalResult(envelope: Envelope, requestType: String): MappedResult {
-    val body = envelope.body
-    val business = messageBusiness(body)
-    if (envelope.status == "failed") {
-        val code = if (body["cancelled"] == JsonPrimitive(true)) "cancelled" else body["error_code"].string().ifEmpty { body["reason"].string() }
-        return MappedResult(result = ResultViewState(errorCode = code, detail = body["detail"].string(),
-            errorData = business.takeIf { it.isNotEmpty() }))
-    }
-    if ("text" in body) {
-        val text = body["text"].string()
-        if (text.isEmpty()) return if (messageAttachments(body).isNotEmpty()) MappedResult() else MappedResult(result = ResultViewState(emptyText = true))
-        val parsed = if (text.trimStart().firstOrNull() in listOf('{', '[')) runCatching { Json.parseToJsonElement(text) }.getOrNull() else null
-        return if (parsed is JsonObject || parsed is JsonArray) MappedResult(result = ResultViewState(parsed, "JSON 结果")) else MappedResult(text)
-    }
-    if (body.objects("content").any { it["type"].string() in setOf("text", "resource_link") })
-        return MappedResult(body.objects("content").filter { it["type"].string() == "text" }.map { it["text"].string().trim() }.filter(String::isNotEmpty).joinToString("\n\n"))
-    if (business.isNotEmpty()) {
-        val title = if (requestType == "actor.describe" || "words" in body && "class" in body)
-            body["class"].string().takeIf(String::isNotEmpty)?.let { "$it 的能力" } ?: "Actor 能力" else "结构化结果"
-        return MappedResult(result = ResultViewState(business, title))
-    }
-    return if (messageAttachments(body).isNotEmpty()) MappedResult() else MappedResult(result = ResultViewState(acknowledgement = true))
 }
 
 private fun prose(body: JsonObject): String {
