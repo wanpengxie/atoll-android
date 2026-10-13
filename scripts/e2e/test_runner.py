@@ -155,7 +155,7 @@ class RunnerTest(unittest.TestCase):
                 self.assertEqual(['adb', '-s', 'emulator-5554'], command[:3])
                 result = unittest.mock.Mock(returncode=0)
                 result.stdout = 'List of devices attached\n' if command[-1] == 'devices' and response.calls == 0 else \
-                    ('List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else '1\n')
+                    ('List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else ('stopped\n' if command[-1] == 'init.svc.bootanim' else '1\n'))
                 response.calls += 1
                 return result
             response.calls = 0
@@ -172,7 +172,7 @@ class RunnerTest(unittest.TestCase):
             lock.base = Path(tmp)
             def response(command, **kwargs):
                 result = unittest.mock.Mock(returncode=0)
-                result.stdout = 'List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else '1\n'
+                result.stdout = 'List of devices attached\nemulator-5554\tdevice\n' if command[-1] == 'devices' else ('stopped\n' if command[-1] == 'init.svc.bootanim' else '1\n')
                 return result
             with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.subprocess.Popen') as start:
                 instrumented.ensure_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
@@ -220,6 +220,51 @@ class RunnerTest(unittest.TestCase):
                 lock.on_empty = callback
             callback.assert_called_once()
             self.assertEqual('sol-3\n', lock.queue.read_text())
+
+    def test_network_probe_waits_until_boot_animation_stops(self):
+        lock = unittest.mock.Mock()
+        animation_calls = 0
+        commands = []
+        def response(command, **kwargs):
+            nonlocal animation_calls
+            commands.append(command)
+            result = unittest.mock.Mock(returncode=0, stdout='')
+            if command[-1] == 'devices': result.stdout = 'List of devices attached\nemulator-5554\tdevice\n'
+            elif command[-1] == 'sys.boot_completed': result.stdout = '1'
+            elif command[-1] == 'init.svc.bootanim':
+                animation_calls += 1
+                result.stdout = 'running' if animation_calls == 1 else 'stopped'
+            elif 'nc' in command: self.assertEqual(2, animation_calls)
+            return result
+        with patch('instrumented.subprocess.run', side_effect=response), patch('instrumented.time.sleep'):
+            instrumented.ensure_emulator({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+        self.assertEqual(2, animation_calls)
+        self.assertEqual(1, sum('nc' in command for command in commands))
+
+    def test_guest_network_failure_is_retried_before_emulator_ready(self):
+        lock = unittest.mock.Mock()
+        responses = [unittest.mock.Mock(returncode=1), unittest.mock.Mock(returncode=0)]
+        environment = {'ANDROID_SERIAL': 'emulator-5554'}
+        with patch('instrumented.subprocess.run', side_effect=responses) as adb, patch('instrumented.time.sleep') as sleep:
+            instrumented.wait_emulator_network(environment, lock)
+        self.assertEqual(2, adb.call_count)
+        self.assertEqual(['adb', '-s', 'emulator-5554', 'shell', 'toybox', 'nc', '-z', '-w', '3', '100.99.232.10', '18080'], adb.call_args.args[0])
+        self.assertEqual(environment, adb.call_args.kwargs['env'])
+        sleep.assert_called_once_with(2)
+        lock.event.assert_any_call('emulator-network-ready', server=URL, attempts=2)
+
+    def test_guest_network_timeout_is_an_environment_failure_without_ready_event(self):
+        lock = unittest.mock.Mock()
+        with patch('instrumented.time.monotonic', side_effect=[0, 0, 121]), \
+             patch('instrumented.subprocess.run', side_effect=__import__('subprocess').TimeoutExpired('adb', 8)), \
+             patch('instrumented.time.sleep'), self.assertRaisesRegex(Failure, 'environment problem.*120s.*no Gradle'):
+            instrumented.wait_emulator_network({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+        self.assertFalse(any(call.args[0] == 'emulator-network-ready' for call in lock.event.call_args_list))
+
+    def test_guest_network_probe_refuses_a_physical_device(self):
+        with patch('instrumented.subprocess.run') as adb, self.assertRaises(Failure):
+            instrumented.wait_emulator_network({'ANDROID_SERIAL': 'e5ca3495'}, unittest.mock.Mock())
+        adb.assert_not_called()
 
     def test_isolated_password_helper_remains_outside_the_ui_runner(self):
         spec = importlib.util.spec_from_file_location('test_password', Path(__file__).parent.parent / 'test-node-password.py')
