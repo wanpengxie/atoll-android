@@ -64,7 +64,7 @@ fun TimedActionsDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
     }
     TaskDialog("定时动作",onClose,busy=busy) {
         LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            item { Text("本设备已安排的定时动作",style=MaterialTheme.typography.titleSmall) }
+            item { Text("本次会话已安排的定时动作",style=MaterialTheme.typography.titleSmall) }
             item { OutlinedTextField(duration,{ duration=it },label={ Text("延迟（毫秒）") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth(),enabled=!busy) }
             item { OutlinedTextField(type,{ type=it },label={ Text("消息类型") },modifier=Modifier.fillMaxWidth(),enabled=!busy) }
             item { OutlinedTextField(payload,{ payload=it },label={ Text("Payload JSON") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=3,maxLines=6) }
@@ -79,13 +79,13 @@ fun TimedActionsDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
             item { TextButton(onClick={ perform { cancelTimer(cancelId.trim());"已确认取消 ${cancelId.trim()}" } },enabled=!busy && state.writable && cancelId.isNotBlank()) { Text("取消定时动作") } }
             items(state.timers,key={ it.timerId }) { timer ->
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    Text(timer.payload.text("text").ifEmpty { timer.msgType },style=MaterialTheme.typography.titleSmall)
+                    WorkTitle(timer.payload.text("text").ifEmpty { timer.msgType })
                     Text("${when (timer.state) { "scheduled" -> "已安排";"fired" -> "已触发";else -> "已取消" }} · ${taskDate(timer.dueAt.toString())}",style=MaterialTheme.typography.bodySmall)
                     Text(timer.timerId,style=MaterialTheme.typography.bodySmall)
                     if (timer.state=="scheduled") TextButton(onClick={ perform { cancelTimer(timer.timerId);"已确认取消 ${timer.timerId}" } },enabled=!busy && state.writable) { Text("取消") }
                 } }
             }
-            if (state.timers.isEmpty()) item { Text("本设备还没有定时记录。",style=MaterialTheme.typography.bodySmall) }
+            if (state.timers.isEmpty()) item { Text("本次会话还没有定时记录。",style=MaterialTheme.typography.bodySmall) }
         }
     }
 }

@@ -55,7 +55,7 @@ fun TasksScreen(viewModel: TasksViewModel,modifier: Modifier=Modifier,onSource: 
             val groups=remember(window.items) { window.items.groupBy(::taskGroup) }
             LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
                 if (window.hasOlder) item { TextButton(onClick={ page++ }) { Text("查看更早任务") } }
-                for ((group,label) in listOf("needs_you" to "需要你处理","active" to "进行中","recovery" to "恢复事项","automation" to "自动动作 · 本设备","history" to "历史")) {
+                for ((group,label) in listOf("needs_you" to "需要你处理","active" to "进行中","recovery" to "恢复事项","automation" to "自动动作 · 本次会话","history" to "历史")) {
                     val rows=groups[group].orEmpty();if (rows.isEmpty()) continue
                     item(key="group:$group") { Text("$label ${rows.size}",style=MaterialTheme.typography.titleSmall,modifier=Modifier.padding(top=4.dp)) }
                     items(rows,key={ it.key }) { item -> TaskRow(item,state.actorNames) { viewModel.select(item.key) } }
@@ -67,7 +67,7 @@ fun TasksScreen(viewModel: TasksViewModel,modifier: Modifier=Modifier,onSource: 
         } else LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
             items(state.waiting,key={ it.key }) { item ->
                 Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp)) {
-                    Text(compactWorkTitle(item.title),style=MaterialTheme.typography.titleSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+                    WorkTitle(item.title)
                     Text("${state.actorNames[item.actorId] ?: item.actorId} · ${taskStates[item.state] ?: item.state}",style=MaterialTheme.typography.bodySmall)
                     Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.spacedBy(4.dp)) {
                         item.actions.forEach { action ->
@@ -96,9 +96,9 @@ fun TasksScreen(viewModel: TasksViewModel,modifier: Modifier=Modifier,onSource: 
 @Composable private fun TaskRow(item: TaskFact,names: Map<String,String>,onOpen: ()->Unit) {
     Card(onClick=onOpen,modifier=Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
         Row { Text(taskKinds[item.kind] ?: item.kind,Modifier.weight(1f),style=MaterialTheme.typography.labelSmall);Text(taskStates[item.state] ?: item.state,style=MaterialTheme.typography.labelSmall) }
-        Text(compactWorkTitle(item.title),style=MaterialTheme.typography.titleSmall,maxLines=1,overflow=TextOverflow.Ellipsis)
+        WorkTitle(item.title)
         Row { Text(item.assigneeActorIds.joinToString("、") { names[it] ?: it }.ifEmpty { "未指定" },Modifier.weight(1f),style=MaterialTheme.typography.bodySmall)
-            if (item.localScope=="this_device") Text("本设备",style=MaterialTheme.typography.labelSmall) }
+            if (item.localScope=="this_device") Text(if(item.kind=="automation") "本次会话" else "本设备",style=MaterialTheme.typography.labelSmall) }
     } }
 }
 
@@ -132,8 +132,8 @@ fun TaskDetail(item: TaskFact,viewModel: TasksViewModel,modifier: Modifier=Modif
     TaskDialog(item.title,onClose,modifier) {
         LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
             item { Text("${taskKinds[item.kind] ?: item.kind} · ${taskStates[item.state] ?: item.state}",style=MaterialTheme.typography.titleSmall) }
-            if (item.localScope=="this_device") item { Text("本设备记录",style=MaterialTheme.typography.labelLarge) }
-            item { Text("负责人：${item.assigneeActorIds.joinToString("、") { state.actorNames[it] ?: it }.ifEmpty { "未指定" }}\n创建者：${state.actorNames[item.requesterActorId] ?: item.requesterActorId}\n截止/触发：${taskDate(item.dueAt)}\n事实来源：${if (item.provenance=="ledger") "频道账本" else "本设备持久记录"}") }
+            if (item.localScope=="this_device") item { Text(if(item.kind=="automation") "本次会话记录" else "本设备记录",style=MaterialTheme.typography.labelLarge) }
+            item { Text("负责人：${item.assigneeActorIds.joinToString("、") { state.actorNames[it] ?: it }.ifEmpty { "未指定" }}\n创建者：${state.actorNames[item.requesterActorId] ?: item.requesterActorId}\n截止/触发：${taskDate(item.dueAt)}\n事实来源：${when { item.provenance=="ledger" -> "频道账本";item.kind=="automation" -> "本次会话记录";else -> "本设备持久记录" }}") }
             if (item.description.isNotEmpty()) item { Text(item.description) }
             if (item.waitingFor.isNotEmpty()) item { Text("当前等待：${item.waitingFor}") }
             when (item.kind) {
@@ -185,7 +185,7 @@ fun ActivityCenterScreen(snapshot: ActivitySnapshot,modifier: Modifier=Modifier,
             if (operations && snapshot.operationsUnavailable) item { Text("当前没有可用的进行中操作快照") }
             items(rows,key={ it.key }) { row -> Card(onClick={ onSource(row.source) },modifier=Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    Text(compactWorkTitle(row.title),style=MaterialTheme.typography.titleSmall,maxLines=1,overflow=TextOverflow.Ellipsis);Text("${taskKinds[row.kind] ?: "操作"} · ${row.channelName} · ${taskStates[row.state] ?: row.state}",style=MaterialTheme.typography.bodySmall)
+                    WorkTitle(row.title);Text("${taskKinds[row.kind] ?: "操作"} · ${row.channelName} · ${taskStates[row.state] ?: row.state}",style=MaterialTheme.typography.bodySmall)
                     if (row.detail.isNotEmpty()) Text(row.detail,style=MaterialTheme.typography.bodySmall,maxLines=2,overflow=TextOverflow.Ellipsis)
                     Text("返回来源 ›",color=MaterialTheme.colorScheme.primary,style=MaterialTheme.typography.labelMedium)
                 }
