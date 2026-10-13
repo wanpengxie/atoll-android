@@ -23,6 +23,28 @@ class WorkspaceMappingContentTest {
         return TimelineMapper().map(replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self")),"human:self",emptyList())
             .filterIsInstance<UiEntry.Message>().map { it.value }
     }
+    @Test fun attachmentsCombineListedFilesAndResourceLinksWithoutDuplicateCards() {
+        val body=json("""{"attachments":[{"resource_id":"daemon://d/c/a.pdf","name":"Chosen PDF","mime":"application/pdf","size":42}],"files":[{"id":"ignored"}],"content":[{"type":"resource_link","uri":"daemon://d/c/a.pdf","name":"duplicate"},{"type":"resource_link","uri":" oss://s/c/image.png ","mimeType":"image/png","size":-1},{"type":"resource_link","uri":"  "}]}""")
+        val cards=messageAttachments(body)
+        assertEquals(2,cards.size);assertEquals("Chosen PDF",cards[0].name)
+        assertEquals("application/pdf",cards[0].mime);assertEquals(42L,cards[0].size)
+        assertEquals("oss://s/c/image.png",cards[1].resourceId);assertEquals(cards[1].resourceId,cards[1].uri)
+        assertEquals("image.png",cards[1].name);assertEquals("image/png",cards[1].mime);assertNull(cards[1].size)
+        assertTrue(messageAttachments(json("""{"attachments":[],"files":[{"id":"ignored"}]}""")).isEmpty())
+        assertEquals("file:x",messageAttachments(json("""{"files":[{"id":"file:x","name":"X","media_type":"text/plain","size":"7"}]}""")).single().resourceId)
+    }
+    @Test fun requestAndAnswerAttachIndependentCardsAndFileOnlyAnswersAvoidJsonOrEmptyAck() {
+        val request=row(1,"q","request",json("""{"files":[{"id":"daemon://d/c/input.txt","name":"input"}]}"""))
+        val reply=row(2,"a","response",json("""{"status":"completed","attachments":[{"resource_id":"oss://s/c/out.png","name":"output"}]}"""),parent="q")
+        val messages=mapped(request,reply)
+        assertEquals("input",messages.first().attachments.single().name);assertEquals("",messages.first().text)
+        assertEquals("output",messages.last().attachments.single().name);assertEquals("",messages.last().text);assertNull(messages.last().result)
+        assertNull(answer("""{"status":"completed","text":"","files":[{"id":"file:x"}]}""").result)
+        val linked=answer("""{"status":"completed","content":[{"type":"text","text":"Here"},{"type":"resource_link","uri":"daemon://d/c/x","title":"X"}]}""")
+        assertEquals("Here",linked.text);assertEquals("X",linked.attachments.single().name);assertNull(linked.result)
+        val structured=answer("""{"status":"completed","value":42,"attachments":[{"id":"file:x"}]}""")
+        assertEquals(json("""{"value":42}"""),structured.result!!.value);assertEquals(1,structured.attachments.size)
+    }
     @Test fun structuredJsonAndBusinessResultsDoNotBecomeMarkdownCodeFences() {
         val objectText=answer(buildJsonObject { put("status","completed");put("text",json("""{"count":2}""").toString()) }.toString())
         assertEquals("",objectText.text);assertEquals("JSON 结果",objectText.result!!.title);assertEquals(json("""{"count":2}"""),objectText.result!!.value)
