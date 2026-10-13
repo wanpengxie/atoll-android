@@ -86,7 +86,7 @@ class IsolatedNodeSmokeTest {
         compose.waitUntil(timeoutMillis = timeout) { nodes(matcher, unmerged).isNotEmpty() }
         return compose.onAllNodes(matcher, useUnmergedTree = unmerged).onFirst()
     }
-    private fun click(text: String) = waitFor(hasText(text) and hasClickAction()).performClick()
+    private fun click(text: String) = waitFor(hasText(text) and hasClickAction() and isEnabled()).performClick()
     private fun replace(label: String, value: String, private: Boolean = false) {
         val field = waitFor(hasSetTextAction() and hasText(label))
         try { field.performTextReplacement(value) } catch (failure: Throwable) {
@@ -128,7 +128,7 @@ class IsolatedNodeSmokeTest {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("atoll.waiting.") == true
     } and hasAnyDescendant(hasText(text, substring = true))
     private fun waitingAction(marker: String, action: String) = waitFor(
-        hasText(action) and hasClickAction() and hasAnyAncestor(waitingRow(marker))).performClick()
+        hasText(action) and hasClickAction() and isEnabled() and hasAnyAncestor(waitingRow(marker))).performClick()
     private fun answer(value: String) = waitFor(hasText(value), timeout = 180_000, unmerged = true).assertExists()
 
     private fun capture(name: String) {
@@ -197,7 +197,12 @@ class IsolatedNodeSmokeTest {
         }
         step("waiting-edit") {
             waitingAction("${marker}_Q2", "编辑")
-            waitFor(hasText("提交编辑") and hasClickAction() and isEnabled())
+            // A running shell command can trigger the documented background-task warning.
+            val continueEditing = hasText("继续编辑") and hasClickAction()
+            val submitEditing = hasText("提交编辑") and hasClickAction() and isEnabled()
+            compose.waitUntil(40_000) { nodes(continueEditing).isNotEmpty() || nodes(submitEditing).isNotEmpty() }
+            if (nodes(continueEditing).isNotEmpty()) click("继续编辑")
+            waitFor(submitEditing)
             waitFor(editor).performTextReplacement("Ignore this extra isolated test instruction; keep your current reply. ${marker}_EDITED")
             click("提交编辑"); waitFor(hasText("编辑已提交")); waitFor(waitingRow("${marker}_EDITED"))
         }
