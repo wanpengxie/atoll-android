@@ -27,6 +27,11 @@
   down, the lead restarts it with:
   `nohup ~/Library/Android/sdk/emulator/emulator -avd ash-browser -no-window -no-snapshot-load -no-snapshot-save -gpu host -dns-server 100.100.100.100,223.5.5.5 > ~/atoll-build/emulator.log 2>&1 &`.
   Never work around DNS in app code.
+  Wait for the lock by retrying, not by messaging its holder:
+  `until mkdir ~/atoll-build/emulator.lock 2>/dev/null; do sleep 15; done`.
+  Hold it only for install + run + screenshots (about 10 minutes at most);
+  develop and run JVM tests without it.
+- Workers do not message each other; anything shared goes through the lead.
 - Node for live tests: `https://tardis.tail6bc2a1.ts.net` (from mbp and the
   emulator). A local automation token is on tardis at
   `~/.atoll/server/atoll-token` (send as `Authorization: Bearer`). Everything
