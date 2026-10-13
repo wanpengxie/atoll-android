@@ -30,7 +30,7 @@ class AppTelemetry(private val now: () -> Long = System::currentTimeMillis) {
         val copied = synchronized(this) { Triple(events.toList(), frames.copy(), scrollingFrames.copy()) }
         return buildJsonObject {
             put("events", JsonArray(copied.first)); put("frames", copied.second.json()); put("scrollingFrames", copied.third.json())
-            put("frameSource", "android.view.FrameMetrics"); put("screen", screen.get())
+            put("frameSource", "android.view.FrameMetrics"); put("frameScope", "activityWindow"); put("screen", screen.get())
         }
     }
     private fun safe(value: JsonElement): JsonElement = when (value) {

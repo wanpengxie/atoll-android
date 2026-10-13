@@ -350,7 +350,7 @@ class AppGraph(private val context: Context) {
     }
 
     private suspend fun transport(state: WireState) {
-        telemetry.event("wire.state", data = buildJsonObject { put("state", state.javaClass.simpleName); if (state is WireState.Attached) put("generation", state.generation) })
+        telemetry.event("wire.state", data = buildJsonObject { put("state", when (state) { WireState.Connecting -> "connecting"; is WireState.Attached -> "attached"; is WireState.Disconnected -> "disconnected"; WireState.SignedOut -> "signed_out"; is WireState.Incompatible -> "incompatible" }); if (state is WireState.Attached) put("generation", state.generation) })
         val rt = runtime ?: return
         if (state is WireState.Attached) {
             val boot = state.receipt["boot"].string()
