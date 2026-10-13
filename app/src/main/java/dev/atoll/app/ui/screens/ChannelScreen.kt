@@ -34,6 +34,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     onMenu: (ChannelMenuAction) -> Unit = {}, onLink: ((String) -> Unit)? = null,
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
+    onAttachment: MessageAttachmentHandler? = null,
     messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Workspace).safeDrawingPadding().imePadding()) {
@@ -83,7 +84,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                     is TimelineEntry.Day -> DaySeparator(entry.text)
                     is TimelineEntry.Notice -> WeakNotice(entry.text)
                     is TimelineEntry.Message -> {
-                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
+                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
                         if (messageContent != null) messageContent(entry.value, default) else default()
                     }
                 } }
