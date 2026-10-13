@@ -15,7 +15,7 @@ fun DemoApp(initialScreen: String = "login") {
     var login by remember { mutableStateOf(LoginViewState("https://tardis.tail6bc2a1.ts.net", "root")) }
     var tab by remember { mutableStateOf(if (initialScreen == "tasks") ChannelTab.Tasks else ChannelTab.Conversation) }
     var mine by remember { mutableStateOf(true) }
-    var actor by remember { mutableStateOf<String?>(null) }
+    var actorFilters by remember { mutableStateOf(emptySet<String>()) }
     var draft by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf<String?>(null) }
     var selected by remember { mutableStateOf(DemoData.channels.first()) }
@@ -27,9 +27,9 @@ fun DemoApp(initialScreen: String = "login") {
                 "channels" -> ChannelListScreen(DemoData.channels, "已连接 · tardis", {
                     selected = DemoData.channels.first { channel -> channel.id == it }; screen = "channel"
                 }, { menu = "新建频道" }, { menu = "活动中心" }, { menu = "设置" })
-                else -> ChannelScreen(ConversationViewState(selected, DemoData.agents, DemoData.entries, DemoData.tasks, mine, actor, waitingCount = 2),
+                else -> ChannelScreen(ConversationViewState(selected, DemoData.agents, DemoData.entries, DemoData.tasks, mine, actorFilters, waitingCount = 2),
                     ComposerViewState(draft, "sol-4", "6.1 Sol", "high"), tab,
-                    { screen = "channels" }, { tab = it }, { mine = !mine }, { actor = it }, { draft = it }, { draft = "" },
+                    { screen = "channels" }, { tab = it }, { mine = !mine }, { id -> actorFilters = if (id in actorFilters) actorFilters - id else actorFilters + id }, { draft = it }, { draft = "" },
                     { menu = "已加载到最早消息" }, { menu = it }, { menu = "文件预览：$it" })
             }
             menu?.let { title -> AlertDialog(onDismissRequest = { menu = null }, title = { Text(title) },
