@@ -64,6 +64,12 @@ class FrameCodecTest {
         assertThrows(FrameVersionException::class.java) { FrameCodec.decode("""{"v":4,"frame_type":"future"}""") }
         assertThrows(Exception::class.java) { FrameCodec.decode("not-json") }
     }
+    @Test fun feedRetainsItsTransportGenerationWithoutMutatingTheLedgerEnvelope() {
+        val frame = FrameCodec.decode("""{"v":5,"frame_type":"feed","payload":{"channel_id":"c","seq":9,"generation":17,"envelope":{"id":"m","payload":{"body":{"text":"hello"}}}}}""") as DownFrame.Feed
+        assertEquals(17L, frame.generation)
+        assertEquals(9L, frame.row.seq)
+        assertFalse(frame.row.envelope.json.containsKey("generation"))
+    }
     private fun invalid(type: String, payload: String) {
         assertThrows(FrameValidationException::class.java) { FrameCodec.encode(type, "ref", obj(payload)) }
     }

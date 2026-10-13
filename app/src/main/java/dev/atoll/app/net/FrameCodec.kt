@@ -99,7 +99,7 @@ object FrameCodec {
         return when (value["frame_type"].string()) {
             "receipt" -> DownFrame.Receipt(ref, p)
             "error" -> DownFrame.Error(ref, p["frame"].string(), p["code"].string().ifEmpty { "unknown" }, p["detail"].string())
-            "feed" -> DownFrame.Feed(ref, Row(p["channel_id"].string(), p.long("seq"), Envelope(p.getValue("envelope").jsonObject)))
+            "feed" -> DownFrame.Feed(ref, Row(p["channel_id"].string(), p.long("seq"), Envelope(p.getValue("envelope").jsonObject)), p.long("generation"))
             "checkpoint" -> DownFrame.Checkpoint(p["channel_id"].string(), p.long("scan_low_seq"), p.long("scanned_seq"), p.long("generation"))
             "page_end" -> DownFrame.PageEnd(ref, p["channel_id"].string(), p)
             "observe_ended" -> DownFrame.ObserveEnded(p["channel_id"].string(), p["reason"].string())
