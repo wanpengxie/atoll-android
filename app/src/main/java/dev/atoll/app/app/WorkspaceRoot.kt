@@ -62,12 +62,13 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             var visibleLogged by remember { mutableStateOf(false) }
                             var composer by rememberSaveable { mutableStateOf("") }
                             val bottomIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0)
+                            val latestBottomIndex by rememberUpdatedState(bottomIndex)
                             suspend fun scrollEnd() {
                                 autoScrolling = true
                                 try {
-                                    listState.scrollToItem(bottomIndex)
+                                    listState.scrollToItem(latestBottomIndex)
                                     withFrameNanos { }
-                                    val last = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.index == bottomIndex }
+                                    val last = listState.layoutInfo.visibleItemsInfo.lastOrNull { it.index == latestBottomIndex }
                                     if (last != null) listState.scrollBy((last.offset + last.size - listState.layoutInfo.viewportEndOffset).coerceAtLeast(0).toFloat())
                                 } finally { autoScrolling = false }
                             }
