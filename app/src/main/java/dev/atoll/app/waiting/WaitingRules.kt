@@ -18,6 +18,14 @@ data class WaitingActions(val insert: WaitingControl? = null, val canEdit: Boole
 
 /** Action availability follows the web dock. Membership always comes from waitingTurns. */
 object WaitingRules {
+    /** The live receiver declares stop; an unread roster must not hide it (web canInterrupt). */
+    fun interrupt(turn: Turn, writable: Boolean): WaitingControl? {
+        val declared = (turn.controlFrame()["controls"] as? JsonArray).orEmpty().any {
+            (it as? JsonObject)?.text("word") == "agent.interrupt"
+        }
+        return if (writable && turn.terminal == null && turn.request.type == "agent.ask" && declared && turn.actor().isNotEmpty())
+            WaitingControl("agent.interrupt", "停止", Envelope.EMPTY) else null
+    }
     fun leaseSupported(manifest: JsonObject?): Boolean {
         val words = manifest?.get("words") as? JsonObject ?: return false
         return listOf("agent.replace", "agent.unhold").all { type ->

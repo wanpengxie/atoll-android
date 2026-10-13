@@ -19,6 +19,7 @@ import dev.atoll.app.waiting.createWaitingViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import dev.atoll.app.tasks.AutomationSession
 import dev.atoll.app.tasks.TasksViewModel
 import dev.atoll.app.tasks.TaskSubmissionOwner
 import dev.atoll.app.tasks.UiFormController
@@ -57,14 +58,16 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         override fun retry(id: String) = composer.retry(id)
         override fun cancel(id: String) = composer.cancel(id)
     }
+    val automation = AutomationSession(services.boot)
     private val mutableTasks = MutableStateFlow<TasksViewModel?>(null)
     val tasks = mutableTasks.asStateFlow()
     fun tasks(channel: String): TasksViewModel {
         val current = mutableTasks.value
         if (current?.channelId == channel) return current
         current?.close()
-        return createTasksViewModel(context, services, channel, owner = taskOwner).also { mutableTasks.value = it }
+        return createTasksViewModel(services, channel, owner = taskOwner, automation = automation).also { mutableTasks.value = it }
     }
+    init { scope.launch(start = CoroutineStart.UNDISPATCHED) { services.wire.state.collect { automation.observe(it) } } }
     private val usageSeq = mutableMapOf<Pair<String, String>, Long>()
     private val mutableWaiting = MutableStateFlow<WaitingViewModel?>(null)
     val waiting = mutableWaiting.asStateFlow()
@@ -78,6 +81,7 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
     init { scope.launch(start = CoroutineStart.UNDISPATCHED) { services.wire.frames.collect { frame ->
         if (frame is DownFrame.Feed) {
             val row = frame.row
+            automation.observeFiring(row, selfIds[row.channelId].orEmpty())
             if (row.envelope.kind == "request") composer.reconcileLanded(row.channelId, setOf(row.envelope.id))
             composerUsage(row.envelope, row.seq)?.let { offerUsage(row.channelId, it) }
         }
@@ -91,5 +95,5 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         override fun <T : ViewModel> create(modelClass: Class<T>): T = FilesViewModel(services.wire, services.httpClient,
             services.server, channel, context.cacheDir, fileHistory) as T
     })["files:$channel", FilesViewModel::class.java]
-    fun clear() { mutableRoster.value?.close(); mutableRoster.value = null; governance.close(); forms.close(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
+    fun clear() { mutableRoster.value?.close(); mutableRoster.value = null; governance.close(); forms.close(); automation.clear(); mutableTasks.value?.close(); mutableTasks.value = null; mutableWaiting.value?.close(); mutableWaiting.value = null; scope.cancel(); viewModelStore.clear() }
 }
