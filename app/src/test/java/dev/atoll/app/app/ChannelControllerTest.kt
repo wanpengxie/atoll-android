@@ -76,6 +76,34 @@ class ChannelControllerTest {
         } finally { fixture.stop() }
     }
 
+    @Test fun baselinedBackgroundChannelsStillPublishActivityFactsFromOneRoomRead() = runBlocking {
+        val fixture = Fixture(head = 1, rows = listOf(row(1)), baseline = false)
+        try {
+            val state = fixture.await { it.taskFacts.isNotEmpty() && it.sync.current }
+            assertEquals(0, state.unread.count)
+            assertNull(state.conversation)
+            assertNull(state.timelineSource)
+            assertEquals("q1", state.taskFacts.single().id)
+            assertNull(state.taskFacts.single().turn)
+            assertTrue("Rows lookups=${fixture.lookups.get()}", fixture.lookups.get() <= 2)
+        } finally { fixture.stop() }
+    }
+
+    @Test fun backgroundApprovalExpiresWithoutAnotherMessageOrARepeatingClock() = runBlocking {
+        val approval = Row("c", 1, Envelope(buildJsonObject {
+            put("id", "approval"); put("kind", "request"); put("type", "human.approve"); put("expires_at", System.currentTimeMillis() + 2_000)
+            put("sender", buildJsonObject { put("id", "agent:a"); put("kind", "agent") }); put("audience", buildJsonArray { add("human:self") })
+            put("payload", buildJsonObject { put("body", buildJsonObject { put("text", "approve?") }) })
+        }))
+        val fixture = Fixture(head = 1, rows = listOf(approval), baseline = false)
+        try {
+            fixture.await { it.taskFacts.singleOrNull()?.state == "waiting" }
+            val expired = fixture.await { it.taskFacts.singleOrNull()?.state == "expired" }
+            assertFalse(expired.taskFacts.single().needsYou)
+            assertNull(expired.conversation)
+        } finally { fixture.stop() }
+    }
+
     private class Fixture(head: Long, rows: List<Row>, baseline: Boolean = true) {
         val memory = MemoryRowStore()
         val lookups = AtomicInteger()

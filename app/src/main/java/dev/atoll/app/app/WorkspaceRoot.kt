@@ -19,6 +19,9 @@ import dev.atoll.app.tasks.ApprovalCard
 import dev.atoll.app.tasks.TasksScreen as NativeTasksScreen
 import dev.atoll.app.tasks.CreateTaskDialog
 import dev.atoll.app.tasks.UiFormsHost
+import dev.atoll.app.tasks.ActivityCenterScreen
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.serialization.json.*
 import dev.atoll.app.terminal.TerminalScreen
 import dev.atoll.app.terminal.TerminalDevice
@@ -40,11 +43,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val graph = viewModel.graph
     val services by graph.services.collectAsStateWithLifecycle()
     val features = viewModel.session(services)
-    val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value
+    val waiting = features?.waiting?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val waitingState = waiting?.state?.collectAsStateWithLifecycle()?.value
-    val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value
+    val tasks = features?.tasks?.collectAsStateWithLifecycle()?.value?.takeIf { it.channelId == state.route?.channel }
     val taskState = tasks?.state?.collectAsStateWithLifecycle()?.value
-    val messageTargets by viewModel.messageTargets.collectAsStateWithLifecycle()
+    val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
+    val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
+    val activity by viewModel.activity.collectAsStateWithLifecycle()
+    var activityOpen by rememberSaveable { mutableStateOf(false) }
     var selectedMessage by remember { mutableStateOf<String?>(null) }
     var recentOpen by remember { mutableStateOf(false) }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
@@ -52,7 +58,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
     LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
-    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; recentOpen = false } }
+    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false; recentOpen = false; activityOpen = false; selectedMessage = null } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     AtollTheme {
         when (state.phase) {
@@ -69,7 +75,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     } }
                     if (state.route == null) {
-                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true })
+                        ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { activityOpen = true })
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
                             if (!loggedList && state.navigation.channels.isNotEmpty()) {
                                 withFrameNanos { }
@@ -161,6 +167,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     is ChannelMenuAction.Process -> selectedMessage = action.messageId
                                     Item.Waiting -> waiting?.setCollapsed(false)
                                     Item.NewTask -> tasks?.beginCreation()
+                                    Item.Running -> activityOpen = true
                                     else -> Unit
                                 } }, onOlder = { following = false; graph.follow(false); graph.older() },
                                 onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
@@ -219,6 +226,17 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     if (state.route?.tab == "tasks") state.route?.focus?.let { tasks?.select(it) }
                 }
                 if (features != null) UiFormsHost(features.forms, state.roster.associate { it.id to it.name }, state.navigation.channels.associate { it.id to it.name })
+                if (activityOpen) Dialog(onDismissRequest = { activityOpen = false }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+                    Surface(Modifier.fillMaxSize()) { Column(Modifier.safeDrawingPadding()) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("活动中心", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                            TextButton({ activityOpen = false }) { Text("关闭") }
+                        }
+                        ActivityCenterScreen(activity, Modifier.weight(1f), onSource = { source ->
+                            taskSourceLink(source)?.let { activityOpen = false; graph.route(it) }
+                        })
+                    } }
+                }
                 if (recentOpen && features != null) {
                     val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
                     AlertDialog(onDismissRequest = { recentOpen = false }, title = { Text("最近阅读") },
@@ -230,7 +248,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             } }
                         } }, confirmButton = { TextButton({ recentOpen = false }) { Text("关闭") } })
                 }
-                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true })
+                if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; activityOpen = true })
             }
         }
     }
