@@ -47,6 +47,7 @@ import dev.atoll.app.ui.components.LocalMarkdownCache
 import dev.atoll.app.ui.components.MarkdownCache
 import dev.atoll.app.ui.components.RichContentHost
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
 import dev.atoll.app.compose.LocalSubmission
 import dev.atoll.app.waiting.WaitingViewModel
@@ -56,6 +57,7 @@ import dev.atoll.app.tasks.TasksState
 import dev.atoll.app.roster.RosterViewModel
 import androidx.compose.foundation.gestures.scrollBy
 
+@OptIn(kotlinx.coroutines.FlowPreview::class)
 @Composable
 fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -140,7 +142,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
                         } else {
                             val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + if (conversation.hasOlder) 1 else 0).coerceAtLeast(0))
-                            var following by remember { mutableStateOf(true) }
+                            var following by remember { mutableStateOf(state.browsePosition?.following != false) }
                             var initialized by remember { mutableStateOf(false) }
                             var autoScrolling by remember { mutableStateOf(false) }
                             var visibleLogged by remember { mutableStateOf(false) }
@@ -160,6 +162,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             LaunchedEffect(state.route?.tab) { graph.follow(state.route?.tab == "conversation" && following) }
                             val latestRevision by rememberUpdatedState(state.timeline?.revision)
+                            val latestDetached by rememberUpdatedState(state.newerUnloaded)
                             LaunchedEffect(listState, state.route?.tab) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 val channel = state.route!!.channel
@@ -169,6 +172,21 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                             .mapNotNull { it.key as? String }.toSet()
                                     }
                                 }.distinctUntilChanged().collect { (_, keys) -> graph.visibleRows(channel, keys) }
+                            }
+                            val latestRowSequences by rememberUpdatedState(state.rowSequences)
+                            LaunchedEffect(listState, state.route?.tab) {
+                                if (state.route?.tab != "conversation") return@LaunchedEffect
+                                val channel = state.route!!.channel
+                                snapshotFlow {
+                                    if (!initialized || autoScrolling || listState.isScrollInProgress) null else {
+                                        val layout = listState.layoutInfo
+                                        layout.visibleItemsInfo.firstOrNull { (it.key as? String) in latestRowSequences }?.let {
+                                            Triple(it.key as String, (layout.viewportStartOffset - it.offset).coerceAtLeast(0), following)
+                                        }
+                                    }
+                                }.distinctUntilChanged().debounce(250).collect { position ->
+                                    position?.let { (key, offset, follow) -> graph.browse(channel, key, offset, follow) }
+                                }
                             }
                             val latestConversation by rememberUpdatedState(conversation)
                             LaunchedEffect(listState, state.route?.tab) {
@@ -188,10 +206,17 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             LaunchedEffect(state.route?.tab, conversation.entries.lastOrNull()?.key, conversation.entries.size) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
-                                if (!initialized || following) {
-                                    scrollEnd()
+                                if (!initialized) {
+                                    val position = state.browsePosition?.takeIf { !it.following && state.route?.focus == null }
+                                    val index = conversation.entries.indexOfFirst { it.key == position?.key }
+                                    if (index >= 0) {
+                                        autoScrolling = true
+                                        try { listState.scrollToItem(index + if (conversation.hasOlder) 1 else 0, position!!.offset) }
+                                        finally { autoScrolling = false }
+                                        following = false; graph.follow(false)
+                                    } else { scrollEnd(); following = true; graph.follow(true) }
                                     initialized = true
-                                }
+                                } else if (following && !latestDetached) scrollEnd()
                                 if (!visibleLogged && conversation.entries.isNotEmpty()) {
                                     withFrameNanos { }
                                     graph.performanceMark("timeline-visible", SystemClock.elapsedRealtime() - state.channelOpenedAt, state.route!!.channel, if (state.firstOrigin == Origin.CACHE) "cache" else "network")
@@ -203,9 +228,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     .distinctUntilChanged().collect { (scrolling, canForward, _) ->
                                     graph.telemetry.scrolling.set(scrolling)
                                     if (initialized && !autoScrolling) {
-                                        if (scrolling) { following = !canForward; graph.follow(following) }
-                                        else if (!canForward) { following = true; graph.follow(true) }
-                                        else if (following) scrollEnd()
+                                        if (scrolling) { following = !canForward && !latestDetached; graph.follow(following) }
+                                        else if (!canForward && !latestDetached) { following = true; graph.follow(true) }
+                                        else if (following && !latestDetached) scrollEnd()
                                     }
                                 }
                             }
@@ -236,6 +261,11 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 else -> null
                             }
                             Column(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+                            var restoreNoticeDismissed by remember(state.restoreNotice) { mutableStateOf(false) }
+                            if (!restoreNoticeDismissed) state.restoreNotice?.let { info -> Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(info, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                                TextButton({ restoreNoticeDismissed = true }) { Text("关闭") }
+                            } }
                             state.channelError?.let { failure -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                                     Text(failure, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)

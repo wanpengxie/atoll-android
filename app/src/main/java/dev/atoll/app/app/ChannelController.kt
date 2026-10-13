@@ -24,6 +24,9 @@ data class ChannelRuntimeState(
     val timelineSource: TimelineSource? = null,
     val taskFacts: List<TaskFact> = emptyList(),
     val agentRuns: List<ActivityAgentRun> = emptyList(),
+    val browsePosition: BrowsePosition? = null,
+    val restoreNotice: String? = null,
+    val rowSequences: Map<String, Long> = emptyMap(),
 )
 
 /** A light serial owner per membership. Only the selected owner's replica is retained. */
@@ -46,6 +49,8 @@ class ChannelController(
     private var record = ChannelRecord(id, id, null, id)
     private var actors = emptyList<ActorRecord>()
     private val activity = linkedMapOf<String, AgentActivityViewState>()
+    private var browsePosition: BrowsePosition? = null
+    private var restoreNotice: String? = null
     private var readPosition = 0L
     private var unread = UnreadCount(pending = true)
     private var options = ChannelViewOptions()
@@ -83,6 +88,7 @@ class ChannelController(
                     preferences.put(namespace, "$id.baselined", "true")
                 }
                 options = preferences.options(namespace, id)
+                browsePosition = BrowsePosition.decode(preferences.get(namespace, "$id.browse"))
                 queueUnread()
                 for (command in commands) {
                     try { handle(command) }
@@ -107,6 +113,7 @@ class ChannelController(
     suspend fun filter(actor: String?) { commands.send(Filter(actor)) }
     suspend fun loadOlder() { commands.send(LoadOlder) }
     suspend fun retry() { commands.send(Retry) }
+    suspend fun browse(key: String, offset: Int, following: Boolean) { commands.send(Browse(key, offset, following)) }
     suspend fun jumpToBottom() { commands.send(Jump) }
     suspend fun visibleRows(keys: Set<String>) { commands.send(VisibleRows(keys)) }
     suspend fun localPlacement(echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { commands.send(LocalPlacement(echoes, placed)) }
@@ -116,7 +123,14 @@ class ChannelController(
         when (command) {
             is Open -> { record = command.record; loadTail() }
             CloseView -> { readerEpoch++; reader?.cancelAndJoin(); reader = null; replica = null; mapper = TimelineMapper(); conversation = null; timeline = null; timelineSource = null; firstOrigin = null; rowSequences = emptyMap(); localEchoes = emptyList(); timelinePlaced = emptySet() }
-            is Batch -> if (command.epoch == readerEpoch) apply(command.batch)
+            is Batch -> if (command.epoch == readerEpoch) {
+                if (command.restored) {
+                    newerUnloaded = command.batch.rows.lastOrNull()?.seq?.let { it < command.head } == true
+                    windowHigh = if (newerUnloaded) command.batch.rows.last().seq else Long.MAX_VALUE
+                }
+                restoreNotice = command.notice ?: restoreNotice
+                apply(command.batch)
+            }
             is ReadFailed -> if (command.epoch == readerEpoch) error = command.message
             Retry -> { error = null; sync.retry(); loadTail() }
             is Sync -> {
@@ -152,6 +166,16 @@ class ChannelController(
             is Follow -> { following = command.value }
             is Foreground -> { foreground = command.value }
             is VisibleRows -> markSeen(command.keys)
+            is Browse -> {
+                val seq = rowSequences[command.key] ?: 0
+                if (seq > 0 && replica != null && foreground) {
+                    val value = BrowsePosition(command.key, seq, command.offset.coerceAtLeast(0), command.following)
+                    if (value != browsePosition) {
+                        browsePosition = value
+                        preferences.put(namespace, "$id.browse", value.encode())
+                    }
+                }
+            }
             is LocalPlacement -> if (command.echoes != localEchoes || command.placed != timelinePlaced) {
                 localEchoes = command.echoes; timelinePlaced = command.placed
                 project()
@@ -179,14 +203,14 @@ class ChannelController(
                 conversation = conversation?.copy(loadingOlder = false, hasOlder = command.hasOlder)
                 error = command.error
             }
-            Jump -> { following = true; if (newerUnloaded) loadTail() else updateBadges() }
+            Jump -> { following = true; if (newerUnloaded) loadTail(restoreBrowse = false) else updateBadges() }
             RefreshUnread -> { refresh = null; calculateUnread() }
             ActivityExpiry -> { activityExpiry = null; taskFactsDirty = true; calculateUnread() }
         }
         publish()
     }
 
-    private suspend fun loadTail() {
+    private suspend fun loadTail(restoreBrowse: Boolean = true) {
         readerEpoch++
         reader?.cancelAndJoin()
         older?.cancelAndJoin(); older = null
@@ -201,9 +225,25 @@ class ChannelController(
         newRoots.clear()
         firstOrigin = null
         error = null
+        restoreNotice = null
+        val position = browsePosition?.takeIf { restoreBrowse && !it.following }
+        following = position == null
         val epoch = readerEpoch
         reader = scope.launch {
-            try { sync.open().collect { commands.send(Batch(epoch, it)) } }
+            try {
+                var first = true
+                sync.open().collect { batch ->
+                    if (first && position != null && batch.rows.isNotEmpty() && position.seq < batch.rows.first().seq) {
+                        val metadata = store.channel(id)
+                        val before = position.seq + minOf(201L, Long.MAX_VALUE - position.seq)
+                        val rows = store.rows(id, beforeSeq = before, limit = 4500)
+                        if (restorableBrowseWindow(position, rows, metadata.coverage)) {
+                            commands.send(Batch(epoch, RowBatch(id, rows, Origin.CACHE), restored = true, head = metadata.meta.headSeq))
+                        } else commands.send(Batch(epoch, batch, notice = "上次浏览位置已不在本地缓存，已打开最新动态"))
+                    } else commands.send(Batch(epoch, batch))
+                    first = false
+                }
+            }
             catch (failure: Exception) {
                 if (failure is CancellationException) throw failure
                 commands.send(ReadFailed(epoch, failure.message ?: "频道读取失败"))
@@ -282,7 +322,7 @@ class ChannelController(
     private fun publish() {
         mutableState.value = ChannelRuntimeState(syncState, unread, if (syncState.connected) activity.values.toList() else emptyList(),
             conversation, newerUnloaded, firstOrigin, error ?: syncState.error, timeline, timelineSource, taskFacts,
-            if (syncState.connected) activity.map { (request, value) -> ActivityAgentRun(id, request, value.id, updatedAt = value.startedAtMillis) } else emptyList())
+            if (syncState.connected) activity.map { (request, value) -> ActivityAgentRun(id, request, value.id, updatedAt = value.startedAtMillis) } else emptyList(), browsePosition, restoreNotice, rowSequences)
     }
     private fun updateActivityFacts(source: TimelineSource) {
         val now = System.currentTimeMillis()
@@ -298,7 +338,7 @@ class ChannelController(
     private sealed interface Command
     private data class Open(val record: ChannelRecord) : Command
     private data object CloseView : Command
-    private data class Batch(val epoch: Long, val batch: RowBatch) : Command
+    private data class Batch(val epoch: Long, val batch: RowBatch, val restored: Boolean = false, val head: Long = 0, val notice: String? = null) : Command
     private data class ReadFailed(val epoch: Long, val message: String) : Command
     private data object Retry : Command
     private data class Sync(val value: SyncState) : Command
@@ -312,6 +352,7 @@ class ChannelController(
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command
     private data object Jump : Command
     private data class VisibleRows(val keys: Set<String>) : Command
+    private data class Browse(val key: String, val offset: Int, val following: Boolean) : Command
     private data class LocalPlacement(val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Command
     private data object RefreshUnread : Command
     private data object ActivityExpiry : Command
