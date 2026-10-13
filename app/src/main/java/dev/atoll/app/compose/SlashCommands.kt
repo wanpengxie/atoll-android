@@ -74,7 +74,9 @@ object SlashCommands {
         if (!online) throw ComposerFailure("composer_command_offline", "连接可用后才能发送命令")
         val definition = command.definition
         if (definition.scope != "system" && target == null) throw ComposerFailure("composer_command_no_target", "请先选择目标 Agent")
-        if (definition.scope == "agent" && manifest != null) {
+        // protocol/message/describe.go: actor.describe is answered by the standard
+        // actor layer before business readiness and is not a manifest word.
+        if (definition.scope == "agent" && definition.type != "actor.describe" && manifest != null) {
             val word = (manifest["words"] as? JsonObject)?.get(definition.type) as? JsonObject
             if (word == null || !requestAllowed(word)) throw ComposerFailure("composer_command_unsupported", "Agent 不支持 ${definition.type}")
         }

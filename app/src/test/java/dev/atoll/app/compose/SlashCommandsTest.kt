@@ -5,6 +5,16 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class SlashCommandsTest {
+    @Test fun statusUsesStandardActorLayerWithoutAManifestWord() {
+        val command = SlashCommands.parse("/status") as ParsedCommand.Command
+        val frame = SlashCommands.frame("c0", "id", command, ComposerDraft(), AGENT, true, json("words" to JsonObject(emptyMap())))
+        assertEquals("actor.describe", frame.text("msg_type"))
+        assertEquals(JsonArray(listOf(text(AGENT.id))), frame["audience"])
+        for ((target, online, code) in listOf(Triple(null, true, "composer_command_no_target"), Triple(AGENT, false, "composer_command_offline"))) {
+            try { SlashCommands.frame("c0", "id", command, ComposerDraft(), target, online, null); fail() }
+            catch (error: ComposerFailure) { assertEquals(code, error.code) }
+        }
+    }
     @Test fun unknownAndUsageFailRatherThanBecomingProse() {
         assertNull(SlashCommands.parse("ordinary /message"))
         assertEquals(ParsedCommand.Escaped("/literal"), SlashCommands.parse("//literal"))
