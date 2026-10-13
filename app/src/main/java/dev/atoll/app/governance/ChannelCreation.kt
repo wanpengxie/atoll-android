@@ -14,7 +14,7 @@ data class ChannelCreation(val requestId: String, val parentId: String, val name
             error = envelope.body.text("detail").ifEmpty { envelope.body.obj("error").text("message").ifEmpty { envelope.body.text("error_code") } })
         return result(envelope.body.obj("value"))
     }
-    fun result(value: kotlinx.serialization.json.JsonObject): ChannelCreation = copy(accepted = true, ledger = true, uncertain = false,
+    fun result(value: kotlinx.serialization.json.JsonObject): ChannelCreation = copy(accepted = true, ledger = true, failed = false, uncertain = false,
         targetId = value.text("channel_id").ifEmpty { value.text("channelId") },
         error = if (value.text("channel_id").ifEmpty { value.text("channelId") }.isEmpty()) "终态没有返回频道 ID；请刷新结果，勿重复创建。" else "")
     fun converge(channels: List<kotlinx.serialization.json.JsonObject>, memberships: Set<String>): ChannelCreation {
