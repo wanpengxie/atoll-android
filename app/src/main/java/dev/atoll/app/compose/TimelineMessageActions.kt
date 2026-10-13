@@ -41,7 +41,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     var feedback by remember(message.id) { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
-    val copyText = message.text.trim()
+    val copyText = remember(message.text, message.result) { messageCopyText(message) }
     fun copy() {
         feedback?.cancel()
         copied = try { clipboard.setText(AnnotatedString(copyText)); "✓ 已复制" } catch (_: Exception) { "复制失败" }

@@ -89,7 +89,8 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                     is TimelineEntry.Day -> DaySeparator(entry.text)
                     is TimelineEntry.Notice -> WeakNotice(entry.text)
                     is TimelineEntry.Message -> {
-                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
+                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment,
+                            onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) }) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
                         if (messageContent != null) messageContent(entry.value, default) else default()
                     }
                 } }

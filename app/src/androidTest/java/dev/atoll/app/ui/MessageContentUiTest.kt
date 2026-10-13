@@ -3,9 +3,11 @@ package dev.atoll.app.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +25,7 @@ import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.theme.AtollTheme
 import kotlinx.serialization.json.JsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,7 +42,7 @@ class MessageContentUiTest {
     private fun TestContent(cache: MarkdownCache = remember { MarkdownCache() }, content: @Composable () -> Unit) {
         AtollTheme {
             CompositionLocalProvider(LocalMarkdownCache provides cache) {
-                Surface { Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) { content() } }
+                Surface { Column(Modifier.fillMaxWidth().safeDrawingPadding().verticalScroll(rememberScrollState())) { content() } }
             }
         }
     }
@@ -172,6 +175,83 @@ class MessageContentUiTest {
         compose.onNodeWithText("加载更早消息").assertIsDisplayed()
     }
 
+    @Test fun identityPendingHidesScopeActorsAndStaleFilters() {
+        val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "c0.android-test"),
+            agents = listOf(AgentViewState("worker", "worker")), actorFilters = setOf("stale"),
+            hasOlder = false, identityReady = false))
+        compose.setContent { TestChannel(state.value) }
+        compose.onNodeWithText("与我相关").assertDoesNotExist()
+        compose.onNodeWithText("worker").assertDoesNotExist()
+        compose.onNodeWithText("已失效 · stale").assertDoesNotExist()
+        compose.runOnIdle { state.value = state.value.copy(identityReady = true) }
+        compose.onNodeWithText("与我相关").assertIsDisplayed()
+        compose.onNodeWithText("worker").assertIsDisplayed()
+        compose.onNodeWithText("已失效 · stale").assertIsDisplayed()
+    }
+
+    @Test fun processActionsAppearUnderTheHeaderAndCanBeOmitted() {
+        val visible = mutableStateOf(true)
+        compose.setContent { AtollTheme {
+            val actions: (@Composable () -> Unit)? = if (visible.value) ({ Text("面板操作") }) else null
+            ProcessPanel(ProcessPanelViewState("请求", "request", "agent.ask", "已完成", emptyList()), {}, actions)
+        } }
+        compose.onNodeWithText("面板操作").assertIsDisplayed()
+        assertTrue(compose.onNodeWithText("面板操作").fetchSemanticsNode().boundsInRoot.top >=
+            compose.onNodeWithText("过程 · 请求").fetchSemanticsNode().boundsInRoot.bottom)
+        screenshot("process-actions")
+        compose.runOnIdle { visible.value = false }
+        compose.onNodeWithText("面板操作").assertDoesNotExist()
+        compose.onNodeWithText("这一轮还没有过程记录。").assertIsDisplayed()
+    }
+
+    @Test fun relatedCallsSeparateCollaborationsAndExpandOnlySelectedResults() {
+        val childTask = SubTaskViewState("child", "协作后台命令", "worker", SubTaskKind.Shell, SubTaskPhase.Completed, 0)
+        val trail = ProgressTrailViewState("读取文件", listOf(ProcessRecordViewState("record", "读取数据", "12:01")), false)
+        val calls = listOf(
+            RelatedCallViewState("conversation", "折叠协作标题", "coordinator", listOf("worker"), "12:00", MessageStatus.Completed,
+                conversation = true, request = "**原始委托**", text = "协作响应", subTasks = listOf(childTask), attachments = listOf(attachment)),
+            RelatedCallViewState("tool", "读取文件", "worker", listOf("files"), "12:01", MessageStatus.Completed,
+                text = "工具读取响应", trail = trail, request = "不展示的工具请求", subTasks = listOf(childTask.copy(title = "不展示的工具后台"))),
+            RelatedCallViewState("nested", "子调用", "files", listOf("device"), "12:02", MessageStatus.Failed, depth = 2,
+                result = ResultViewState(errorCode = "permission_denied", detail = "调用拒绝原因")))
+        val opened = mutableListOf<String>()
+        compose.setContent { TestContent { MessageFrame(MessageViewState("answer", "root", "", "12:00", self = true,
+            relatedCalls = calls), onRelatedCall = { opened += it }) } }
+        compose.onNodeWithContentDescription("Agent 协作消息").assertExists()
+        compose.onNodeWithText("折叠协作标题").assertIsDisplayed()
+        compose.onNodeWithText("2 次关联调用").assertIsDisplayed()
+        compose.onNodeWithText("读取文件").assertDoesNotExist()
+        compose.onNodeWithText("协作响应").assertDoesNotExist()
+        compose.onNodeWithText("2 次关联调用").performClick()
+        compose.onNodeWithContentDescription("展开 关联调用 读取文件").performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("工具读取响应").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("工具读取响应").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("不展示的工具请求").assertDoesNotExist()
+        compose.onNodeWithText("不展示的工具后台").assertDoesNotExist()
+        compose.onNodeWithText("1 条过程记录").performScrollTo().performClick()
+        compose.onNodeWithText("读取数据").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf("tool"), opened) }
+        val rootCall = compose.onNodeWithContentDescription("收起 关联调用 读取文件").fetchSemanticsNode().boundsInRoot
+        val childCall = compose.onNodeWithContentDescription("展开 关联调用 子调用").fetchSemanticsNode().boundsInRoot
+        assertTrue(childCall.left > rootCall.left)
+        compose.onNodeWithContentDescription("展开 关联调用 子调用").performScrollTo().performClick()
+        compose.onNodeWithText("调用拒绝原因").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("展开 worker 的协作消息").performScrollTo().performClick()
+        screenshot("related-conversation-open")
+        compose.onNodeWithContentDescription("收起 worker 的协作消息").assertExists()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("原始委托").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("原始委托").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("折叠协作标题").assertDoesNotExist()
+        compose.onNodeWithText("协作响应").assertExists()
+        compose.onNodeWithText("协作后台命令").assertExists()
+        compose.onNodeWithText("报告.pdf").assertExists()
+        screenshot("related-calls-expanded")
+        compose.onNodeWithText("2 次关联调用").performScrollTo().performClick()
+        compose.onNodeWithText("工具读取响应").assertDoesNotExist()
+        compose.onNodeWithText("调用拒绝原因").assertDoesNotExist()
+        compose.onNodeWithText("协作响应").assertExists()
+    }
+
     @Composable private fun TestChannel(state: ConversationViewState) {
         AtollTheme { ChannelScreen(state, ComposerViewState(), ChannelTab.Conversation,
             onBack = {}, onTab = {}, onScope = {}, onActor = {}, onText = {}, onSend = {}, onOlder = {}, composerVisible = false) }
@@ -182,7 +262,7 @@ class MessageContentUiTest {
             ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output", "message-content")
         check(directory.mkdirs() || directory.isDirectory)
         File(directory, "$name.png").outputStream().use {
-            compose.onRoot().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
+            compose.onAllNodes(isRoot()).onLast().captureToImage().asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, it)
         }
     }
 }

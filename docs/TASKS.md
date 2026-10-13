@@ -211,15 +211,20 @@ Each package owns its files; live checks run on our test node.
 
 | Task | Owner | State |
 |---|---|---|
-| W1 net/model/sync/ui | sol-1..4 | merged |
-| W2-integrate | sol-3 | files, composer, terminal, settings, update, diagnostics mounted; now mounting waiting -> tasks -> activity center |
-| W2-files, W2-terminal | sol-1 | merged |
-| W2-composer | sol-2 | merged (editor fix, submitFrame) |
-| W2-content | sol-4 | merged; timeline scroll investigation (offline cache replay) in progress |
-| W2-waiting-edit | sol-2 | merged (8ef1f2e); mount pending |
-| W2-tasks | sol-1 | merged (364c8de); mount pending |
-| W2-governance | sol-1 (from sol-3 @ 9a794f3) | protocol merged; VM tests + UI in progress |
-| W2-roster | sol-2 | in progress |
+| Waves 1-3 | all | merged |
+| W4 #12 empty states, #33 attachments, N1 approval detail | sol-3, sol-1 | merged |
+| W4 #11/#52 interfaces | sol-4 | merged (afa9c03) |
+| W4 e2e emulator guard + on-demand emulator | sol-2 | merged (2f73e6c) |
+| W4 #34 approval receipts, #19 completed label | sol-1 | merged |
+| W4 #02 (v2 false positive, test added) | sol-3 | merged |
+| W4 #10 dismissable channel error | sol-3 | merged |
+| W4 #11 identity-ready | sol-3 | merged |
+| W4 N2 process panel lifecycle | sol-3 | merged |
+| W4 #52 data, #07 history | sol-3 | gating one by one |
+| W4 #24 data | sol-1 | in progress (merge with sol-4 renderer) |
+| W4 #24 renderer | sol-4 | merged (data from sol-1 pending) |
+| W4 #17 continuation bubbles | sol-4 | in progress |
+| W4 #29 copy structured results | sol-2 | merged (UI gate via next run on main) |
+| R8 17-step on 8fd496d, then release APK | sol-2 | rebuilding |
 
-Blocked: every live-node check waits for a node restart (shared token was logged out, 401).
-Writes to the real node (governance, roster, logout, register, upgrade) are mock-tested only.
+Live checks use the own test node only (100.99.232.10:18080).

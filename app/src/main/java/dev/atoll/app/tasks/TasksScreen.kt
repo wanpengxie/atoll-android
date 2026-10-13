@@ -12,6 +12,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.atoll.app.ui.components.Markdown
+import dev.atoll.app.ui.components.StructuredResult
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.*
 import java.time.*
 import java.time.format.DateTimeFormatter
@@ -107,6 +111,10 @@ fun TasksScreen(viewModel: TasksViewModel,modifier: Modifier=Modifier,onSource: 
 fun ApprovalCard(item: TaskFact,names: Map<String,String> = emptyMap(),busy: Boolean=false,error: String="",onResolve: (action: String,text: String,note: String)->Unit) {
     var answer by remember(item.key) { mutableStateOf("") };var note by remember(item.key) { mutableStateOf("") }
     val ask=(item.turn?.request?.type ?: item.diagnostic.text("requestType"))=="human.ask"
+    var receipt by remember(item.turn) { mutableStateOf<ApprovalReceipt?>(null) }
+    LaunchedEffect(item.turn) {
+        receipt = withContext(Dispatchers.Default) { approvalReceipt(item.turn) }
+    }
     Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         Text(item.title,style=MaterialTheme.typography.titleMedium)
         Text("${names[item.requesterActorId] ?: item.requesterActorId} · ${taskStates[item.state] ?: item.state}",style=MaterialTheme.typography.bodySmall)
@@ -120,6 +128,16 @@ fun ApprovalCard(item: TaskFact,names: Map<String,String> = emptyMap(),busy: Boo
             Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                 if (TaskAction.APPROVE in item.actions) Button(onClick={ onResolve(TaskAction.APPROVE,answer,note) },enabled=!busy) { Text(if (busy) "正在提交…" else if (ask) "提交回答" else "批准") }
                 if (!ask && TaskAction.REJECT in item.actions) OutlinedButton(onClick={ onResolve(TaskAction.REJECT,"",note) },enabled=!busy) { Text("拒绝") }
+            }
+        }
+        receipt?.let { response ->
+            HorizontalDivider()
+            Text("已回执",style=MaterialTheme.typography.labelMedium)
+            if (response.unavailable) Text("终态详情不可用，请刷新或重新进入频道。",style=MaterialTheme.typography.bodySmall)
+            else {
+                Text("处理者：${names[response.resolverId] ?: response.resolverId}" + response.decision.takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty(),style=MaterialTheme.typography.bodySmall)
+                if (response.text.isNotEmpty()) Markdown("approval:${item.key}:response",response.text)
+                response.result?.let { StructuredResult(it) }
             }
         }
         if (error.isNotEmpty()) Text(error,color=MaterialTheme.colorScheme.error)
