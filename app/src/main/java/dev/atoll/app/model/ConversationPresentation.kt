@@ -53,7 +53,13 @@ object ConversationPresentation {
         return { envelope -> byEnvelope[envelope.id] ?: (envelope.id in related) }
     }
     private fun matchesConversation(entry: TimelineEntry, related: Set<String>) = entry.envelopes().any { it.type !in selfOperations } && entry.envelopes().any { it.id in related }
-    private fun waiting(turn: Turn, restarts: Map<String, Long>, options: TimelineOptions) = !options.newerUnloaded && turn.request.type in ConversationVisibility.agentMessageTypes && turn.requestId !in options.timelinePlaced && RequestLifecycle.of(turn, restarts, options.now) in setOf(Lifecycle.PENDING, Lifecycle.WAITING)
+    private fun queuePassed(state: TimelineSource, facts: ProjectionFacts?): (Turn) -> Boolean =
+        facts?.queueBoundaries?.let(RequestLifecycle::passedInQueue) ?: RequestLifecycle.passedInQueue(state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } })
+    internal fun waiting(turn: Turn, restarts: Map<String, Long>, options: TimelineOptions, passed: (Turn) -> Boolean = { false }): Boolean {
+        if (options.newerUnloaded || turn.request.type !in ConversationVisibility.agentMessageTypes || turn.requestId in options.timelinePlaced) return false
+        val lifecycle = RequestLifecycle.of(turn, restarts, options.now)
+        return lifecycle == Lifecycle.PENDING || lifecycle == Lifecycle.WAITING && !passed(turn)
+    }
     fun selectTimelineItems(state: TimelineSource, options: TimelineOptions = TimelineOptions(), facts: ProjectionFacts? = null): List<TimelineEntry> {
         val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
         val related = facts?.relatedIds ?: if (options.scope == ConversationScope.MINE && options.selfId.isNotEmpty()) relatedEnvelopeIds(state, options.selfId) else null
@@ -147,7 +153,8 @@ object ConversationPresentation {
         val entries = selectTimelineItems(state, options, facts)
         val items = entries.mapIndexed { index, entry -> presentationItem(entry, entries.getOrNull(index - 1), entries.getOrNull(index + 1), options) }
         val restarts = facts?.restarts ?: RequestLifecycle.memberRestarts(state)
-        val waitingTurns = state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } }.filter { waiting(it, restarts, options) }.sortedBy { it.requestSeq }
+        val passed = queuePassed(state, facts)
+        val waitingTurns = state.timeline.flatMap { listOfNotNull(it.turn) + it.thread.mapNotNull { child -> child.turn } }.filter { waiting(it, restarts, options, passed) }.sortedBy { it.requestSeq }
         return TimelineSnapshot(state.channelId, state.projectionVersion, frozen(items), frozen(waitingTurns), if (options.newerUnloaded) emptyList() else (facts?.runningTasks ?: BackgroundTasks.runningBackgroundTasks(state)), entries.firstOrNull()?.seq ?: 0, entries.lastOrNull()?.seq ?: 0)
     }
     internal fun presentationItem(entry: TimelineEntry, previous: TimelineEntry?, next: TimelineEntry?, options: TimelineOptions): PresentationItem {

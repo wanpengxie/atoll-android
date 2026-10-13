@@ -67,6 +67,7 @@ data class ProjectionFacts(
     val restarts: Map<String, Long>,
     val taskSteps: List<Envelope>,
     val runningTasks: List<BackgroundTask>,
+    val queueBoundaries: Map<String, Long>? = null,
 )
 
 data class ReplicaSnapshot(
