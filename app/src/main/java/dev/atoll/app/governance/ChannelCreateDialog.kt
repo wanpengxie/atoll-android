@@ -1,6 +1,9 @@
 package dev.atoll.app.governance
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
@@ -32,8 +35,8 @@ fun ChannelCreateDialog(viewModel: GovernanceViewModel,onEnterChannel: ((String)
                 item { Text("在 ${channelName(state)} 下创建子频道。") }
                 item { OutlinedTextField(name,{ name=it },label={ Text("频道名称") },modifier=Modifier.fillMaxWidth(),singleLine=true,enabled=!locked,isError=name.isNotEmpty() && validation.isNotEmpty(),supportingText={ if (name.isNotEmpty() && validation.isNotEmpty()) Text(validation) }) }
                 item { Text("起点",style=MaterialTheme.typography.titleSmall) }
-                items(listOf(ChannelStart.Blank to "空白",ChannelStart.Copy to "复制一个频道",ChannelStart.Pick to "从本频道挑成员")) { (choice,label) -> Row {
-                    RadioButton(start==choice,onClick={ start=choice },enabled=!locked);Text(label,Modifier.padding(top=12.dp))
+                items(listOf(ChannelStart.Blank to "空白",ChannelStart.Copy to "复制一个频道",ChannelStart.Pick to "从本频道挑成员")) { (choice,label) -> Row(Modifier.fillMaxWidth().selectable(start==choice,enabled=!locked,role=Role.RadioButton) { start=choice }) {
+                    RadioButton(start==choice,onClick=null,enabled=!locked);Text(label,Modifier.padding(top=12.dp))
                 } }
                 if (start!=ChannelStart.Copy) item { OutlinedTextField(purpose,{ purpose=it },label={ Text("说明（可选）") },modifier=Modifier.fillMaxWidth(),enabled=!locked,minLines=2,maxLines=4) }
                 if (start==ChannelStart.Copy) item {
@@ -42,11 +45,11 @@ fun ChannelCreateDialog(viewModel: GovernanceViewModel,onEnterChannel: ((String)
                 }
                 if (start==ChannelStart.Pick) {
                     item { TextButton(onClick=viewModel::readEntries,enabled=!locked && !state.busy) { Text(if (state.entries==null) "读取本频道成员条目" else "重新读取成员条目") } }
-                    items(entries,key={ it.text("id") }) { entry -> Row { Checkbox(entry.text("id") in picked,{ selected -> picked=if (selected) picked+entry.text("id") else picked-entry.text("id") },enabled=!locked);Column(Modifier.weight(1f).padding(top=8.dp)) { Text(entry.text("name").ifEmpty { entry.text("id") });Text(entry.obj("body").toString(),style=MaterialTheme.typography.bodySmall) } } }
+                    items(entries,key={ it.text("id") }) { entry -> Row(Modifier.fillMaxWidth().toggleable(entry.text("id") in picked,enabled=!locked,role=Role.Checkbox) { selected -> picked=if (selected) picked+entry.text("id") else picked-entry.text("id") }) { Checkbox(entry.text("id") in picked,null,enabled=!locked);Column(Modifier.weight(1f).padding(top=8.dp)) { Text(entry.text("name").ifEmpty { entry.text("id") });Text(entry.obj("body").toString(),style=MaterialTheme.typography.bodySmall) } } }
                     if (state.entries?.isEmpty()==true) item { Text("当前描述没有可选成员条目。") }
                 }
                 item { Text("带进来的人",style=MaterialTheme.typography.titleSmall);Text("✓ 我 · ${viewModel.principalId}（自动加入）",style=MaterialTheme.typography.bodySmall) }
-                items(principals,key={ it.text("id") }) { person -> Row { Checkbox(person.text("id") in humans,{ selected -> humans=if (selected) humans+person.text("id") else humans-person.text("id") },enabled=!locked);Text(person.displayName(),Modifier.padding(top=12.dp)) } }
+                items(principals,key={ it.text("id") }) { person -> Row(Modifier.fillMaxWidth().toggleable(person.text("id") in humans,enabled=!locked,role=Role.Checkbox) { selected -> humans=if (selected) humans+person.text("id") else humans-person.text("id") }) { Checkbox(person.text("id") in humans,null,enabled=!locked);Text(person.displayName(),Modifier.padding(top=12.dp)) } }
                 if (error.isNotEmpty() || state.error.isNotEmpty()) item { Text(error.ifEmpty { state.error },color=MaterialTheme.colorScheme.error) }
                 operation?.let { creation -> item {
                     GovernanceCard(when { creation.ready -> "${creation.name} · 已就绪";creation.failed -> "${creation.name} · 创建失败";creation.uncertain -> "${creation.name} · 待确认";else -> "${creation.name} · 正在收敛" }) {

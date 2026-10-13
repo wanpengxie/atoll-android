@@ -14,7 +14,7 @@ data class GovernanceState(val channel: String = "", val selfId: String = "", va
     val directory: GovernanceDirectory = GovernanceDirectory(), val loading: Boolean = false, val busy: Boolean = false,
     val message: String = "", val error: String = "", val channelView: JsonObject? = null,
     val entries: List<JsonObject>? = null, val memberView: JsonObject? = null, val keyNames: List<String>? = null,
-    val introducedPrincipal: String = "", val introducedEntry: String = "") {
+    val introducedPrincipal: String = "", val introducedEntry: String = "", val keyRevision: Long = 0) {
     val memberReady: Boolean get() = directory.actors.any { row ->
         val d = row.declared()
         (introducedPrincipal.isNotEmpty() && d.text("principal") == introducedPrincipal) ||
@@ -105,11 +105,13 @@ class GovernanceViewModel(private val port: GovernancePort, val principalId: Str
     fun keyNames() = runOperation(write = false) { channel -> mutableState.value = state.value.copy(keyNames = GlobalKeys(port, channel).names()) }
     fun saveKey(name: String, value: String, overwrite: Boolean) = runOperation(write = true) { channel ->
         val keys = GlobalKeys(port, channel); keys.save(name, value, overwrite)
-        mutableState.value = state.value.copy(message = "全局 key 已保存", keyNames = keys.names())
+        mutableState.value = state.value.copy(message = "全局 key 已保存",keyRevision = state.value.keyRevision+1)
+        mutableState.value = state.value.copy(keyNames = keys.names())
     }
     fun deleteKey(name: String) = runOperation(write = true) { channel ->
         val keys = GlobalKeys(port, channel); keys.delete(name)
-        mutableState.value = state.value.copy(message = "全局 key 已删除", keyNames = keys.names())
+        mutableState.value = state.value.copy(message = "全局 key 已删除",keyRevision = state.value.keyRevision+1)
+        mutableState.value = state.value.copy(keyNames = keys.names())
     }
     private fun runOperation(write: Boolean, operation: suspend (String) -> Unit) {
         if (state.value.busy || state.value.channel.isEmpty()) return

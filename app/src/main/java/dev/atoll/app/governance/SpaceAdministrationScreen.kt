@@ -1,6 +1,8 @@
 package dev.atoll.app.governance
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -54,7 +56,7 @@ fun SpaceAdministrationScreen(viewModel: GovernanceViewModel,modifier: Modifier=
     val latest=groups.mapValues { it.value.maxBy { row -> row.integer("version") } }
     GovernanceCard("新建 Actor 描述") {
         Text("已有版本不会修改；可以新建一条，或给同一个 ID 出新版本。",style=MaterialTheme.typography.bodySmall)
-        GovernanceChoice(base,listOf("" to "新的一条 Actor 描述")+latest.map { (id,row) -> id to "${row.text("name").ifEmpty { id }} 的新版本（现为 @${row.integer("version")}）" },"建什么",!state.busy) { id ->
+        GovernanceChoice(base,listOf("" to "新的一条 Actor 描述")+latest.map { (id,row) -> id to "${descriptionLabel(row,latest.values.toList())} 的新版本" },"建什么",!state.busy) { id ->
             base=id;latest[id]?.let { row -> name=row.text("name");klass=row.text("class");description=row.text("description");params=row.obj("params").toString();configurable=row["configurable"]!=JsonPrimitive(false) }
         }
         if (base.isNotEmpty()) Text("将建成 @${(latest[base]?.integer("version") ?: 0)+1}",style=MaterialTheme.typography.bodySmall)
@@ -62,7 +64,7 @@ fun SpaceAdministrationScreen(viewModel: GovernanceViewModel,modifier: Modifier=
         OutlinedTextField(klass,{ klass=it },label={ Text("Class") },modifier=Modifier.fillMaxWidth(),enabled=!state.busy,singleLine=true)
         OutlinedTextField(description,{ description=it },label={ Text("说明") },modifier=Modifier.fillMaxWidth(),enabled=!state.busy,minLines=2,maxLines=4)
         OutlinedTextField(params,{ params=it },label={ Text("参数 JSON") },modifier=Modifier.fillMaxWidth(),enabled=!state.busy,minLines=3,maxLines=7)
-        Row { Checkbox(configurable,{ configurable=it },enabled=!state.busy);Text("可被配置",Modifier.padding(top=12.dp)) }
+        Row(Modifier.fillMaxWidth().toggleable(configurable,enabled=!state.busy,role=Role.Checkbox) { configurable=it }) { Checkbox(configurable,null,enabled=!state.busy);Text("可被配置",Modifier.padding(top=12.dp)) }
         Text("参数可用 \"\$required:说明\" 标记必填；\"\$global.名称\" 引用全局 key。",style=MaterialTheme.typography.bodySmall)
         if (error.isNotEmpty()) Text(error,color=MaterialTheme.colorScheme.error)
         Button(onClick={
@@ -95,7 +97,7 @@ fun SpaceAdministrationScreen(viewModel: GovernanceViewModel,modifier: Modifier=
     var confirmation by remember { mutableStateOf("") };var operation by remember { mutableStateOf("") };var error by remember { mutableStateOf("") }
     val available=state.selfId.isNotEmpty()
     LaunchedEffect(available) { if (available && state.keyNames==null) vm.keyNames() }
-    LaunchedEffect(state.message) { if (state.message=="全局 key 已保存") { value="";changed="";editing="" } }
+    LaunchedEffect(state.keyRevision) { if (state.message=="全局 key 已保存") { value="";changed="";editing="" } }
     LazyColumn(Modifier.fillMaxSize(),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
         item { Row(Modifier.fillMaxWidth(),horizontalArrangement=Arrangement.SpaceBetween) { Text("全局 key ${state.keyNames?.size ?: ""}",Modifier.padding(top=12.dp));TextButton(onClick=vm::keyNames,enabled=available && !state.busy) { Text("刷新") } } }
         item { Text(if (available) "整个空间共用一份；成员配置用 \"\$global.名称\" 引用。这里只列名字。" else "全局 key 需要经一个你是成员的频道读写。",style=MaterialTheme.typography.bodySmall) }
