@@ -81,7 +81,6 @@ class AppGraph(private val context: Context) {
             }
         }
         scope.launch { commands.send(Restore) }
-        scope.launch { while (isActive) { delay(1000); commands.send(Tick) } }
     }
 
     fun login(form: LoginViewState) { post(Login(form)) }
@@ -141,7 +140,7 @@ class AppGraph(private val context: Context) {
             }
             is Controller -> if (event.epoch == epoch && event.world == runtime?.world) { channelStates[event.id] = event.value; publish() }
             is Navigate -> {
-                if (runtime == null || mutableState.value.phase != WorkspacePhase.Workspace) requestedRoute = event.route
+                if (runtime == null || mutableState.value.phase != WorkspacePhase.Workspace || runtime!!.gate.state.value !is WireState.Attached) requestedRoute = event.route
                 else navigate(event.route, event.push)
             }
             Back -> if (backStack.isNotEmpty()) navigate(backStack.removeLast(), false) else navigate(null, false)
@@ -196,7 +195,6 @@ class AppGraph(private val context: Context) {
                 publish()
             }
             is Notice -> { notice = event.value; publish() }
-            Tick -> if (runtime != null && mutableState.value.phase == WorkspacePhase.Workspace) publish()
         }
     }
 
@@ -306,6 +304,8 @@ class AppGraph(private val context: Context) {
             watchers.remove(id)?.cancelAndJoin(); controllers.remove(id)?.stop(); channelStates.remove(id); accesses.remove(id)
         }
         memberships.clear(); memberships.putAll(next)
+        // An attach-confirmed membership supersedes any earlier observer/connection result.
+        next.keys.forEach { accesses.remove(it) }
         mutableServices.value = mutableServices.value?.copy(selfIds = next.toMap())
         val heads = payload.objects("history_meta").associate { it["channel_id"].string() to it.longValue("head_seq") }
         for ((id, self) in next) ensureController(id, self, heads[id] ?: 0)
@@ -358,6 +358,7 @@ class AppGraph(private val context: Context) {
     }
 
     private suspend fun maybeRequestedRoute() {
+        if (runtime?.gate?.state?.value !is WireState.Attached) return
         val requested = requestedRoute ?: return
         val match = records.values.firstOrNull { it.id == requested.channel || it.qualifiedName == requested.channel }
         if (match != null || requested.channel in memberships) { requestedRoute = null; navigate(requested.copy(channel = match?.id ?: requested.channel), false) }
@@ -485,5 +486,4 @@ class AppGraph(private val context: Context) {
     private data class Expired(val epoch: Long) : Event
     private data class Observed(val epoch: Long, val world: Long, val id: String, val meta: JsonObject?, val failure: String?) : Event
     private data class Notice(val value: String?) : Event
-    private data object Tick : Event
 }
