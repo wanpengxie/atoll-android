@@ -103,4 +103,10 @@ class EditMachineTest {
         assertTrue(EditMachine.submit(submitted, "duplicate").effects.isEmpty())
         assertEquals("replacement", submitted.session!!.replacementId)
     }
+    @Test fun idleConnectionAndAccessEventsNeverInventAnEditingNotice() {
+        val idle = EditState()
+        assertEquals(idle, EditMachine.disconnected(idle).state)
+        assertEquals(idle, EditMachine.exit(idle, "current target readonly").state)
+    }
+
 }
