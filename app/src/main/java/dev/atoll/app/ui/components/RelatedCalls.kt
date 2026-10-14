@@ -70,7 +70,7 @@ private fun CallList(messageId: String, calls: List<RelatedCallViewState>, conve
 }
 
 @Composable
-private fun CallLeaf(messageId: String, call: RelatedCallViewState, onLink: ((String) -> Unit)?,
+internal fun CallLeaf(messageId: String, call: RelatedCallViewState, onLink: ((String) -> Unit)?,
     onAttachment: MessageAttachmentHandler?, onProcess: (String) -> Unit) {
     var expanded by rememberSaveable(messageId, call.id) { mutableStateOf(false) }
     val recipients = call.recipients.joinToString("、").ifBlank { "—" }
