@@ -31,26 +31,26 @@ private val ERROR_LABELS = mapOf(
 @Composable
 fun StructuredResult(state: ResultViewState) {
     if (state.errorCode != null) {
-        Surface(color = AtollColors.Accent.copy(alpha = .06f), shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+        Surface(color = AtollColors.DangerSurface, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(failureTitle(state.errorCode), fontWeight = FontWeight.SemiBold, color = AtollColors.Accent)
-                Text(state.errorCode, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = AtollColors.Muted)
-                if (state.detail.isNotEmpty()) Text(state.detail, fontSize = 13.sp)
+                Text(failureTitle(state.errorCode), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Danger)
+                Text(state.errorCode, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = AtollColors.DangerText)
+                if (state.detail.isNotEmpty()) Text(state.detail, fontSize = 14.sp, lineHeight = 21.sp)
                 state.errorData?.let { JsonTree(it) }
             }
         }
-    } else if (state.emptyText) Text("返回了空文本", color = AtollColors.Muted, fontSize = 12.sp)
-    else if (state.acknowledgement) Text("✓ 已完成", color = AtollColors.Online, fontSize = 12.sp)
+    } else if (state.emptyText) Text("返回了空文本", color = AtollColors.Muted, fontSize = 13.sp)
+    else if (state.acknowledgement) Text("✓ 已完成", color = AtollColors.Muted, fontSize = 13.sp)
     else state.value?.let { value ->
         var expanded by remember(value) { mutableStateOf(false) }
-        Surface(shape = MaterialTheme.shapes.medium, border = BorderStroke(1.dp, AtollColors.Line)) {
+        Surface(shape = MaterialTheme.shapes.medium, color = AtollColors.Surface, border = BorderStroke(1.dp, AtollColors.Line)) {
             Column(Modifier.fillMaxWidth()) {
-                Row(Modifier.fillMaxWidth().clickable { expanded = !expanded }.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(state.title, Modifier.weight(1f), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-                    Text(summary(value), fontSize = 11.sp, color = AtollColors.Muted)
-                    Text(if (expanded) "收起" else "展开", fontSize = 11.sp, color = AtollColors.Muted)
+                Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable { expanded = !expanded }.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(state.title, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Body)
+                    Text(summary(value), fontSize = 12.sp, color = AtollColors.Muted)
+                    Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = AtollColors.Lagoon)
                 }
-                if (expanded) JsonTree(value, Modifier.padding(12.dp))
+                if (expanded) { HorizontalDivider(color = AtollColors.LineSoft); JsonTree(value, Modifier.padding(12.dp)) }
             }
         }
     }
@@ -69,7 +69,7 @@ fun JsonTree(value: JsonElement, modifier: Modifier = Modifier, depth: Int = 0) 
                         val entries = if (value is JsonObject) value.entries.map { it.key to it.value } else (value as JsonArray).mapIndexed { index, element -> "${index + 1}" to element }
                         entries.take(20).forEach { (key, child) ->
                             Row(Modifier.fillMaxWidth().padding(start = 10.dp, top = 4.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(key, Modifier.width(72.dp), fontSize = 11.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.SemiBold)
+                                Text(key, Modifier.width(80.dp), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = AtollColors.Muted)
                                 JsonTree(child, Modifier.weight(1f), depth = depth + 1)
                             }
                         }
@@ -77,7 +77,7 @@ fun JsonTree(value: JsonElement, modifier: Modifier = Modifier, depth: Int = 0) 
                 }
             }
             JsonNull -> Text("null", color = AtollColors.Muted, fontSize = 12.sp)
-            is JsonPrimitive -> Text(value.booleanOrNull?.let { if (it) "是" else "否" } ?: value.content, fontSize = 12.sp)
+            is JsonPrimitive -> Text(value.booleanOrNull?.let { if (it) "是" else "否" } ?: value.content, fontSize = 13.sp, lineHeight = 19.sp)
         }
     }
 }

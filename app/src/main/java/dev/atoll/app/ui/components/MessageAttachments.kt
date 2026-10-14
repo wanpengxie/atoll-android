@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -43,20 +44,22 @@ fun MessageAttachments(values: List<MessageAttachmentViewState>, onLink: ((Strin
         values.forEach { attachment ->
             val name = attachmentName(attachment)
             val type = attachmentType(attachment.mime)
-            Surface(shape = RoundedCornerShape(8.dp), color = AtollColors.Input,
-                border = BorderStroke(1.dp, AtollColors.ControlLine)) {
+            Surface(shape = RoundedCornerShape(12.dp), color = AtollColors.Surface,
+                border = BorderStroke(1.dp, AtollColors.Line)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Surface(onClick = {
                         if (onAttachment != null) onAttachment(attachment, MessageAttachmentAction.Preview)
                         else onLink?.invoke(attachment.uri)
                     }, enabled = onAttachment != null || (onLink != null && attachment.uri.isNotBlank()),
-                        color = AtollColors.Input, modifier = Modifier.weight(1f)) {
-                        Row(Modifier.heightIn(min = 44.dp).padding(8.dp), verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(if (type == "PDF") "PDF" else "◇", Modifier.width(28.dp), fontSize = 11.sp, color = AtollColors.Muted)
+                        color = AtollColors.Surface, modifier = Modifier.weight(1f)) {
+                        Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Surface(Modifier.size(32.dp), shape = RoundedCornerShape(8.dp), color = AtollColors.Subtle) {
+                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Description, null, Modifier.size(17.dp), tint = AtollColors.Muted) }
+                            }
                             Column(Modifier.weight(1f)) {
-                                Text(name, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(listOfNotNull(type, attachmentSize(attachment.size)).joinToString(" · "), fontSize = 10.sp, color = AtollColors.Muted)
+                                Text(name, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(listOfNotNull(type, attachmentSize(attachment.size)).joinToString(" · "), fontSize = 12.sp, color = AtollColors.Muted)
                             }
                         }
                     }
