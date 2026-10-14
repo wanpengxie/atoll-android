@@ -20,45 +20,6 @@ import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.theme.AtollColors
 import kotlinx.serialization.json.*
 
-@Composable
-fun RosterPanel(viewModel: RosterViewModel, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null, onSelect: ((RosterActor) -> Unit)? = null) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val (people, members) = remember(state.rows) { state.rows.partition { it.kind == "human" } }
-    Column(modifier.fillMaxSize().background(AtollColors.Ground)) {
-        Row(Modifier.fillMaxWidth().background(AtollColors.Surface).heightIn(min = 56.dp).padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("成员 ${state.rows.size}", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = viewModel::refresh, enabled = state.online && !state.busy) { Text(if (state.busy) "读取中…" else "刷新名册", color = AtollColors.Lagoon) }
-            if (onClose != null) TextButton(onClick = onClose) { Text("关闭", color = AtollColors.Muted) }
-        }
-        HorizontalDivider(color = AtollColors.Line)
-        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (state.error.isNotEmpty()) item { NoticeBanner(state.error, Tone.Waiting) }
-            if (state.identityPending) item { Text("正在确认你在本频道中的 Actor 身份", Modifier.padding(horizontal = 4.dp), fontSize = 13.sp, color = AtollColors.Muted) }
-            if (state.rows.isEmpty() && !state.busy) item { Text("暂无业务成员", Modifier.padding(16.dp), fontSize = 15.sp, color = AtollColors.Muted) }
-            for ((label, rows) in listOf("Agent 与工具" to members, "人" to people)) {
-                if (rows.isEmpty()) continue
-                item(key = "label:$label") { SectionLabel(label, trailing = rows.size.toString()) }
-                item(key = "group:$label") { GroupCard {
-                    rows.forEachIndexed { index, actor ->
-                        val selected = state.selected?.id == actor.id
-                        Row(Modifier.fillMaxWidth().background(if (selected) AtollColors.LagoonSurface else AtollColors.Surface)
-                            .clickable { viewModel.select(actor); onSelect?.invoke(actor) }.heightIn(min = 64.dp).padding(horizontal = 14.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ActorAvatar(actor.name, actor.id, agent = actor.kind != "human", size = 40.dp, self = actor.id == state.selfId)
-                            Column(Modifier.weight(1f)) {
-                                Text(actor.name + if (actor.id == state.selfId) " · 我" else "", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text("${actor.kind.ifEmpty { "actor" }} · ${MemberConfig.rosterBodyLabel(actor.body).ifEmpty { "channel member" }}", color = AtollColors.Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            StatusPill(actor.presence, when (actor.presence) { "在线" -> Tone.Lagoon; "未绑定" -> Tone.Waiting; else -> Tone.Neutral })
-                        }
-                        if (index < rows.lastIndex) HorizontalDivider(Modifier.padding(start = 66.dp), color = AtollColors.LineSoft)
-                    }
-                } }
-            }
-            item { Text("设备在线 · 仅绑定", Modifier.padding(horizontal = 4.dp, vertical = 8.dp), color = AtollColors.Muted, fontSize = 12.sp) }
-        }
-    }
-}
 
 @Composable
 fun ActorDetail(viewModel: RosterViewModel, modifier: Modifier = Modifier, onClose: (() -> Unit)? = null) {

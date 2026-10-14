@@ -47,8 +47,11 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
     onAttachment: MessageAttachmentHandler? = null,
     messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null,
-    newerUnloaded: Boolean = false, connectionPhase: ConnectionPhase = ConnectionPhase.OPEN, onReconnect: () -> Unit = {}) {
+    newerUnloaded: Boolean = false, connectionPhase: ConnectionPhase = ConnectionPhase.OPEN, onReconnect: () -> Unit = {},
+    membersOpen: Boolean = false, memberCount: Int? = null, onRefreshMembers: (() -> Unit)? = null,
+    membersRefreshing: Boolean = false, membersRefreshEnabled: Boolean = true) {
     val section = when {
+        membersOpen -> ChannelSection.Members
         tab == ChannelTab.Tasks -> ChannelSection.Tasks
         state.filesOpen || state.terminalOpen -> ChannelSection.Files
         else -> ChannelSection.Conversation
@@ -57,7 +60,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
         ChannelSection.Conversation -> {
             if (state.terminalOpen) onMenu(Item.CloseTerminal)
             if (state.filesOpen) onMenu(Item.CloseFiles)
-            if (tab != ChannelTab.Conversation) onTab(ChannelTab.Conversation)
+            if (tab != ChannelTab.Conversation || membersOpen) onTab(ChannelTab.Conversation)
         }
         ChannelSection.Tasks -> onTab(ChannelTab.Tasks)
         ChannelSection.Files -> if (!state.filesOpen) onMenu(Item.OpenFiles)
@@ -94,9 +97,10 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             ConnectionPhase.RECONNECTING -> "重连中"
             ConnectionPhase.CLOSED -> "已断开"
             ConnectionPhase.OPEN -> state.connection
-        }), onBack, onMenu, connecting = connectionPhase == ConnectionPhase.CONNECTING || connectionPhase == ConnectionPhase.RECONNECTING)
+        }), onBack, onMenu, connecting = connectionPhase == ConnectionPhase.CONNECTING || connectionPhase == ConnectionPhase.RECONNECTING,
+            onRefresh = onRefreshMembers.takeIf { membersOpen }, refreshing = membersRefreshing, refreshEnabled = membersRefreshEnabled)
         if (connectionPhase == ConnectionPhase.RECONNECTING || connectionPhase == ConnectionPhase.CLOSED) ReconnectNotice(onReconnect)
-        ChannelTabs(section, state) { select(it) }
+        ChannelTabs(section, state, memberCount) { select(it) }
         if (contentOverride != null) {
             Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
@@ -158,7 +162,8 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
 }
 
 @Composable
-private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMenu: (ChannelMenuAction) -> Unit, connecting: Boolean = false) {
+private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMenu: (ChannelMenuAction) -> Unit, connecting: Boolean = false,
+    onRefresh: (() -> Unit)? = null, refreshing: Boolean = false, refreshEnabled: Boolean = true) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().background(AtollColors.Surface).heightIn(min = 56.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -182,6 +187,9 @@ private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMe
                 }, fontSize = 12.sp, color = if (connected) AtollColors.Muted else AtollColors.Warning, maxLines = 1)
             }
         }
+        if (onRefresh != null) IconButton(onRefresh, Modifier.size(44.dp).semantics { contentDescription = "刷新名册" }, enabled = refreshEnabled) {
+            if (refreshing) Spinner(19.dp) else Icon(Icons.Outlined.Refresh, null, Modifier.size(19.dp))
+        }
         Box {
             IconButton({ menuOpen = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(22.dp)) }
             DropdownMenu(menuOpen, { menuOpen = false }) {
@@ -196,7 +204,7 @@ private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMe
 }
 
 @Composable
-private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, onSelect: (ChannelSection) -> Unit) {
+private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, memberCount: Int?, onSelect: (ChannelSection) -> Unit) {
     Row(Modifier.fillMaxWidth().background(AtollColors.Surface).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
         ChannelSection.entries.forEach { choice ->
             val active = choice == section
@@ -207,7 +215,7 @@ private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, o
                     Text(choice.label, fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                         color = if (active) AtollColors.Ink else AtollColors.Muted)
                     if (choice == ChannelSection.Tasks && state.tasks.isNotEmpty()) CountBadge(state.tasks.size.toString(), Tone.Waiting)
-                    if (choice == ChannelSection.Members && state.agents.isNotEmpty()) Text(state.agents.size.toString(), fontSize = 12.sp, color = AtollColors.Faint)
+                    if (choice == ChannelSection.Members && memberCount != null) Text(memberCount.toString(), fontSize = 12.sp, color = AtollColors.Muted)
                 }
                 Box(Modifier.height(2.dp).fillMaxWidth().background(if (active) AtollColors.Ink else Color.Transparent))
             }

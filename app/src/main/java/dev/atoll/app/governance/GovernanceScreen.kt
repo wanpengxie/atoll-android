@@ -124,6 +124,18 @@ private fun ChannelMembers(vm: GovernanceViewModel,state: GovernanceState,onActo
         item { AddParticipant(vm,state,roster) }
     }
 }
+/** Reuse the channel governance writer from the roster's add-member overlay. */
+@Composable
+fun AddMemberForm(viewModel: GovernanceViewModel) {
+    val state by viewModel.state.collectAsState()
+    LaunchedEffect(state.channel) { viewModel.refresh() }
+    val roster = remember(state.directory.actors) { governanceMembers(state.directory.actors) }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        GovernanceStatus(state)
+        AddParticipant(viewModel, state, roster)
+    }
+}
+
 @Composable private fun AddParticipant(vm: GovernanceViewModel,state: GovernanceState,roster: List<GovernanceMember>) {
     val principals=governancePrincipals(state.directory.principals).filter { p -> roster.none { it.principal==p.text("id") } }
     val descriptions=governanceDescriptions(state.directory.descriptions,true)

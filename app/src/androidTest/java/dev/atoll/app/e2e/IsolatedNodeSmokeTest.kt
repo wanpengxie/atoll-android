@@ -357,7 +357,7 @@ class IsolatedNodeSmokeTest {
             menu("关闭终端")
         }
         step("tasks") { click("任务"); waitFor(SemanticsMatcher("work item count") { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("工作项 ") } }); click("动态") }
-        step("members") { click("成员"); waitFor(hasText("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("关闭") }
+        step("members") { click("成员"); waitFor(hasContentDescription("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("动态") }
         step("channel-details") { menu("频道详情"); waitFor(hasText("危险操作")); click("关闭") }
         step("create-child") {
             val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
