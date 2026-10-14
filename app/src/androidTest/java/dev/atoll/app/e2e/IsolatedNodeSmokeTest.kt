@@ -168,8 +168,8 @@ class IsolatedNodeSmokeTest {
             put("connection", graph.state.value.navigation.connection.name)
         }
     }
-    private fun replace(label: String, value: String, private: Boolean = false) {
-        val field = waitFor(hasSetTextAction() and hasText(label))
+    private fun replace(label: String, value: String, private: Boolean = false, selector: SemanticsMatcher = hasText(label)) {
+        val field = waitFor(hasSetTextAction() and selector)
         try { field.performTextReplacement(value) } catch (failure: Throwable) {
             if (private) throw AssertionError("Password replacement action failed") else throw failure
         }
@@ -362,7 +362,7 @@ class IsolatedNodeSmokeTest {
         step("create-child") {
             val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
             val qualifiedName = "$parentName.$child"
-            menu("新建子频道"); replace("频道名称", child)
+            menu("新建子频道"); replace("频道名称", child, selector = hasContentDescription("频道名称"))
             runCatching { compose.onNode(hasScrollAction()).performScrollToNode(hasText("创建频道")) }
             click("创建频道"); click("进入新频道")
             waitFor(hasText(qualifiedName)); compose.waitUntil(40_000) { graph.state.value.route?.channel != config.channel }
