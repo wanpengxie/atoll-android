@@ -154,8 +154,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             val access = state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.access
                             if (state.channelError != null) StatusPage("频道读取失败", state.channelError!!, "重试", { graph.retryChannel(state.route!!.channel) })
                             else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = graph::home)
-                        } else key(browseViewKey(conversation.mineOnly, conversation.actorFilters)) {
-                            val readingView = browseViewKey(conversation.mineOnly, conversation.actorFilters)
+                        } else key(browseViewKey(conversation.mineOnly, conversation.actorFilters, conversation.showChannelActivity)) {
+                            val readingView = browseViewKey(conversation.mineOnly, conversation.actorFilters, conversation.showChannelActivity)
                             val headerCount = timelineHeaderCount(conversation)
                             val listState = rememberLazyListState(initialFirstVisibleItemIndex = (conversation.entries.lastIndex + headerCount).coerceAtLeast(0))
                             var following by remember { mutableStateOf(state.browsePosition?.following != false) }
@@ -239,7 +239,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (!initialized) {
                                     val position = state.browsePosition?.takeIf { !it.following && state.route?.focus == null }
-                                    val index = conversation.entries.indexOfFirst { it.key == position?.key }
+                                    val index = browseEntryIndex(conversation.entries, position)
                                     if (routeFocus?.kind == FocusKind.Turn) {
                                         following = false; graph.follow(false)
                                     } else if (index >= 0) {
@@ -315,7 +315,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             Box(Modifier.weight(1f)) {
                             ChannelScreen(conversation, ComposerViewState(""),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
-                                onBack = graph::home, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter,
+                                onBack = graph::home, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter, onChannelActivity = graph::channelActivity,
                                 onText = {}, onSend = {}, composerVisible = false,
                                 onMenu = { action -> when (action) {
                                     Item.OpenFiles -> graph.files(true)

@@ -50,7 +50,7 @@ class ChannelController(
     private var actors = emptyList<ActorRecord>()
     private val activity = linkedMapOf<String, AgentActivityViewState>()
     private var browsePosition: BrowsePosition? = null
-    private val viewKey get() = browseViewKey(options.mineOnly && selfId.isNotBlank(), options.actorFilters)
+    private val viewKey get() = browseViewKey(options.mineOnly && selfId.isNotBlank(), options.actorFilters, options.showChannelActivity)
     private val browseKey get() = "$id.browse.$viewKey"
     private var restoreNotice: String? = null
     private var readPosition = 0L
@@ -114,6 +114,7 @@ class ChannelController(
     suspend fun foreground(value: Boolean) { commands.send(Foreground(value)) }
     suspend fun toggleScope() { commands.send(ChangeScope) }
     suspend fun filter(actor: String?) { commands.send(Filter(actor)) }
+    suspend fun channelActivity(show: Boolean) { commands.send(ActivityVisibility(show)) }
     suspend fun loadOlder() { commands.send(LoadOlder) }
     suspend fun retry() { commands.send(Retry) }
     suspend fun browse(view: String, key: String, offset: Int, following: Boolean) { commands.send(Browse(view, key, offset, following)) }
@@ -189,6 +190,7 @@ class ChannelController(
                 project()
             }
             ChangeScope -> changeView(options.copy(mineOnly = !options.mineOnly))
+            is ActivityVisibility -> changeView(options.copy(showChannelActivity = command.show))
             is Filter -> changeView(options.copy(actorFilters = if (command.actor == null) emptySet() else
                 if (command.actor in options.actorFilters) options.actorFilters - command.actor else options.actorFilters + command.actor))
             LoadOlder -> {
@@ -317,13 +319,14 @@ class ChannelController(
         val mineOnly = options.mineOnly && knownIdentity
         val actorFilters = options.actorFilters.takeIf { knownIdentity }.orEmpty()
         val snapshot = model.timeline(TimelineOptions(scope = if (mineOnly) ConversationScope.MINE else ConversationScope.ALL,
-            selfId = selfId, actorFilter = actorFilters, newerUnloaded = newerUnloaded, showNarration = true,
+            selfId = selfId, actorFilter = actorFilters, newerUnloaded = newerUnloaded, showNarration = mineOnly || options.showChannelActivity,
             localEchoes = if (newerUnloaded) emptyList() else localEchoes, timelinePlaced = timelinePlaced))
         timeline = snapshot
-        rowSequences = timelineRowSequences(snapshot)
+        val entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource)
+        rowSequences = timelineRowSequences(snapshot, entries)
         val previous = conversation
         conversation = ConversationViewState(channel = ChannelViewState(id, record.qualifiedName.ifEmpty { record.name }),
-            entries = mapper.map(snapshot, selfId, actors, newerUnloaded, source = timelineSource), mineOnly = mineOnly, actorFilters = actorFilters,
+            entries = entries, mineOnly = mineOnly, actorFilters = actorFilters, showChannelActivity = options.showChannelActivity,
             loadingOlder = previous?.loadingOlder ?: false, hasOlder = !historyStartKnown,
             connection = if (syncState.connected) "已连接" else "离线缓存", waitingCount = 0,
             runningCount = if (newerUnloaded) 0 else snapshot.runningTasks.size)
@@ -390,6 +393,7 @@ class ChannelController(
     private data class Follow(val value: Boolean) : Command
     private data class Foreground(val value: Boolean) : Command
     private data object ChangeScope : Command
+    private data class ActivityVisibility(val show: Boolean) : Command
     private data class Filter(val actor: String?) : Command
     private data object LoadOlder : Command
     private data class OlderFinished(val epoch: Long, val hasOlder: Boolean, val error: String?) : Command

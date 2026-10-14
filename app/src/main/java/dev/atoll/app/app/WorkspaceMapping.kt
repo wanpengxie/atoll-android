@@ -1,6 +1,7 @@
 package dev.atoll.app.app
 
 import dev.atoll.app.core.Envelope
+import dev.atoll.app.core.Row
 import dev.atoll.app.core.string
 import dev.atoll.app.model.*
 import dev.atoll.app.ui.screens.*
@@ -59,7 +60,15 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         val entries = mutableListOf<UiEntry>()
         var day = ""
         val retained = mutableSetOf<String>()
-        for (item in snapshot.items) {
+        val narrationPlaceholder = snapshot.items.firstOrNull { it.entry.kind == "narration" }
+        val failed = narrationPlaceholder?.let { item -> cache[item.key]?.takeIf { it.revision == item.contentRevision }
+            ?.value?.any { it.key == "${item.key}:error" } } == true
+        val presentation = if (failed) NarrationPresentation(snapshot.items) else try { narrationPresentation(snapshot, source) }
+            catch (exception: Exception) {
+                if (exception is CancellationException) throw exception
+                NarrationPresentation(snapshot.items) // Let the existing per-entry boundary isolate the narration error.
+            }
+        for (item in presentation.items) {
             retained += item.key
             val latest = item.entry.id == snapshot.currentEntryCandidate?.id
             var lifecycleKey = ""
@@ -69,7 +78,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 }.joinToString("|")
                 val previous = cache[item.key]
                 if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest && previous.lifecycleKey == lifecycleKey) previous.value
-                else render(item, selfId, names, newerUnloaded, source, restarts, instant).map { entry ->
+                else render(item, selfId, names, newerUnloaded, source, restarts, instant, presentation.rows[item.key]).map { entry ->
                     if (entry is UiEntry.Message) UiEntry.Message(entry.value.copy(latest=latest)) else entry
                 }.also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
             } catch (exception: Exception) {
@@ -85,9 +94,17 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
     }
 
     private fun render(item: PresentationItem, self: String, names: Map<String, String>, newerUnloaded: Boolean,
-        source: TimelineSource?, restarts: Map<String,Long>, instant: Long): List<UiEntry> {
-        if (item.entry.kind=="narration") return source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
-            .mapNotNull { row -> narrationText(row.envelope,names)?.let { UiEntry.Notice("${item.key}:${row.envelope.id}",it) } }.orEmpty()
+        source: TimelineSource?, restarts: Map<String,Long>, instant: Long, narration: List<Row>?): List<UiEntry> {
+        if (item.entry.kind=="narration") {
+            val rows = narration ?: source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
+            val activities = rows.mapNotNull { row ->
+                val envelope = row.envelope
+                narrationText(envelope,names)?.let { text -> ChannelActivityItem(envelope.id, row.seq, text,
+                    time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts),
+                    envelope.type == "system.build.finished" && envelope.body["result"].string() !in setOf("", "ok", "superseded")) }
+            }
+            return if (activities.isEmpty()) emptyList() else listOf(UiEntry.ChannelActivity(item.key, activities))
+        }
         val result = mutableListOf<UiEntry>()
         val tasks = subTaskViews(item.entry.subTasks,names)
         val tasksByRequest = tasks.groupBy { it.requestId.orEmpty() }

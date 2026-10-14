@@ -25,5 +25,14 @@ internal fun restorableBrowseWindow(position: BrowsePosition, rows: List<Row>, c
     }
 
 /** Only effective filters distinguish reading views; set insertion order never does. */
-internal fun browseViewKey(mineOnly: Boolean, actors: Set<String>): String =
-    if (mineOnly) "mine:${JsonArray(actors.sorted().map(::JsonPrimitive))}" else "all"
+internal fun browseViewKey(mineOnly: Boolean, actors: Set<String>, showChannelActivity: Boolean = true): String =
+    if (mineOnly) "mine:${JsonArray(actors.sorted().map(::JsonPrimitive))}" else if (showChannelActivity) "all" else "all:activity-off"
+
+/** Loading an earlier page can extend an activity group and change its first-row key. */
+internal fun browseEntryIndex(entries: List<dev.atoll.app.ui.screens.TimelineEntry>, position: BrowsePosition?): Int {
+    if (position == null) return -1
+    val exact = entries.indexOfFirst { it.key == position.key }
+    if (exact >= 0) return exact
+    return entries.indexOfFirst { entry -> entry is dev.atoll.app.ui.screens.TimelineEntry.ChannelActivity &&
+        entry.items.isNotEmpty() && position.seq in entry.items.first().seq..entry.items.last().seq }
+}

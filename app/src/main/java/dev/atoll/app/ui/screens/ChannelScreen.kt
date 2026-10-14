@@ -8,6 +8,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
@@ -20,6 +21,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -39,7 +41,7 @@ private enum class ChannelSection(val label: String) { Conversation("动态"), T
 fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab: ChannelTab,
     onBack: () -> Unit, onTab: (ChannelTab) -> Unit, onScope: () -> Unit, onActor: (String) -> Unit,
     onText: (String) -> Unit, onSend: () -> Unit, onOlder: () -> Unit,
-    onMenu: (ChannelMenuAction) -> Unit = {}, onLink: ((String) -> Unit)? = null,
+    onMenu: (ChannelMenuAction) -> Unit = {}, onLink: ((String) -> Unit)? = null, onChannelActivity: (Boolean) -> Unit = {},
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
     onAttachment: MessageAttachmentHandler? = null,
@@ -66,7 +68,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else if (tab == ChannelTab.Conversation) {
-            FilterBar(state, onScope, onActor)
+            FilterBar(state, onScope, onActor, onChannelActivity)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 12.dp)) {
                     if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
@@ -83,6 +85,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                     items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
                         is TimelineEntry.Day -> DaySeparator(entry.text)
                         is TimelineEntry.Notice -> WeakNotice(entry.text)
+                        is TimelineEntry.ChannelActivity -> ChannelActivity(entry)
                         is TimelineEntry.Message -> {
                             val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment,
                                 onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) }) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
@@ -177,8 +180,24 @@ private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, o
 
 /** Scope and actor filters sit above the list instead of floating over it. */
 @Composable
-private fun FilterBar(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit) {
+private fun FilterBar(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit, onChannelActivity: (Boolean) -> Unit) {
     if (!state.identityReady) return
+    if (!state.mineOnly) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            SegmentedControl(listOf("与我相关", "全部"), 1, { if (it == 0) onScope() })
+            Spacer(Modifier.weight(1f))
+            Row(Modifier.heightIn(min = 44.dp).toggleable(state.showChannelActivity, role = Role.Switch, onValueChange = onChannelActivity)
+                .semantics { contentDescription = "频道活动" }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("频道活动", fontSize = 13.sp, color = AtollColors.Body)
+                Box(Modifier.size(40.dp, 24.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (state.showChannelActivity) AtollColors.Lagoon else AtollColors.ControlLine)) {
+                    Box(Modifier.align(if (state.showChannelActivity) Alignment.CenterEnd else Alignment.CenterStart)
+                        .padding(3.dp).size(18.dp).clip(CircleShape).background(Color.White))
+                }
+            }
+        }
+        return
+    }
     ChipRow(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
         SegmentedControl(listOf("与我相关", "全部"), if (state.mineOnly) 0 else 1, { index -> if ((index == 0) != state.mineOnly) onScope() })
         if (state.mineOnly && (state.agents.isNotEmpty() || state.actorFilters.isNotEmpty())) Box(Modifier.size(1.dp, 20.dp).background(AtollColors.ControlLine))
