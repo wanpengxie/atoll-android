@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>输入 · / 命令</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollCaret{50%{opacity:0}}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: #FFFFFF; border-bottom: 1px solid #E5E5E0">
+    <a href="Main.html" aria-label="返回" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="flex: 1; font-size: 17px; font-weight: 600"><span style="color: #8B9097; font-weight: 500">#</span> atoll-web</span>
+  </header>
+
+  <div style="flex: 1; min-height: 40px; opacity: .35"></div>
+
+  <section aria-label="命令" style="flex: none; margin: 0 8px 8px; border-radius: 20px; background: #FFFFFF; border: 1px solid #E5E5E0; box-shadow: 0 10px 30px rgba(21,23,26,.12); overflow: hidden">
+    <div style="display: flex; align-items: center; gap: 8px; padding: 12px 16px 4px; font-size: 12px; font-weight: 600; color: #5C6169">
+      发给
+      <span style="height: 22px; display: flex; align-items: center; gap: 5px; padding: 0 8px 0 3px; border-radius: 11px; background: #EEEDFC; color: #3730A3"><span style="width: 16px; height: 16px; border-radius: 5px; background: #4F46E5; color: #FFFFFF; font-size: 10px; display: flex; align-items: center; justify-content: center">B</span>builder</span>
+      的命令
+    </div>
+    <ul role="listbox" style="list-style: none; margin: 0; padding: 2px 6px">
+      <li role="option" aria-selected="true" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px; background: #F1F1EC">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/compact</code>
+        <span style="flex: 1; font-size: 14px">压缩上下文</span>
+        <span style="font-size: 12px; color: #5C6169">上下文 78%</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/model</code>
+        <span style="flex: 1; font-size: 14px">切换模型与推理强度</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C6169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/new</code>
+        <span style="flex: 1; font-size: 14px">新建对话</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/fork</code>
+        <span style="flex: 1; font-size: 14px">分叉对话</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/context</code>
+        <span style="flex: 1; font-size: 14px">查看上下文</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/status</code>
+        <span style="flex: 1; font-size: 14px">查看状态</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500; color: #B42318">/restart</code>
+        <span style="flex: 1; font-size: 14px">重启 Agent</span>
+        <span style="font-size: 12px; color: #5C6169">需确认</span>
+      </li>
+    </ul>
+    <div style="padding: 10px 16px 4px; font-size: 12px; font-weight: 600; color: #5C6169; border-top: 1px solid #E5E5E0">空间命令</div>
+    <ul role="listbox" style="list-style: none; margin: 0; padding: 2px 6px 6px">
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/introduce</code>
+        <span style="flex: 1; font-size: 14px">创建成员</span>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5C6169">&lt;class&gt; [name]</span>
+      </li>
+      <li role="option" aria-selected="false" style="display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 10px; border-radius: 12px">
+        <code style="width: 92px; flex: none; font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">/admit</code>
+        <span style="flex: 1; font-size: 14px">准入用户</span>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #5C6169">&lt;principal&gt;</span>
+      </li>
+    </ul>
+    <p style="margin: 0; padding: 10px 16px 12px; background: #F6F6F2; font-size: 12px; line-height: 18px; color: #5C6169">正文要以 / 开头时，写成 <code style="font-family: 'Geist Mono', monospace">//</code>。命令不能带附件，回复模式下不可用。</p>
+  </section>
+
+  <div style="flex: none; margin: 0 8px 10px; border-radius: 22px; background: #FFFFFF; border: 1.5px solid #15171A">
+    <div role="textbox" aria-label="发送消息" style="padding: 12px 16px 6px; font-family: 'Geist Mono', monospace; font-size: 16px; line-height: 23px">/<span style="display: inline-block; width: 2px; height: 20px; margin-left: 1px; vertical-align: -4px; background: #0F766E; animation: atollCaret 1s steps(1) infinite"></span></div>
+    <div style="display: flex; align-items: center; gap: 2px; padding: 4px 6px 6px">
+      <a href="AgentPicker.html" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 4px; border-radius: 18px; background: #F1F1EC; color: #15171A; font-size: 13px">
+        <span style="width: 26px; height: 26px; border-radius: 8px; background: #4F46E5; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>builder<span style="color: #5C6169">· 高</span>
+      </a>
+      <span style="flex: 1"></span>
+      <button aria-label="发送" disabled style="width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: #EBEBE5; color: #8B9097">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

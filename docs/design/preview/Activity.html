@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>活动收件箱</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollPulse{0%{box-shadow:0 0 0 0 rgba(29,95,209,.45)}70%{box-shadow:0 0 0 6px rgba(29,95,209,0)}100%{box-shadow:0 0 0 0 rgba(29,95,209,0)}}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="flex: none; display: flex; align-items: center; padding: 12px 8px 4px 20px">
+    <h1 style="margin: 0; flex: 1; font-size: 26px; line-height: 32px; font-weight: 700">活动</h1>
+    <button style="height: 44px; padding: 0 12px; font-size: 14px; color: #5C6169">全部已读</button>
+  </header>
+
+  <div style="flex: none; padding: 8px 16px 12px">
+    <div role="group" aria-label="活动范围" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; border-radius: 18px; background: #EBEBE5">
+      <button aria-pressed="true" style="height: 32px; border-radius: 15px; background: #FFFFFF; font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(21,23,26,.08)">需要我 3</button>
+      <button aria-pressed="false" style="height: 32px; border-radius: 15px; font-size: 13px; color: #5C6169">运行中 2</button>
+      <button aria-pressed="false" style="height: 32px; border-radius: 15px; font-size: 13px; color: #5C6169">全部</button>
+    </div>
+  </div>
+
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 0 12px">
+
+    <article style="padding: 14px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #4F46E5; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 14px"><b style="font-weight: 600">builder</b> 请求审批</span>
+          <span style="font-size: 12px; color: #5C6169"># atoll-web · 3 分钟前</span>
+        </span>
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #B42318"></span>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 22px">允许推送修复到 <code style="font-family: 'Geist Mono', monospace; font-size: 13px">release/1.4</code> 分支</p>
+      <div style="display: flex; gap: 8px">
+        <button style="height: 40px; padding: 0 16px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 14px; font-weight: 500">拒绝</button>
+        <button style="height: 40px; padding: 0 18px; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 14px; font-weight: 600">批准</button>
+        <span style="flex: 1"></span>
+        <a href="HumanAsk.html" style="height: 40px; display: flex; align-items: center; font-size: 14px; color: #5C6169">详情</a>
+      </div>
+    </article>
+
+    <a href="HumanAsk.html" style="padding: 14px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 8px; color: #15171A">
+      <span style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #E2F1EE; color: #0F5F59; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 14px"><b style="font-weight: 600">planner</b> 向你提问</span>
+          <span style="font-size: 12px; color: #5C6169"># atoll-android · 12 分钟前</span>
+        </span>
+        <span style="width: 8px; height: 8px; border-radius: 4px; background: #B42318"></span>
+      </span>
+      <span style="font-size: 15px; line-height: 22px">1.4 版本是否包含终端深色主题？</span>
+    </a>
+
+    <a href="HumanAsk.html" style="padding: 14px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 8px; color: #15171A">
+      <span style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #4F46E5; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 14px"><b style="font-weight: 600">builder</b> 请你填写表单</span>
+          <span style="font-size: 12px; color: #5C6169"># ops · 40 分钟前</span>
+        </span>
+      </span>
+      <span style="font-size: 15px; line-height: 22px">部署参数 · 3 个字段，其中 1 个为密钥</span>
+    </a>
+
+    <h2 style="margin: 10px 4px 0; font-size: 13px; font-weight: 600; color: #5C6169">运行中</h2>
+    <div style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+      <a href="Process.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: #15171A; border-bottom: 1px solid #E5E5E0">
+        <span style="width: 8px; height: 8px; flex: none; border-radius: 4px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 15px; font-weight: 500">builder · 修复登录页键盘遮挡</span>
+          <span style="font-size: 12px; color: #5C6169"># atoll-web · 子 Agent 2 个</span>
+        </span>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #1D4FB0">02:14</span>
+      </a>
+      <a href="Process.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: #15171A">
+        <span style="width: 8px; height: 8px; flex: none; border-radius: 4px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 15px; font-weight: 500">planner · 整理 1.4 发布清单</span>
+          <span style="font-size: 12px; color: #5C6169"># atoll-android</span>
+        </span>
+        <span style="font-family: 'Geist Mono', monospace; font-size: 13px; color: #1D4FB0">00:48</span>
+      </a>
+    </div>
+
+    <h2 style="margin: 10px 4px 0; font-size: 13px; font-weight: 600; color: #5C6169">今天早些时候</h2>
+    <div style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+      <a href="Main.html" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: #15171A">
+        <span style="width: 20px; height: 20px; flex: none; border-radius: 10px; background: #FCECEA; color: #B42318; display: flex; align-items: center; justify-content: center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+          <span style="font-size: 15px">ops-bot 回合失败</span>
+          <span style="font-size: 12px; color: #5C6169"># ops · 接收方已不可用 · 08:05</span>
+        </span>
+      </a>
+    </div>
+  </main>
+
+  <nav aria-label="主导航" style="flex: none; height: 68px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: #FFFFFF; border-top: 1px solid #E5E5E0">
+    <a href="Channels.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5C6169; font-size: 12px">
+      <span style="width: 56px; height: 30px; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"></path></svg>
+      </span>频道
+    </a>
+    <a href="Activity.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #15171A; font-size: 12px; font-weight: 600">
+      <span style="position: relative; width: 56px; height: 30px; border-radius: 15px; background: #E2F1EE; color: #0F5F59; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"></path></svg>
+        <span style="position: absolute; top: 1px; right: 10px; min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #B42318; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">3</span>
+      </span>活动
+    </a>
+    <a href="Settings.html" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5C6169; font-size: 12px">
+      <span style="width: 56px; height: 30px; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.8"></circle><path d="M4.5 20c1.2-3.6 4-5.5 7.5-5.5s6.3 1.9 7.5 5.5"></path></svg>
+      </span>我
+    </a>
+  </nav>
+</div>
+</div>
+
+</body>
+</html>

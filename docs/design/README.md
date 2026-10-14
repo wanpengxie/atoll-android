@@ -11,6 +11,11 @@ title and position.
 
 Phone boards are 390×844 px (1 px = 1 dp). The UI text is Chinese.
 
+**To look at the designs**, open `preview/index.html` in any browser: the
+same boards as standalone static pages, no login or runtime needed, with
+the links between screens working. Regenerate them from `artboards/`
+whenever the artboards change.
+
 ## Where to start
 
 | Board | What it defines |

@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>设计基础</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+
+<div style="width: 1800px; height: 1120px; box-sizing: border-box; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 56px; padding: 64px 72px; overflow: hidden; background: #FFFFFF; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <section style="display: flex; flex-direction: column; gap: 20px">
+    <span style="font-size: 14px; font-weight: 600; color: #0F766E; letter-spacing: .08em">颜色</span>
+    <h1 style="margin: 0; font-size: 34px; line-height: 42px; font-weight: 700">墨色为主，一个潟湖绿</h1>
+    <p style="margin: 0; font-size: 15px; line-height: 23px; color: #3B3F46">中性纸面 + 墨黑文字。主按钮用墨黑，潟湖绿只表示“选中 / 在线 / 链接”。状态色只用于状态，完成不着色。</p>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #15171A"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Ink</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#15171A · 文字 / 主按钮</code></span></div>
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #0F766E"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Lagoon</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#0F766E · 选中 / 在线</code></span></div>
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #F6F6F2"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Ground</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#F6F6F2 · 页面底色</code></span></div>
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #FFFFFF; border-bottom: 1px solid #E5E5E0"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Surface</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#FFFFFF · 卡片 / 顶栏</code></span></div>
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #EBEBE5"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Sunken</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#EBEBE5 · 分段 / 输入底</code></span></div>
+      <div style="display: flex; flex-direction: column; border-radius: 14px; border: 1px solid #E5E5E0; overflow: hidden"><span style="height: 56px; background: #5C6169"></span><span style="padding: 10px 12px; display: flex; flex-direction: column; gap: 2px"><b style="font-size: 14px; font-weight: 600">Muted</b><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#5C6169 · 次要文字 6.2:1</code></span></div>
+    </div>
+
+    <h2 style="margin: 8px 0 0; font-size: 15px; font-weight: 600">状态</h2>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="display: flex; align-items: center; gap: 12px"><span style="width: 96px; height: 28px; border-radius: 14px; background: #E9F0FC; color: #1D4FB0; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center">处理中</span><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#1D5FD1 / #E9F0FC · 带脉冲点</code></span>
+      <span style="display: flex; align-items: center; gap: 12px"><span style="width: 96px; height: 28px; border-radius: 14px; background: #FBF1DF; color: #8A4B00; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center">排队 / 待处理</span><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#9A5800 / #FBF1DF · 时钟图标</code></span>
+      <span style="display: flex; align-items: center; gap: 12px"><span style="width: 96px; height: 28px; border-radius: 14px; background: #FCECEA; color: #B42318; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center">失败</span><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">#B42318 / #FCECEA · 叉 / 感叹号</code></span>
+      <span style="display: flex; align-items: center; gap: 12px"><span style="width: 96px; height: 28px; border-radius: 14px; border: 1px solid #E5E5E0; color: #5C6169; font-size: 13px; font-weight: 500; display: flex; align-items: center; justify-content: center">✓ 已完成</span><code style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">不着色 · 完成是常态</code></span>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 20px">
+    <span style="font-size: 14px; font-weight: 600; color: #0F766E; letter-spacing: .08em">字体</span>
+    <h2 style="margin: 0; font-size: 34px; line-height: 42px; font-weight: 700">Geist + 思源黑体</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 23px; color: #3B3F46">拉丁字母与数字用 Geist，中文回落到系统黑体（Android 上即思源 / Noto Sans CJK）。代码、ID、命令、终端用 Geist Mono。正文最小 15sp，说明文字最小 12sp。</p>
+    <div style="display: flex; flex-direction: column; border-radius: 16px; border: 1px solid #E5E5E0; overflow: hidden">
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">display 26/32</code><span style="font-size: 26px; line-height: 32px; font-weight: 700">频道</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">title 18/24</code><span style="font-size: 18px; line-height: 24px; font-weight: 600">修复登录页键盘遮挡</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">bar 17/22</code><span style="font-size: 17px; line-height: 22px; font-weight: 600"># atoll-web</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">body 15/23</code><span style="font-size: 15px; line-height: 23px">原因找到了：表单居中放置。</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">label 13/18</code><span style="font-size: 13px; line-height: 18px; font-weight: 600; color: #5C6169">我的频道</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #EFEFEA"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">caption 12/16</code><span style="font-size: 12px; line-height: 16px; color: #5C6169">10:42 · 已送达 builder</span></div>
+      <div style="display: flex; align-items: baseline; gap: 16px; padding: 14px 18px"><code style="width: 110px; flex: none; font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">mono 13/19</code><span style="font-family: 'Geist Mono', monospace; font-size: 13px; line-height: 19px">./gradlew connectedDebugAndroidTest</span></div>
+    </div>
+  </section>
+
+  <section style="display: flex; flex-direction: column; gap: 20px">
+    <span style="font-size: 14px; font-weight: 600; color: #0F766E; letter-spacing: .08em">形状与间距</span>
+    <h2 style="margin: 0; font-size: 34px; line-height: 42px; font-weight: 700">形状区分身份</h2>
+    <p style="margin: 0; font-size: 15px; line-height: 23px; color: #3B3F46">Agent 用圆角方块，人用圆形，不靠颜色区分。每个 Agent 有一个固定色调，由 actor id 哈希得出。</p>
+    <div style="display: flex; gap: 14px; align-items: center">
+      <span style="width: 44px; height: 44px; border-radius: 12px; background: #4F46E5; color: #FFFFFF; font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+      <span style="width: 44px; height: 44px; border-radius: 12px; background: #FBF1DF; color: #8A4B00; font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span>
+      <span style="width: 44px; height: 44px; border-radius: 12px; background: #E2F1EE; color: #0F5F59; font-size: 18px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
+      <span style="width: 1px; height: 32px; background: #E5E5E0"></span>
+      <span style="width: 44px; height: 44px; border-radius: 22px; background: #15171A; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+      <span style="width: 44px; height: 44px; border-radius: 22px; background: #E7E3F8; color: #3F3591; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">L</span>
+    </div>
+
+    <h3 style="margin: 8px 0 0; font-size: 15px; font-weight: 600">圆角</h3>
+    <div style="display: flex; gap: 14px; align-items: flex-end">
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 56px; height: 56px; border-radius: 10px; background: #EBEBE5"></span>10 按钮</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 56px; height: 56px; border-radius: 14px; background: #EBEBE5"></span>14 行</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 56px; height: 56px; border-radius: 16px; background: #EBEBE5"></span>16 卡片</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 56px; height: 56px; border-radius: 22px; background: #EBEBE5"></span>22 输入框</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 56px; height: 56px; border-radius: 24px 24px 0 0; background: #EBEBE5"></span>24 面板</span>
+    </div>
+
+    <h3 style="margin: 8px 0 0; font-size: 15px; font-weight: 600">间距（4 的倍数）</h3>
+    <div style="display: flex; gap: 12px; align-items: flex-end">
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 4px; height: 40px; background: #0F766E"></span>4</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 8px; height: 40px; background: #0F766E"></span>8</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 12px; height: 40px; background: #0F766E"></span>12</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 16px; height: 40px; background: #0F766E"></span>16 页边</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 22px; height: 40px; background: #0F766E"></span>22 消息间</span>
+      <span style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><span style="width: 44px; height: 40px; background: #0F766E"></span>44 触控</span>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 20px; color: #5C6169">所有可点区域至少 44dp；视觉更小的标签与筛选片用 Compose 的最小交互尺寸扩到 48dp。</p>
+  </section>
+</div>
+</div>
+
+</body>
+</html>

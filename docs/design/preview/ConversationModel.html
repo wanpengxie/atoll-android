@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>对话模型盘点</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+
+<div style="width: 1800px; height: 1500px; box-sizing: border-box; display: flex; flex-direction: column; gap: 32px; padding: 56px 64px; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="display: flex; flex-direction: column; gap: 8px">
+    <span style="font-size: 14px; font-weight: 600; color: #0F766E; letter-spacing: .08em">对话模型盘点</span>
+    <h1 style="margin: 0; font-size: 40px; line-height: 48px; font-weight: 700">时间线上到底有什么，手机上怎么摆</h1>
+    <p style="margin: 0; font-size: 17px; line-height: 26px; color: #3B3F46; max-width: 1200px">依据 <code style="font-family: 'Geist Mono', monospace; font-size: 15px">ChannelReplica</code>、<code style="font-family: 'Geist Mono', monospace; font-size: 15px">ConversationPresentation</code>、<code style="font-family: 'Geist Mono', monospace; font-size: 15px">WorkspaceMapping</code> 的实际逻辑整理。数据层一条不改，只改它在手机上的呈现：一个根请求的全部后代收进一张回合卡，复杂度分三层逐级展开。</p>
+  </header>
+
+  <section aria-label="处理流水线" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px">
+    <div style="padding: 16px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">1 · 账本行</span>
+      <b style="font-size: 16px; font-weight: 600">request / response / event</b>
+      <span style="font-size: 13px; line-height: 19px; color: #3B3F46">visibility=system 的行进叙述；无正文的行丢弃</span>
+    </div>
+    <div style="padding: 16px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">2 · 折叠</span>
+      <b style="font-size: 16px; font-weight: 600">回合 + 线程</b>
+      <span style="font-size: 13px; line-height: 19px; color: #3B3F46">请求 + 临时帧 + 第一个终态 = 回合；沿 parent_id 找到根，所有后代压平成根的线程</span>
+    </div>
+    <div style="padding: 16px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">3 · 过滤</span>
+      <b style="font-size: 16px; font-weight: 600">范围、Agent、隐藏规则</b>
+      <span style="font-size: 13px; line-height: 19px; color: #3B3F46">与我相关的关系索引；控制词、ui.*、排队消息、被取代的回合、父级未加载的行</span>
+    </div>
+    <div style="padding: 16px; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #5C6169">4 · 聚合</span>
+      <b style="font-size: 16px; font-weight: 600">挂载与合并</b>
+      <span style="font-size: 13px; line-height: 19px; color: #3B3F46">子任务挂到所属回合；孤儿子任务成组；瞬时事件只留最新；叙述合成一块</span>
+    </div>
+    <div style="padding: 16px; border-radius: 16px; background: #15171A; color: #FFFFFF; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: 'Geist Mono', monospace; font-size: 12px; color: #A9AEB5">5 · 呈现（本次重做）</span>
+      <b style="font-size: 16px; font-weight: 600">回合卡 + 三层披露</b>
+      <span style="font-size: 13px; line-height: 19px; color: #D5D8DC">日期、连续、稳定 key、最新行不折叠；手机上最多一级缩进</span>
+    </div>
+  </section>
+
+  <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 2.2fr) minmax(0, 1fr); gap: 32px">
+
+    <section aria-label="消息类型盘点" style="display: grid; grid-template-columns: 150px minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.3fr); align-content: start; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden; font-size: 13px; line-height: 19px">
+      <div style="padding: 10px 14px; background: #EFEFEA; font-weight: 600; color: #3B3F46">类别</div>
+      <div style="padding: 10px 14px; background: #EFEFEA; font-weight: 600; color: #3B3F46">判定</div>
+      <div style="padding: 10px 14px; background: #EFEFEA; font-weight: 600; color: #3B3F46">现在</div>
+      <div style="padding: 10px 14px; background: #EFEFEA; font-weight: 600; color: #3B3F46">新设计</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">回合</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">kind=request + 它的 response</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">请求、回答两个独立气泡</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">一张回合卡：请求在上，回答在下，状态在卡头</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">流式文本</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">临时帧 process.stage=text</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">拼在回答文字前</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">回答区实时输出 + 光标；终态到达后去重</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">过程记录</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">stage（思考等）、tool started/ended</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">“处理中: 标题”+ 最后 2 行</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">工作条：当前一步 + “过程 N”；全文进底部面板</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">协作调用</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">线程里 Agent→Agent / Agent→人的请求</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">每层缩进 23dp 的树</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">工作条“协作 N”；展开为一级列表，深度用路径标签 builder › reviewer</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">关联调用</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">线程里的工具 / system 操作</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">9sp “N 次关联调用”</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">工作条“调用 N”，失败时标红；详情只在面板</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">子任务</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">agent.task（started → progress → completed/failed）</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">任务卡树，超过 3 个成组</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">工作条“子 Agent N · M 进行中”；展开为进度行</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">后台任务</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">孤儿 agent.task；provider.run 带 task_summary</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">独立任务树 / “后台任务已返回”</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">独立的后台任务行，可展开结果，点开定位来源</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">审批与提问</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">线程中发给我的 human.ask / approve</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">从线程抽出，放在回合后</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">紧贴回合卡的操作卡，标明来源；同时进活动收件箱</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">人消息 · 事件</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">standalone（human.message 等）</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">气泡</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">无卡片的消息行；5 分钟内同作者连续不重复头像</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">弱通知 · 瞬时</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">非 system 事件；transient 只留最新</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">一行灰字</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">居中一行；瞬时状态原地替换，不新增行</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">叙述</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">system：成员进出、构建、跨频道请求</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">逐条通知</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">连续的合成一行“频道活动 N 条”，点开逐条；构建失败单独标红</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">排队中</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">agent.ask / queue / replace 未开始</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">等待区</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">不变；开始处理（或被后面 10 条超过）后进入时间线</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">编辑 · 取代</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">replaced_by；agent.replace 继承旧位置</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">旧条隐藏，新条占位</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">同；新卡请求区标“已编辑”</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">并入 · 抢占</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">终态带 merged_into / preempted_by</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">回答气泡隐藏</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">卡片收成一行“已并入另一回合 ›”，点按跳转</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">失联 · 中断</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">LOST（重启 / 过期）；error_code=interrupted</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">回答区一行文字</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">卡头状态 + 原因；附“重新发送”</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">本地回显</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">未进账本的本机发送</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">发送状态文字</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">卡片请求区底部的投递状态，失败可原编号重试</div>
+
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; font-weight: 600">始终隐藏</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #3B3F46">hold、interrupt、dismiss、context、options、fork、空 steer、ui.*</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA; color: #5C6169">隐藏</div>
+      <div style="padding: 9px 14px; border-top: 1px solid #EFEFEA">不变</div>
+    </section>
+
+    <aside style="display: flex; flex-direction: column; gap: 20px">
+      <section style="padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 12px">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">三层披露</h2>
+        <div style="display: flex; gap: 12px"><span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #15171A; color: #FFFFFF; font-family: 'Geist Mono', monospace; font-size: 13px; display: flex; align-items: center; justify-content: center">L0</span><span style="font-size: 14px; line-height: 21px"><b style="font-weight: 600">时间线</b>：请求、回答正文（超过 18 行折叠）、状态，以及一条工作条（当前一步 + 计数片）</span></div>
+        <div style="display: flex; gap: 12px"><span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #EBEBE5; font-family: 'Geist Mono', monospace; font-size: 13px; display: flex; align-items: center; justify-content: center">L1</span><span style="font-size: 14px; line-height: 21px"><b style="font-weight: 600">原地展开</b>：点计数片，在卡内列出协作、子任务、调用，每项一行，最多一级缩进</span></div>
+        <div style="display: flex; gap: 12px"><span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #EBEBE5; font-family: 'Geist Mono', monospace; font-size: 13px; display: flex; align-items: center; justify-content: center">L2</span><span style="font-size: 14px; line-height: 21px"><b style="font-weight: 600">底部面板</b>：过程 · 协作 · 子任务 · 调用 · 账本，五个标签；深层线程用路径导航</span></div>
+      </section>
+
+      <section style="padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">“与我相关”怎么判定</h2>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: #3B3F46">种子：我发的、发给我的、成员主动发起的根对话。再沿 parent_id / correlation_id 走一跳。一个回合只要有一条相关，整张卡都保留。</p>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: #3B3F46">Agent 筛选只在“与我相关”下可用：卡内任一消息的发送方或收件人命中即可。</p>
+        <p style="margin: 0; font-size: 14px; line-height: 21px; color: #3B3F46">新设计：筛选条显示被隐藏的数量，空结果给出一键切换。</p>
+      </section>
+
+      <section style="padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">滚动与位置</h2>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 21px; color: #3B3F46">
+          <li>跟随底部 / 浏览两种模式；“↓ N 条新动态”只数新回合根</li>
+          <li>上翻预取历史；失败给“重试”；到顶显示“频道记录从这里开始”</li>
+          <li>超过 5000 行切到历史窗口：顶部横幅“正在看历史 · 回到最新”，不显示运行中和等待状态</li>
+          <li>每个视图（范围 + 筛选）各自记住位置；日期吸顶</li>
+        </ul>
+      </section>
+
+      <section style="padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; display: flex; flex-direction: column; gap: 10px">
+        <h2 style="margin: 0; font-size: 18px; font-weight: 600">手势</h2>
+        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 21px; color: #3B3F46">
+          <li>右滑消息：回复（替代现在的“点按即回复”，避免误触）</li>
+          <li>长按：操作面板（复制、星标、回复、编辑、停止、新建任务、过程）</li>
+          <li>点计数片：原地展开；点状态或“过程”：底部面板</li>
+          <li>每条消息下常驻的操作按钮取消</li>
+        </ul>
+      </section>
+    </aside>
+  </div>
+</div>
+</div>
+
+</body>
+</html>
