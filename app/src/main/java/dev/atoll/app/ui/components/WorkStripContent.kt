@@ -37,6 +37,8 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
     onChildProcess: (String) -> Unit, inset: Boolean, onExpanded: ((Boolean) -> Unit)? = null) {
     if (!showTurnWorkStrip(message)) return
     var expanded by rememberSaveable(message.id) { mutableIntStateOf(0) }
+    // Restore the parent tracker only for an already-open strip; closed rows launch no effects.
+    if (expanded != 0 && onExpanded != null) LaunchedEffect(message.id) { onExpanded(true) }
     val groups = remember(message.relatedCalls) { message.relatedCalls.partition { it.conversation } }
     val records = message.trail?.records.orEmpty()
     val running = message.status == MessageStatus.Processing || message.trail?.running == true

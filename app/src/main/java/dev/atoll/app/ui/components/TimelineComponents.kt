@@ -57,13 +57,13 @@ private val cardBottom = RoundedCornerShape(bottomStart = 18.dp, bottomEnd = 18.
  */
 @Composable
 fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
-    onAttachment: MessageAttachmentHandler? = null, onRelatedCall: ((String) -> Unit)? = null, onMore: () -> Unit = {}) {
+    onAttachment: MessageAttachmentHandler? = null, onRelatedCall: ((String) -> Unit)? = null, onWorkExpanded: ((Boolean) -> Unit)? = null, onMore: () -> Unit = {}) {
     when (message.part) {
         MessagePart.Request -> Column(Modifier.fillMaxWidth().padding(top = 7.dp).clip(cardTop).background(AtollColors.Surface)
             .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             CardHeader(message, null, onMore)
             MessageBody(message, onLink, onAttachment)
-            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = false)
+            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = false, onExpanded = onWorkExpanded)
         }
         MessagePart.Answer -> Column(Modifier.fillMaxWidth().padding(bottom = turnBottomPadding(message)).clip(turnBottomShape(message, cardBottom)).background(AtollColors.Surface)) {
             HorizontalDivider(color = AtollColors.LineSoft)
@@ -72,7 +72,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                 CardHeader(message, message.status, onMore)
                 MessageBody(message, onLink, onAttachment)
             }
-            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true)
+            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true, onExpanded = onWorkExpanded)
         }
         MessagePart.Single -> Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp,
             top = if (message.continuation) 2.dp else 9.dp, bottom = if (message.continuation) 5.dp else 9.dp),
@@ -92,7 +92,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                 }
                 MessageBody(message, onLink, onAttachment)
                 if (hasWork(message)) Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AtollColors.Surface)) {
-                    WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true)
+                    WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true, onExpanded = onWorkExpanded)
                 }
             }
         }
