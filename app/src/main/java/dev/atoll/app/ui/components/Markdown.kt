@@ -54,7 +54,7 @@ fun Markdown(messageId: String, source: String, modifier: Modifier = Modifier, o
             runCatching { uri.openUri(address) }
         }
     }
-    SelectionContainer(modifier) {
+    MarkdownSelection(modifier) {
         if (previewHeight != null) {
             // A collapsed reply must not measure its invisible paragraphs.
             LazyColumn(Modifier.fillMaxWidth().height(previewHeight), userScrollEnabled = false,
