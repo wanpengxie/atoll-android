@@ -21,6 +21,7 @@ class WaitingViewModelTest {
         var owner = ""
         var submitted: JsonObject? = null
         var deferHold: CompletableDeferred<Unit>? = null
+        var deferSteer: CompletableDeferred<Unit>? = null
         var holdAdmitted = CompletableDeferred<Unit>()
         var acceptReturned = CompletableDeferred<Unit>()
         var localAcceptance = CompletableDeferred<Unit>()
@@ -31,6 +32,7 @@ class WaitingViewModelTest {
             calls += type to payload
             return when (type) {
                 "actor.describe" -> WaitingRulesTest().manifest()
+                "agent.steer" -> { deferSteer?.await(); Envelope.EMPTY }
                 "agent.hold" -> { owner = messageId; holdAdmitted.complete(Unit); deferHold?.await(); Envelope.EMPTY }
                 "agent.context" -> if (owner.isEmpty()) Envelope.EMPTY else buildJsonObject { put("frozen", buildJsonObject { put("held_by", owner); put("until", leaseUntil) }) }
                 "agent.unhold" -> { if (owner == payload.text("expected_hold_id")) owner = ""; buildJsonObject { put("released", true) } }
@@ -94,6 +96,45 @@ class WaitingViewModelTest {
             viewModel.updateSnapshot(snapshot.copy(items = listOf(snapshot.items.single().copy(entry = item.copy(turn = running.copy(terminal = running.request))))))
             viewModel.stop("target")
             assertEquals(1, port.calls.count { it.first == "agent.interrupt" })
+        } finally { viewModel.close() }
+    }
+
+    private fun steerable(): Turn = WaitingRulesTest().turn(status = "processing").let { turn ->
+        val progress = turn.provisional.single()
+        val frame = progress.envelope.json
+        turn.copy(provisional = listOf(progress.copy(envelope = Envelope(JsonObject(frame +
+            ("payload" to buildJsonObject { put("body", JsonObject(progress.envelope.body + ("turn_id" to JsonPrimitive("execution:opaque")))) }))))))
+    }
+    @Test fun guideNamesExecutionAndDoubleClickDoesNotSendWhilePending() = runBlocking<Unit> {
+        val wire = Wire(); val port = Port(wire); val gate = CompletableDeferred<Unit>(); port.deferSteer = gate
+        val viewModel = vm(wire, port, snapshot(listOf(steerable())))
+        try {
+            viewModel.guide("target", "  stay within this turn  ")
+            viewModel.guide("target", "second click")
+            assertEquals(listOf(payload("text" to "stay within this turn", "expected_turn_id" to "execution:opaque")), port.calls.filter { it.first == "agent.steer" }.map { it.second })
+            assertTrue("agent:a" in viewModel.state.value.busyActors)
+            gate.complete(Unit); yield()
+            assertFalse("agent:a" in viewModel.state.value.busyActors)
+        } finally { viewModel.close() }
+    }
+    @Test fun guideRejectsReadonlyTerminalMissingExecutionAndMissingDeclaration() = runBlocking<Unit> {
+        val wire = Wire(); val port = Port(wire); val original = steerable()
+        val viewModel = vm(wire, port, snapshot(listOf(original)))
+        try {
+            viewModel.updateAccess(false, "self", mapOf("agent:a" to "A"))
+            viewModel.guide("target", "readonly")
+            viewModel.updateAccess(true, "self", mapOf("agent:a" to "A"))
+            viewModel.updateSnapshot(snapshot(listOf(original.copy(terminal = original.request))))
+            viewModel.guide("target", "ended")
+            viewModel.updateSnapshot(snapshot(listOf(WaitingRulesTest().turn(status = "processing"))))
+            viewModel.guide("target", "no execution ID")
+            viewModel.updateSnapshot(snapshot(listOf(original.copy(provisional = listOf(original.provisional.single().let { row ->
+                row.copy(envelope = Envelope(buildJsonObject { put("payload", buildJsonObject { put("body", payload("status" to "processing", "turn_id" to "execution:opaque")) }) }))
+            })))))
+            viewModel.guide("target", "undeclared")
+            viewModel.updateSnapshot(snapshot(listOf(original)), newerUnloaded = true)
+            viewModel.guide("target", "old history")
+            assertEquals(0, port.calls.count { it.first == "agent.steer" })
         } finally { viewModel.close() }
     }
 
