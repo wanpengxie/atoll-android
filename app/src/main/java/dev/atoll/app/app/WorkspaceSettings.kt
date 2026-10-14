@@ -40,7 +40,7 @@ fun connectionLabel(phase: ConnectionPhase): String = when (phase) {
 @Composable
 fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, terminal: TerminalPreferences?,
     onClose: () -> Unit, onExport: (Boolean) -> Unit, onLogout: () -> Unit,
-    onSpaceAdmin: (() -> Unit)? = null, onUpgrade: (() -> Unit)? = null,
+    onSpaceAdmin: (() -> Unit)? = null, onVersion: (() -> Unit)? = null,
     onChannels: () -> Unit = onClose, onActivity: () -> Unit = {}) {
     val emptyTheme = remember { MutableStateFlow(TerminalTheme.DARK) }
     val theme by (terminal?.theme ?: emptyTheme).collectAsStateWithLifecycle()
@@ -48,7 +48,6 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
     val canExport = services != null && services.boot.isNotEmpty() && channel?.id in services.selfIds &&
         state.navigation.connection == ConnectionPhase.OPEN && !state.exporting
     val account = state.navigation.account
-    var upgradeOpen by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding()) {
         PageTitle("我", Modifier.padding(bottom = 8.dp))
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 24.dp),
@@ -83,7 +82,7 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
             } }
             if (account.root && (onSpaceAdmin != null || state.navigation.upgrade != null)) item("administration") { GroupCard {
                 if (onSpaceAdmin != null) GroupRow("空间管理", divider = state.navigation.upgrade != null, onClick = onSpaceAdmin)
-                state.navigation.upgrade?.let { update -> GroupRow("节点版本", divider = false, onClick = { upgradeOpen = true }, trailing = {
+                state.navigation.upgrade?.let { update -> GroupRow("节点版本", divider = false, onClick = onVersion, trailing = {
                     if (update.canStart) StatusPill("可升级", Tone.Lagoon)
                     else Text(update.current, fontSize = 13.sp, color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text("›", fontSize = 18.sp, color = AtollColors.Faint)
@@ -124,5 +123,4 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
         }
         HomeBar(HomeDestination.Me, onChannels = onChannels, onActivity = onActivity, onMe = {})
     }
-    if (upgradeOpen) state.navigation.upgrade?.let { update -> UpgradePanel(update, state.navigation.connection, { upgradeOpen = false }, onUpgrade) }
 }
