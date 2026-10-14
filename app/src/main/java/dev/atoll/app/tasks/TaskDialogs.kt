@@ -20,6 +20,23 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.theme.AtollColors
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import dev.atoll.app.ui.components.*
+import dev.atoll.app.ui.theme.ChatColors
 import kotlinx.coroutines.delay
 import java.time.Instant
 import kotlinx.serialization.json.*
@@ -169,48 +186,106 @@ fun UiFormsHost(controller: UiFormController,actorNames: Map<String,String> = em
     state.current?.let { form -> UiFormDialog(form,controller,actorNames[form.requester].orEmpty(),channelNames[form.channelId].orEmpty()) }
     if (state.notice.isNotEmpty()) AlertDialog(onDismissRequest=controller::dismissNotice,text={ Text(state.notice) },confirmButton={ TextButton(onClick=controller::dismissNotice) { Text("知道了") } })
 }
+/**
+ * HumanAsk board, third card: an agent asks me to fill in fields. Rows on white; a secret field is masked
+ * while typing, goes to its global/<name> resource, and the reply carries only a mask.
+ */
 @Composable
 fun UiFormDialog(form: UiForm,controller: UiFormController,requesterName: String="",channelName: String="") {
     val state by controller.state.collectAsState()
     var values by remember(form.id) { mutableStateOf(initialFormValues(form.fields,form.values)) }
     var errors by remember(form.id) { mutableStateOf<Map<String,String>>(emptyMap()) }
     val busy=state.busy.isNotEmpty()
-    TaskDialog(form.title,onClose={ controller.cancelAsync(form) },busy=busy) {
-        LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            item { Text("${requesterName.ifEmpty { form.requester }} 请你在这块屏上填写${if (channelName.isNotEmpty()) " · $channelName" else ""}",style=MaterialTheme.typography.bodySmall) }
-            items(form.fields,key={ it.name }) { field ->
-                val value=values[field.name];val error=errors[field.name].orEmpty()
-                val label=field.label+if (field.required) " *" else ""
-                when (field.control) {
-                    "checkbox" -> Row { Checkbox(value==JsonPrimitive(true),onCheckedChange={ values=values+(field.name to JsonPrimitive(it)) },enabled=!busy);Text(label,Modifier.padding(top=12.dp)) }
-                    "select" -> {
-                        var menu by remember { mutableStateOf(false) }
-                        Box { OutlinedButton(onClick={ menu=true },enabled=!busy,modifier=Modifier.fillMaxWidth()) {
-                            Text("$label：${field.enum?.firstOrNull { it.toString()==(value as? JsonPrimitive)?.content }?.let { (it as? JsonPrimitive)?.contentOrNull ?: it.toString() } ?: "请选择"}")
+    val requester=requesterName.ifEmpty { form.requester }
+    // In the Activity window, not a Dialog: only there do keyboard insets keep 提交 above the keyboard.
+    androidx.activity.compose.BackHandler { if (!busy) controller.cancelAsync(form) }
+    run {
+        Box(Modifier.fillMaxSize().background(ChatColors.Scrim).pointerInput(Unit) { detectTapGestures {} }.safeDrawingPadding().imePadding(),
+            contentAlignment=Alignment.BottomCenter) {
+            Column(Modifier.fillMaxWidth().heightIn(max=760.dp).clip(ChatSheetShape).background(ChatColors.Block)) {
+                ChatGrabber()
+                Row(Modifier.fillMaxWidth().heightIn(min=48.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically,
+                    horizontalArrangement=Arrangement.spacedBy(10.dp)) {
+                    ActorAvatar(requester,form.requester,agent=!form.requester.startsWith("human:"),size=24.dp)
+                    Text("$requester 请你填写 · ${form.title}",Modifier.weight(1f),fontSize=15.sp,fontWeight=FontWeight.SemiBold,color=ChatColors.Ink,
+                        maxLines=2,overflow=TextOverflow.Ellipsis)
+                    Text(if (state.busy=="cancel") "正在取消…" else "取消",Modifier.heightIn(min=44.dp).clickable(enabled=!busy) { controller.cancelAsync(form) }
+                        .padding(horizontal=12.dp).wrapContentHeight(),fontSize=15.sp,color=ChatColors.Gray)
+                }
+                if (channelName.isNotEmpty()) Text("在 $channelName 里",Modifier.padding(horizontal=16.dp),fontSize=13.sp,color=ChatColors.Gray)
+                LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(bottom=8.dp)) {
+                    items(form.fields,key={ it.name }) { field ->
+                        val value=values[field.name];val error=errors[field.name].orEmpty()
+                        val hint=listOfNotNull("必填".takeIf { field.required },"密钥 · 回复中只留掩码".takeIf { field.secret },
+                            field.description.takeIf(String::isNotEmpty)).joinToString(" · ")
+                        Column(Modifier.fillMaxWidth().padding(start=16.dp,end=16.dp,top=10.dp,bottom=10.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+                            when (field.control) {
+                                "checkbox" -> Row(Modifier.fillMaxWidth().heightIn(min=44.dp).toggleable(value==JsonPrimitive(true),enabled=!busy,role=Role.Switch) {
+                                    values=values+(field.name to JsonPrimitive(it)) },verticalAlignment=Alignment.CenterVertically) {
+                                    FieldTitle(field.label,hint,Modifier.weight(1f)); FormSwitch(value==JsonPrimitive(true))
+                                }
+                                "select" -> {
+                                    var menu by remember { mutableStateOf(false) }
+                                    val chosen=field.enum?.firstOrNull { it.toString()==(value as? JsonPrimitive)?.content }?.let { (it as? JsonPrimitive)?.contentOrNull ?: it.toString() }
+                                    Box { Row(Modifier.fillMaxWidth().heightIn(min=44.dp).clickable(enabled=!busy) { menu=true },verticalAlignment=Alignment.CenterVertically,
+                                        horizontalArrangement=Arrangement.spacedBy(6.dp)) {
+                                        FieldTitle(field.label,hint,Modifier.weight(1f))
+                                        Text(chosen ?: "请选择",fontSize=16.sp,color=if (chosen==null) ChatColors.Hint else ChatColors.Gray)
+                                        ChatChevron()
+                                    }
+                                        DropdownMenu(menu,onDismissRequest={ menu=false },containerColor=ChatColors.Block) { field.enum.orEmpty().forEach { option -> DropdownMenuItem(
+                                            text={ Text((option as? JsonPrimitive)?.contentOrNull ?: option.toString()) },onClick={ menu=false;values=values+(field.name to JsonPrimitive(option.toString())) }) } }
+                                    }
+                                }
+                                else -> {
+                                    FieldTitle(field.label,hint)
+                                    val text=(value as? JsonPrimitive)?.contentOrNull.orEmpty()
+                                    BasicTextField(text,{ values=values+(field.name to JsonPrimitive(it)) },
+                                        Modifier.fillMaxWidth().heightIn(min=40.dp).clip(RoundedCornerShape(8.dp)).background(ChatColors.Bar)
+                                            .padding(horizontal=12.dp,vertical=9.dp).semantics { contentDescription=field.label },
+                                        enabled=!busy,singleLine=field.control!="json",minLines=if (field.control=="json") 3 else 1,maxLines=if (field.control=="json") 7 else 1,
+                                        textStyle=TextStyle(fontSize=16.sp,lineHeight=22.sp,color=ChatColors.Body,fontFamily=if (field.control=="json") FontFamily.Monospace else null),
+                                        cursorBrush=SolidColor(ChatColors.Green),
+                                        keyboardOptions=KeyboardOptions(keyboardType=when (field.control) { "password" -> KeyboardType.Password;"number" -> KeyboardType.Decimal;else -> KeyboardType.Text }),
+                                        visualTransformation=if (field.secret) PasswordVisualTransformation('●') else VisualTransformation.None,
+                                        decorationBox={ inner -> Box { if (text.isEmpty()) Text(if (field.secret) "输入后只保存到 ${form.secret[field.name]}" else "填写${field.label}",
+                                            fontSize=16.sp,lineHeight=22.sp,color=ChatColors.Hint,maxLines=1,overflow=TextOverflow.Ellipsis); inner() } })
+                                }
+                            }
+                            if (error.isNotEmpty()) Text(error,fontSize=13.sp,color=ChatColors.Red)
+                            if (field.secret) {
+                                val existing=state.existing[field.name]
+                                val note=when {
+                                    existing?.exists==true -> "这个 key 已有值，提交会覆盖。"
+                                    existing?.error?.isNotEmpty()==true -> "无法确认这个 key 是否存在：${existing.error}"
+                                    existing!=null -> "这个 key 现在还没有值。"
+                                    else -> ""
+                                }
+                                if (note.isNotEmpty()) Text(note,fontSize=13.sp,color=ChatColors.Gray)
+                            }
                         }
-                            DropdownMenu(menu,onDismissRequest={ menu=false }) { field.enum.orEmpty().forEach { option -> DropdownMenuItem(text={ Text((option as? JsonPrimitive)?.contentOrNull ?: option.toString()) },onClick={ menu=false;values=values+(field.name to JsonPrimitive(option.toString())) }) } }
-                        }
+                        HorizontalDivider(Modifier.padding(start=16.dp),color=ChatColors.LineInWhite)
                     }
-                    else -> OutlinedTextField((value as? JsonPrimitive)?.contentOrNull.orEmpty(),onValueChange={ values=values+(field.name to JsonPrimitive(it)) },label={ Text(label) },modifier=Modifier.fillMaxWidth(),enabled=!busy,
-                        isError=error.isNotEmpty(),supportingText={ if (error.isNotEmpty()) Text(error) else if (field.description.isNotEmpty()) Text(field.description) },
-                        singleLine=field.control!="json",minLines=if (field.control=="json") 3 else 1,maxLines=if (field.control=="json") 7 else 1,
-                        keyboardOptions=KeyboardOptions(keyboardType=when (field.control) { "password" -> KeyboardType.Password;"number" -> KeyboardType.Decimal;else -> KeyboardType.Text }),
-                        visualTransformation=if (field.secret) PasswordVisualTransformation() else VisualTransformation.None)
                 }
-                if (error.isNotEmpty() && field.control in setOf("select","checkbox")) Text(error,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
-                if (field.secret) {
-                    Text("写入 ${form.secret[field.name]}，回复里只有掩码。",style=MaterialTheme.typography.bodySmall)
-                    val existing=state.existing[field.name]
-                    if (existing?.exists==true) Text("这个 key 已有值，提交会覆盖。",style=MaterialTheme.typography.bodySmall)
-                    else if (existing?.error?.isNotEmpty()==true) Text("无法确认这个 key 是否存在：${existing.error}",style=MaterialTheme.typography.bodySmall)
-                    else if (existing!=null) Text("这个 key 现在还没有值。",style=MaterialTheme.typography.bodySmall)
-                }
+                if (state.error.isNotEmpty()) Text(state.error,Modifier.padding(horizontal=16.dp),fontSize=13.sp,color=ChatColors.Red)
+                ChatSecondaryButton(if (state.busy=="submit") "正在提交…" else "提交",{
+                    val validation=validateFormValues(form.fields,values);errors=validation.errors;if (validation.valid) controller.submitAsync(form,validation.values)
+                },Modifier.fillMaxWidth().padding(start=16.dp,end=16.dp,top=8.dp,bottom=14.dp),enabled=!busy)
             }
-            if (state.error.isNotEmpty()) item { Text(state.error,color=MaterialTheme.colorScheme.error) }
-            item { Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick={ controller.cancelAsync(form) },enabled=!busy) { Text(if (state.busy=="cancel") "正在取消…" else "取消") }
-                Button(onClick={ val validation=validateFormValues(form.fields,values);errors=validation.errors;if (validation.valid) controller.submitAsync(form,validation.values) },enabled=!busy) { Text(if (state.busy=="submit") "正在提交…" else "提交") }
-            } }
         }
+    }
+}
+
+@Composable private fun FieldTitle(label: String,hint: String,modifier: Modifier=Modifier) {
+    Column(modifier,verticalArrangement=Arrangement.spacedBy(2.dp)) {
+        Text(label,fontSize=16.sp,lineHeight=22.sp,color=ChatColors.Ink)
+        if (hint.isNotEmpty()) Text(hint,fontSize=13.sp,lineHeight=18.sp,color=ChatColors.Gray)
+    }
+}
+
+@Composable private fun FormSwitch(on: Boolean) {
+    Box(Modifier.size(50.dp,30.dp).clip(RoundedCornerShape(15.dp)).background(if (on) ChatColors.Green else ChatColors.Line)) {
+        Box(Modifier.align(if (on) Alignment.CenterEnd else Alignment.CenterStart).padding(2.dp).size(26.dp).clip(RoundedCornerShape(13.dp))
+            .background(androidx.compose.ui.graphics.Color.White))
     }
 }

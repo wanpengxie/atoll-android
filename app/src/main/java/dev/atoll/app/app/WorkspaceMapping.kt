@@ -228,6 +228,8 @@ fun messageText(envelope: Envelope): String {
     body["text"].string().takeIf(String::isNotBlank)?.let { return it }
     body["body"].string().takeIf(String::isNotBlank)?.let { return it }
     body["message"].string().takeIf(String::isNotBlank)?.let { return it }
+    // An edit (agent.replace) carries the new wording; never show its control JSON.
+    if (envelope.type == "agent.replace") body["new_text"].string().takeIf(String::isNotBlank)?.let { return it }
     val content = body.objects("content").filter { it["type"].string() == "text" }.map { it["text"].string() }.filter(String::isNotBlank)
     if (content.isNotEmpty()) return content.joinToString("\n\n")
     if (envelope.status == "failed") return body["detail"].string().ifEmpty { body["reason"].string().ifEmpty { body["error_code"].string() } }

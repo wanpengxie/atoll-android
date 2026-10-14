@@ -19,6 +19,17 @@ internal fun failedResendTurn(request: Envelope = resendRequest(), extra: JsonOb
 }))
 
 class TurnStatePolicyTest {
+    @Test fun callerCancellationIsACompactStateOnTheRequestNotAFailure() {
+        // The ledger shape the node writes when the sender cancels a waiting request.
+        val turn = failedResendTurn(extra = buildJsonObject { put("cancelled", true); put("detail", "cancelled by caller"); put("error_code", "unanswered_timeout") })
+        val state = TurnStatePolicy.presentation(turn)
+        assertEquals(TurnKind.Cancelled, state.kind); assertTrue(state.compact)
+        assertEquals(TurnKind.Failed, TurnStatePolicy.presentation(failedResendTurn()).kind)
+    }
+    @Test fun anEditShowsItsNewWordingInsteadOfControlJson() {
+        val edit = resendRequest("agent.replace", "edit", buildJsonObject { put("target", "original"); put("old_text", "before"); put("new_text", "changed") })
+        assertEquals("changed", dev.atoll.app.app.messageText(edit))
+    }
     @Test fun mergedAndPreemptedAreCompactAndCannotBeResent() {
         for ((field, kind) in listOf("merged_into" to TurnKind.Merged, "preempted_by" to TurnKind.Preempted)) {
             val turn = failedResendTurn(extra = buildJsonObject { put(field, "next") })

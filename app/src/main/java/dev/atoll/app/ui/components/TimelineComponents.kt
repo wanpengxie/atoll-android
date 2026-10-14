@@ -255,11 +255,14 @@ fun CompactTurnRow(message: MessageViewState, onProcess: (String) -> Unit, onRes
         val caption = when (state.kind) {
             TurnKind.Merged -> "已合并到上一条一起处理"
             TurnKind.Preempted -> "已被下一条替换"
+            TurnKind.Cancelled -> "已取消"
             else -> ""
         }
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.End) {
-            MineRow(message, null, null, faded = true)
-            if (caption.isNotEmpty()) Text("$caption ›", Modifier.heightIn(min = 32.dp).clickable { onProcess(state.targetId) }.wrapContentHeight(),
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = if (message.self) Alignment.End else Alignment.Start) {
+            if (message.self) MineRow(message, null, null, faded = true)
+            else Box(Modifier.alpha(.5f)) { OthersRow(message, null, null, {}, { onProcess(state.requestId) }) }
+            if (state.kind == TurnKind.Cancelled) Text(caption, Modifier.heightIn(min = 24.dp).wrapContentHeight(), fontSize = 12.sp, color = ChatColors.Gray)
+            else if (caption.isNotEmpty()) Text("$caption ›", Modifier.heightIn(min = 32.dp).clickable { onProcess(state.targetId) }.wrapContentHeight(),
                 fontSize = 12.sp, color = ChatColors.Gray)
         }
     }

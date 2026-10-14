@@ -17,11 +17,15 @@ object TurnStatePolicy {
         val preempted = terminal?.body?.text("preempted_by").orEmpty()
         val stopped = terminal?.status == "failed" &&
             listOf(terminal.body.text("error_code"), terminal.body.text("reason")).contains("interrupted")
+        // The caller withdrew it: the request row itself says 已取消, no separate failure answer.
+        val cancelled = terminal?.status == "failed" && (terminal.body["cancelled"] == JsonPrimitive(true) ||
+            listOf(terminal.body.text("error_code"), terminal.body.text("reason")).contains("cancelled"))
         val kind = when {
             merged.isNotEmpty() -> TurnKind.Merged
             preempted.isNotEmpty() -> TurnKind.Preempted
             turn.terminalClosureOnly -> TurnKind.Normal
             stopped -> TurnKind.Stopped
+            cancelled -> TurnKind.Cancelled
             terminal?.status == "failed" -> TurnKind.Failed
             terminal == null && !newerUnloaded && lostReason.isNotEmpty() -> TurnKind.Lost
             else -> TurnKind.Normal

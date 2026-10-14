@@ -163,7 +163,10 @@ class WorkspaceMappingContentTest {
         val failed=answer("""{"status":"failed","error_code":"receiver_unavailable","reason":"dead","detail":"process exited","data":{"request":"q"},"closed_by":"system"}""")
         assertEquals("",failed.text);assertEquals("receiver_unavailable",failed.result!!.errorCode)
         assertEquals("process exited",failed.result!!.detail);assertEquals(json("""{"data":{"request":"q"}}"""),failed.result!!.errorData)
-        assertEquals("cancelled",answer("""{"status":"failed","cancelled":true,"reason":"cancelled"}""").result!!.errorCode)
+        // A cancelled request keeps one row, the request itself, marked 已取消; no failure answer.
+        val cancelled=mapped(row(1,"q","request",json("""{"text":"question"}""")),row(2,"a","response",json("""{"status":"failed","cancelled":true,"reason":"cancelled"}"""),"agent.ask","q"))
+        assertEquals(listOf("question"),cancelled.map { it.text })
+        assertEquals(dev.atoll.app.ui.screens.TurnKind.Cancelled,cancelled.single().turnState!!.kind)
     }
     @Test fun emptyTextAndBareAcknowledgementsStayDistinctFromReadableContentBlocks() {
         assertTrue(answer("""{"status":"completed","text":""}""").result!!.emptyText)

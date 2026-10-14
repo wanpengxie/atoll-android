@@ -126,6 +126,7 @@ class ChatV2BoardsUiTest {
             mine("m3", "部署到 staging", turn = TurnViewState(TurnKind.Lost, "m3", lostReason = "restart", receiverId = "agent:deployer"), recipient = "deployer"),
             mine("m4", "把 360dp 改成 320dp", turn = TurnViewState(TurnKind.Preempted, "m4", "m5")),
             mine("m5", "顺便更新 changelog", turn = TurnViewState(TurnKind.Merged, "m5", "m6")),
+            mine("m7", "Discard this isolated UI test request.", turn = TurnViewState(TurnKind.Cancelled, "m7")),
             mine("m6", "先停下，优先修登录页"),
             TimelineEntry.Message(MessageViewState("approval:ask", "builder", "", "", agent = true)))
         compose.setContent { Board(entries) }
