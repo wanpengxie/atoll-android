@@ -249,7 +249,7 @@ class IsolatedNodeSmokeTest {
             replace("服务器地址", config.url, selector = hasContentDescription("服务器地址")); replace("账号", "root", selector = hasContentDescription("账号")); replace("密码", config.password, private = true, selector = hasContentDescription("密码"))
             // The login screen now owns local fields and only publishes them at submit.
             // Read the rendered server field at that boundary; password semantics are masked.
-            val serverField = waitFor(hasSetTextAction() and hasText("服务器地址"))
+            val serverField = waitFor(hasSetTextAction() and hasContentDescription("服务器地址"))
             check(serverField.fetchSemanticsNode().config.getOrNull(SemanticsProperties.EditableText)?.text == TEST_URL)
             submitLogin()
             // The real UI session is established before any authenticated fixture cleanup.
