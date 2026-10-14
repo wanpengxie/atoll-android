@@ -54,8 +54,11 @@ fun ChannelListScreen(state: ChannelNavigationViewState, onOpen: (String) -> Uni
     val toggle: (String) -> Unit = { id -> collapsed = if (id in collapsed) collapsed - id else collapsed + id }
     var upgradeConfirmation by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding()) {
-        PageTitle("频道") {
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Text("频道", style = MaterialTheme.typography.headlineSmall)
             ConnectionPill(state.connection)
+            Spacer(Modifier.weight(1f))
             IconButton(onCreate, Modifier.size(44.dp)) { Icon(Icons.Outlined.Add, "新建频道", Modifier.size(24.dp)) }
             if (onClose != null) IconButton(onClose, Modifier.size(44.dp)) { Icon(Icons.Outlined.Close, "关闭频道列表", Modifier.size(22.dp)) }
         }
@@ -111,7 +114,7 @@ enum class HomeDestination { Channels, Activity, Me }
 fun HomeBar(selected: HomeDestination, onChannels: () -> Unit, onActivity: () -> Unit, onMe: () -> Unit) {
     Column(Modifier.fillMaxWidth().background(AtollColors.Surface)) {
         HorizontalDivider(color = AtollColors.Line)
-        Row(Modifier.fillMaxWidth().heightIn(min = 64.dp)) {
+        Row(Modifier.fillMaxWidth().heightIn(min = 68.dp)) {
             HomeBarItem("频道", Icons.Outlined.Tag, selected == HomeDestination.Channels, onChannels)
             HomeBarItem("活动", Icons.Outlined.Timeline, selected == HomeDestination.Activity, onActivity)
             HomeBarItem("我", Icons.Outlined.Person, selected == HomeDestination.Me, onMe)
@@ -121,7 +124,7 @@ fun HomeBar(selected: HomeDestination, onChannels: () -> Unit, onActivity: () ->
 
 @Composable
 private fun RowScope.HomeBarItem(label: String, icon: ImageVector, active: Boolean, onClick: () -> Unit) {
-    Column(Modifier.weight(1f).heightIn(min = 64.dp).semantics { selected = active }.clickable(role = Role.Tab, onClick = onClick),
+    Column(Modifier.weight(1f).heightIn(min = 68.dp).semantics { selected = active }.clickable(role = Role.Tab, onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Box(Modifier.size(56.dp, 30.dp).clip(AtollShapes.Pill).background(if (active) AtollColors.LagoonSurface else Color.Transparent),
             contentAlignment = Alignment.Center) {
@@ -136,8 +139,13 @@ private fun RowScope.HomeBarItem(label: String, icon: ImageVector, active: Boole
 @Composable
 private fun ConnectionPill(phase: ConnectionPhase) {
     val open = phase == ConnectionPhase.OPEN
-    StatusPill(when (phase) { ConnectionPhase.OPEN -> "已连接"; ConnectionPhase.CONNECTING -> "连接中"; ConnectionPhase.RECONNECTING -> "重连中"; ConnectionPhase.CLOSED -> "已断开" },
-        if (open) Tone.Lagoon else Tone.Waiting, Modifier.padding(start = 10.dp), live = !open)
+    Row(Modifier.padding(start = 8.dp).height(24.dp).clip(AtollShapes.Pill)
+        .background(if (open) AtollColors.LagoonSurface else AtollColors.WarningSurface).padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        PulseDot(if (open) AtollColors.Lagoon else AtollColors.Warning, pulsing = !open)
+        Text(when (phase) { ConnectionPhase.OPEN -> "已连接"; ConnectionPhase.CONNECTING -> "连接中"; ConnectionPhase.RECONNECTING -> "重连中"; ConnectionPhase.CLOSED -> "已断开" },
+            fontSize = 12.sp, fontWeight = FontWeight.Medium, color = if (open) AtollColors.LagoonText else AtollColors.Warning)
+    }
 }
 
 @Composable
