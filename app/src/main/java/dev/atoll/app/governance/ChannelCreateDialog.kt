@@ -29,7 +29,7 @@ fun ChannelCreateDialog(viewModel: GovernanceViewModel,onEnterChannel: ((String)
     val principals=governancePrincipals(state.directory.principals).filter { it.text("id")!=viewModel.principalId }
     val entries=state.entries.orEmpty().filter { it.text("id").isNotEmpty() }
     Dialog(onDismissRequest=onClose,properties=DialogProperties(usePlatformDefaultWidth=false)) {
-        Surface(Modifier.fillMaxWidth(.96f).heightIn(max=720.dp),shape=MaterialTheme.shapes.large) { Column(Modifier.imePadding()) {
+        Surface(Modifier.fillMaxWidth(.96f).heightIn(max=760.dp),shape=MaterialTheme.shapes.extraLarge,color=dev.atoll.app.ui.theme.AtollColors.Ground) { Column(Modifier.imePadding()) {
             GovernanceHeader("新建频道",onClose)
             LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
                 item { Text("在 ${channelName(state)} 下创建子频道。") }

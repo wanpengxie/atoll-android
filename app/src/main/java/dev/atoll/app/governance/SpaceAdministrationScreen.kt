@@ -1,5 +1,6 @@
 package dev.atoll.app.governance
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
@@ -18,7 +19,7 @@ fun SpaceAdministrationScreen(viewModel: GovernanceViewModel,modifier: Modifier=
     val state by viewModel.state.collectAsState();var tab by remember { mutableStateOf("descriptions") }
     var confirm by remember { mutableStateOf<GovernanceConfirmation?>(null) }
     LaunchedEffect(state.channel) { viewModel.refresh() }
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().background(dev.atoll.app.ui.theme.AtollColors.Ground)) {
         GovernanceHeader("空间管理",onClose)
         GovernanceTabs(listOf("descriptions" to "Actor 描述","devices" to "设备","keys" to "全局 key"),tab) { tab=it }
         GovernanceStatus(state)

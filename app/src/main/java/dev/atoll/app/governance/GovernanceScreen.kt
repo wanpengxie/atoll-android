@@ -1,5 +1,10 @@
 package dev.atoll.app.governance
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.ui.semantics.Role
@@ -8,7 +13,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import dev.atoll.app.ui.components.NoticeBanner
+import dev.atoll.app.ui.components.Spinner
+import dev.atoll.app.ui.components.Tone
+import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.AtollShapes
 import androidx.compose.ui.unit.dp
 import kotlinx.serialization.json.*
 
@@ -20,7 +37,7 @@ fun GovernanceScreen(viewModel: GovernanceViewModel,modifier: Modifier=Modifier,
     var confirm by remember(state.channel) { mutableStateOf<GovernanceConfirmation?>(null) }
     var create by remember(state.channel) { mutableStateOf(false) }
     LaunchedEffect(state.channel) { viewModel.refresh() }
-    Column(modifier.fillMaxSize()) {
+    Column(modifier.fillMaxSize().background(AtollColors.Ground)) {
         GovernanceHeader("频道详情",onClose) {
             TextButton(onClick={ create=true },enabled=state.writable) { Text("新建子频道") }
         }
@@ -42,23 +59,38 @@ internal data class GovernanceConfirmation(val title: String,val detail: String,
         dismissButton={ TextButton(onClick=onDismiss,enabled=!busy) { Text("取消") } },confirmButton={ TextButton(onClick=onConfirm,enabled=!busy) { Text("确认",color=MaterialTheme.colorScheme.error) } })
 }
 @Composable internal fun GovernanceHeader(title: String,onClose: (() -> Unit)?=null,actions: @Composable RowScope.()->Unit={}) {
-    Row(Modifier.fillMaxWidth().heightIn(min=44.dp).padding(start=12.dp),horizontalArrangement=Arrangement.SpaceBetween) {
-        Text(title,Modifier.weight(1f).padding(vertical=12.dp),style=MaterialTheme.typography.titleMedium);actions()
-        onClose?.let { TextButton(onClick=it) { Text("关闭") } }
+    Row(Modifier.fillMaxWidth().background(AtollColors.Surface).heightIn(min=56.dp).padding(start=16.dp,end=4.dp),verticalAlignment=Alignment.CenterVertically) {
+        Text(title,Modifier.weight(1f),style=MaterialTheme.typography.titleLarge);actions()
+        onClose?.let { TextButton(onClick=it) { Text("关闭",color=AtollColors.Muted) } }
     }
 }
 @Composable internal fun GovernanceTabs(tabs: List<Pair<String,String>>,selected: String,onSelect: (String)->Unit) {
-    ScrollableTabRow(tabs.indexOfFirst { it.first==selected }.coerceAtLeast(0),modifier=Modifier.fillMaxWidth(),edgePadding=0.dp) { tabs.forEach { (key,label) -> Tab(key==selected,onClick={ onSelect(key) },text={ Text(label) }) } }
+    Row(Modifier.fillMaxWidth().background(AtollColors.Surface).horizontalScroll(rememberScrollState()).padding(horizontal=16.dp),horizontalArrangement=Arrangement.spacedBy(22.dp)) {
+        tabs.forEach { (key,label) ->
+            val active=key==selected
+            Column(Modifier.heightIn(min=44.dp).semantics { this.selected=active }.clickable(role=Role.Tab) { onSelect(key) },horizontalAlignment=Alignment.CenterHorizontally) {
+                Box(Modifier.heightIn(min=42.dp),contentAlignment=Alignment.Center) {
+                    Text(label,fontSize=15.sp,fontWeight=if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        color=if (key=="danger") AtollColors.Danger else if (active) AtollColors.Ink else AtollColors.Muted)
+                }
+                Box(Modifier.height(2.dp).width(28.dp).background(if (active) AtollColors.Ink else Color.Transparent))
+            }
+        }
+    }
+    HorizontalDivider(color=AtollColors.Line)
 }
 @Composable internal fun GovernanceStatus(state: GovernanceState) {
-    if (state.loading || state.busy || state.error.isNotEmpty() || state.message.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=4.dp)) {
-        if (state.loading || state.busy) Text(if (state.busy) "正在提交…" else "正在读取目录…",style=MaterialTheme.typography.bodySmall)
-        if (state.message.isNotEmpty()) Text(state.message,style=MaterialTheme.typography.bodySmall)
-        if (state.error.isNotEmpty()) Text(state.error,color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.bodySmall)
+    if (state.loading || state.busy || state.error.isNotEmpty() || state.message.isNotEmpty()) Column(Modifier.fillMaxWidth().padding(horizontal=12.dp,vertical=6.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
+        if (state.loading || state.busy) Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+            Spinner(14.dp,AtollColors.Muted,AtollColors.Line);Text(if (state.busy) "正在提交…" else "正在读取目录…",fontSize=13.sp,color=AtollColors.Muted)
+        }
+        if (state.message.isNotEmpty()) NoticeBanner(state.message,Tone.Lagoon)
+        if (state.error.isNotEmpty()) NoticeBanner(state.error,Tone.Danger)
     }
 }
 @Composable internal fun GovernanceCard(title: String,modifier: Modifier=Modifier,content: @Composable ColumnScope.()->Unit) {
-    Card(modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) { Text(title,style=MaterialTheme.typography.titleSmall);content() } }
+    Column(modifier.fillMaxWidth().clip(AtollShapes.Card).background(AtollColors.Surface).border(1.dp,AtollColors.Line,AtollShapes.Card).padding(14.dp),
+        verticalArrangement=Arrangement.spacedBy(10.dp)) { Text(title,fontSize=15.sp,fontWeight=FontWeight.SemiBold);content() }
 }
 @Composable internal fun GovernanceChoice(value: String,options: List<Pair<String,String>>,label: String,enabled: Boolean=true,onSelect: (String)->Unit) {
     var expanded by remember { mutableStateOf(false) }
