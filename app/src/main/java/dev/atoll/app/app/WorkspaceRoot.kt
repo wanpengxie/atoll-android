@@ -373,6 +373,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                         TimelineSubmissionStatus(row, features.composer::retry, features.composer::cancel)
                                     }
                                 },
+                                newerUnloaded = state.newerUnloaded,
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
                             if (features != null && !terminal) {
