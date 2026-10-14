@@ -27,6 +27,10 @@ import androidx.compose.ui.unit.sp
 import dev.atoll.app.core.Envelope
 import dev.atoll.app.model.Turn
 import dev.atoll.app.ui.screens.MessageViewState
+import dev.atoll.app.ui.screens.MessagePart
+import dev.atoll.app.ui.screens.TurnKind
+import dev.atoll.app.ui.components.TurnStateRow
+import dev.atoll.app.ui.components.TurnFailureActions
 import dev.atoll.app.ui.theme.AtollColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -45,6 +49,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     onCreateTask: ((Envelope, Turn?) -> Unit)? = null,
     onStop: ((String) -> Unit)? = null, busyActors: Set<String> = emptySet(),
     starred: Boolean = false, onToggleStar: ((Envelope, String) -> Unit)? = null,
+    onOpenProcess: ((String) -> Unit)? = null, onResend: (() -> Unit)? = null, resendEnabled: Boolean = true,
     content: @Composable () -> Unit) {
     val actions = TimelineActionPolicy.actions(envelope, turn, message.text, selfId, roster,
         writable, online, newerUnloaded, safeEditActors)
@@ -93,7 +98,8 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
                 } else Modifier)
                 .then(if (hasMenu) Modifier.combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
                     onClick = {}, onLongClickLabel = "消息操作", onLongClick = { menu = true }) else Modifier)) {
-                content()
+                if (message.turnState?.compact == true) TurnStateRow(message, onOpenProcess ?: {}, onResend, resendEnabled)
+                else content()
                 DropdownMenu(menu, { menu = false }) {
                     if (copyText.isNotEmpty()) DropdownMenuItem(text = { Text("复制", fontSize = 15.sp) }, onClick = { menu = false; copy() })
                     if (reply != null) DropdownMenuItem(text = { Text("回复", fontSize = 15.sp) }, onClick = { menu = false; onReply(reply) })
@@ -107,6 +113,9 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
                         enabled = stopEnabled, onClick = { menu = false; onStop?.invoke(actions.stopTargetId) })
                 }
             }
+        }
+        if (message.turnState?.kind == TurnKind.Failed && message.part != MessagePart.Request && onResend != null) {
+            TurnFailureActions(message, onResend, resendEnabled, onOpenProcess)
         }
         if (editingTargetId.isNotEmpty() && envelope.id == editingTargetId) {
             Text("正在输入框中编辑", Modifier.padding(horizontal = 16.dp, vertical = 2.dp), fontSize = 12.sp, color = AtollColors.LagoonText)

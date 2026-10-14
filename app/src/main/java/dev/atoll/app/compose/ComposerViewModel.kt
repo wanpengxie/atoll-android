@@ -2,6 +2,7 @@ package dev.atoll.app.compose
 
 import androidx.lifecycle.ViewModel
 import dev.atoll.app.core.*
+import dev.atoll.app.model.Turn
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.sync.Mutex
@@ -15,7 +16,7 @@ data class ComposerUiState(
     val writable: Boolean = false, val online: Boolean = false, val sending: Boolean = false,
     val uploading: Boolean = false, val error: String = "", val submissions: List<LocalSubmission> = emptyList(),
     val definitions: List<SlashDefinition> = SlashCommands.static, val parameters: AgentParameters? = null,
-    val editorCommand: EditorCommand = EditorCommand(),
+    val editorCommand: EditorCommand = EditorCommand(), val resendingRequestIds: Set<String> = emptySet(),
 ) {
     val targetAgent: ComposerActor? get() = delivery.recipients.filter { it.kind == "agent" }.singleOrNull()
     val canSend get() = writable && !sending && !uploading && (draft.text.isNotBlank() || draft.attachments.isNotEmpty()) && (draft.text.trim().startsWith('/') && !draft.text.trim().startsWith("//") || delivery.valid)
@@ -48,6 +49,8 @@ class ComposerViewModel(
     private val draftWrites = Mutex()
     private var agentFilter = emptySet<String>()
     private var recentAgentId = ""
+    private val resending = hashSetOf<String>()
+    private val resent = hashSetOf<String>()
     init {
         scope.launch {
             try { outbox.restoreDrafts().forEach { (channel, draft) -> if (channel !in modifiedDrafts) drafts[channel] = draft }; rebuild(drafts[mutable.value.channelId] ?: mutable.value.draft) }
@@ -57,7 +60,7 @@ class ComposerViewModel(
             mutable.value = mutable.value.copy(online = connection is WireState.Attached)
             if (connection is WireState.Attached) { probeAgents(); refreshTarget() }
         } }
-        scope.launch { engine.submissions.collect { values -> mutable.value = mutable.value.copy(submissions = values.filter { it.channelId == mutable.value.channelId }) } }
+        scope.launch { engine.submissions.collect { refreshSubmissions() } }
     }
     fun setChannel(channelId: String, selfId: String, roster: List<ComposerActor>, writable: Boolean = true, agentFilter: Set<String> = emptySet(), recentAgentId: String = "") {
         val previous = mutable.value
@@ -68,6 +71,7 @@ class ComposerViewModel(
         val draft = drafts[channelId] ?: ComposerDraft()
         rebuild(draft)
         if (previous.channelId != channelId) commandEditor(draft.text)
+        refreshSubmissions()
         probeAgents(); refreshTarget()
     }
     /** Host validates all restored channels from current membership/access facts. */
@@ -141,6 +145,36 @@ class ComposerViewModel(
         engine.accept(listOf(submission))
         return submission.messageId
     }
+    /** One writer guards a source request; all transport retries retain the journalled UUID. */
+    fun resend(turn: Turn, lostReason: String = "", newerUnloaded: Boolean = false) {
+        val current = mutable.value
+        val request = turn.request
+        if (!current.writable || request.channelId != current.channelId ||
+            !TurnStatePolicy.canResend(turn, current.selfId, lostReason, newerUnloaded) || !resending.add(request.id)) return
+        refreshSubmissions()
+        scope.launch {
+            try {
+                engine.awaitReady()
+                val existing = submissions.value.firstOrNull { it.channelId == request.channelId && it.resendOf == request.id }
+                if (existing == null && request.id in resent) return@launch
+                if (existing != null) engine.retry(existing.messageId)
+                else {
+                    require(request.audience.all { id -> current.roster.any { it.id == id } }) { "收件人已不在频道" }
+                    val frame = TurnStatePolicy.resendFrame(request, UUID.randomUUID().toString(), now())
+                    val saved = prepareSubmission(frame, frame.getValue("payload").jsonObject.text("text"),
+                        request.audience.joinToString("、") { id -> current.roster.first { it.id == id }.name }).copy(resendOf = request.id)
+                    engine.accept(listOf(saved))
+                }
+            } catch (error: Exception) { if (mutable.value.channelId == request.channelId) report(error) }
+            finally { resending.remove(request.id); refreshSubmissions() }
+        }
+    }
+    private fun refreshSubmissions() {
+        val values = submissions.value.filter { it.channelId == mutable.value.channelId }
+        mutable.value = mutable.value.copy(submissions = values, resendingRequestIds =
+            resending + values.filter { it.resendOf.isNotEmpty() && it.state != SendState.REJECTED }.map { it.resendOf } +
+                resent.filter { id -> values.none { it.resendOf == id && it.state == SendState.REJECTED } })
+    }
     private fun prepareSubmission(frame: JsonObject, text: String, targetLabel: String): LocalSubmission {
         val channel = frame.text("channel_id")
         if (channel.isEmpty() || writeAccess.value[channel] != true) throw ComposerFailure("composer_channel_readonly", "当前频道不可写")
@@ -157,7 +191,10 @@ class ComposerViewModel(
     }
     fun retry(id: String) { scope.launch { try { engine.retry(id) } catch (error: Exception) { report(error) } } }
     fun cancel(id: String) { scope.launch { try { engine.cancel(id) } catch (error: Exception) { report(error) } } }
-    fun reconcileLanded(channelId: String, ids: Set<String>) { scope.launch { engine.reconcileLanded(channelId, ids) } }
+    fun reconcileLanded(channelId: String, ids: Set<String>) { scope.launch {
+        resent.addAll(submissions.value.filter { it.channelId == channelId && it.messageId in ids && it.resendOf.isNotEmpty() }.map { it.resendOf })
+        engine.reconcileLanded(channelId, ids); refreshSubmissions()
+    } }
     fun upload(files: List<UploadFile>) {
         if (files.isEmpty() || mutable.value.uploading) return
         val channel = mutable.value.channelId

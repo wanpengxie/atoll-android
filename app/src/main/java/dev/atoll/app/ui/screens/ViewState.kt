@@ -30,7 +30,7 @@ data class MessageViewState(val id: String, val sender: String, val text: String
     val progress: String? = null, val recipient: String? = null, val latest: Boolean = false,
     val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null, val subTasks: List<SubTaskViewState> = emptyList(),
     val attachments: List<MessageAttachmentViewState> = emptyList(), val relatedCalls: List<RelatedCallViewState> = emptyList(),
-    val part: MessagePart = MessagePart.Single)
+    val part: MessagePart = MessagePart.Single, val turnState: TurnViewState? = null)
 /** Where a message sits in its turn card: a request and its answer render as one card. */
 enum class MessagePart { Single, Request, Answer }
 @Immutable

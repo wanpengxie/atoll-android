@@ -52,6 +52,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import dev.atoll.app.compose.LocalSubmission
 import dev.atoll.app.stars.StarredState
 import dev.atoll.app.tasks.TimedActionsDialog
@@ -84,6 +85,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val waitingState = observedWaitingState.takeIf { waiting != null }
     var processReturnRequest by remember(state.route?.channel) { mutableStateOf<String?>(null) }
     val localSubmissions by (features?.composer?.submissions ?: emptySubmissions).collectAsStateWithLifecycle()
+    val pendingResends by remember(features?.composer) {
+        features?.composer?.state?.map { it.resendingRequestIds }?.distinctUntilChanged() ?: MutableStateFlow(emptySet<String>())
+    }.collectAsStateWithLifecycle(initialValue = emptySet())
     val localById = remember(localSubmissions) { localSubmissions.associateBy { it.messageId } }
     val emptyTasks = remember { MutableStateFlow<TasksViewModel?>(null) }
     val emptyTaskState = remember { MutableStateFlow(TasksState()) }
@@ -372,7 +376,12 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                             onStop = waiting?.let { owner -> { id -> owner.stop(id) } },
                                             busyActors = waitingState?.busyActors.orEmpty(),
                                             starred = starredState.isStarred(state.route!!.channel, target.envelope.id),
-                                            onToggleStar = stars?.let { it::toggle }, content = default)
+                                            onToggleStar = stars?.let { it::toggle },
+                                            onOpenProcess = { openTurnProcess(graph, state.route!!.channel, it, messageTargets, state.timelineSource) },
+                                            onResend = resendAction(features.composer, target, self, message.turnState?.lostReason.orEmpty(), state.newerUnloaded),
+                                            resendEnabled = composerWritable(conversation.channel.access, self) &&
+                                                target.turn?.requestId !in pendingResends && waitingState?.edit?.session == null,
+                                            content = default)
                                     } else default()
                                     if (target?.seq == 0L && features != null) localById[target.envelope.id]?.let { row ->
                                         TimelineSubmissionStatus(row, features.composer::retry, features.composer::cancel)
