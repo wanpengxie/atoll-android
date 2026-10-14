@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>终端</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#6FD3C5;text-decoration:none}a:hover{color:#9BE3D8}
+@keyframes atollCaret{50%{opacity:0}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #111315; color: #E3E5E8; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; border-bottom: 1px solid #23262B">
+    <a href="Files.dc.html" aria-label="收起终端" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #E3E5E8">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+    </a>
+    <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+      <span style="font-size: 16px; font-weight: 600; line-height: 21px">local-device</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #9BA1A9"><span style="width: 6px; height: 6px; border-radius: 3px; background: #4CC38A"></span>已连接 · # atoll-web</span>
+    </span>
+    <button style="height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid #33373D; font-size: 13px; color: #C9CDD2">浅色</button>
+    <button aria-label="重开终端" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #C9CDD2">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"></path></svg>
+    </button>
+  </header>
+
+  <pre style="flex: 1; min-height: 0; margin: 0; padding: 12px 14px; overflow: hidden; font-family: 'Geist Mono', monospace; font-size: 12.5px; line-height: 19px; white-space: pre-wrap; word-break: break-all; color: #D5D8DC"><span style="color: #6FD3C5">~/atoll-android</span> <span style="color: #8B9097">main</span> $ ./gradlew :app:testDebugUnitTest
+&gt; Task :app:compileDebugKotlin
+&gt; Task :app:testDebugUnitTest
+
+ChannelControllerTest <span style="color: #4CC38A">PASSED</span> (38 tests)
+TimelineCacheTest <span style="color: #4CC38A">PASSED</span> (21 tests)
+ComposerDeliveryTest <span style="color: #4CC38A">PASSED</span> (17 tests)
+WaitingViewModelTest <span style="color: #4CC38A">PASSED</span> (12 tests)
+
+<span style="color: #4CC38A">BUILD SUCCESSFUL</span> in 48s
+31 actionable tasks: 6 executed, 25 up-to-date
+
+<span style="color: #6FD3C5">~/atoll-android</span> <span style="color: #8B9097">main</span> $ git status -s
+ M app/src/main/java/dev/atoll/app/ui/screens/LoginScreen.kt
+ M app/src/main/java/dev/atoll/app/ui/theme/AtollTheme.kt
+
+<span style="color: #6FD3C5">~/atoll-android</span> <span style="color: #8B9097">main</span> $ <span style="display: inline-block; width: 8px; height: 16px; vertical-align: -3px; background: #E3E5E8; animation: atollCaret 1s steps(1) infinite"></span></pre>
+
+  <div role="toolbar" aria-label="特殊按键" style="flex: none; display: flex; gap: 6px; padding: 8px 8px 12px; border-top: 1px solid #23262B; background: #181A1D; overflow: hidden">
+    <button style="min-width: 48px; height: 44px; padding: 0 10px; border-radius: 10px; background: #26292E; font-family: 'Geist Mono', monospace; font-size: 13px">Esc</button>
+    <button style="min-width: 48px; height: 44px; padding: 0 10px; border-radius: 10px; background: #26292E; font-family: 'Geist Mono', monospace; font-size: 13px">Tab</button>
+    <button aria-pressed="true" style="min-width: 52px; height: 44px; padding: 0 10px; border-radius: 10px; background: #0F766E; color: #FFFFFF; font-family: 'Geist Mono', monospace; font-size: 13px; font-weight: 600">Ctrl</button>
+    <button aria-label="上" style="width: 40px; height: 44px; border-radius: 10px; background: #26292E; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg></button>
+    <button aria-label="下" style="width: 40px; height: 44px; border-radius: 10px; background: #26292E; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+    <button aria-label="左" style="width: 40px; height: 44px; border-radius: 10px; background: #26292E; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></button>
+    <button aria-label="右" style="width: 40px; height: 44px; border-radius: 10px; background: #26292E; display: flex; align-items: center; justify-content: center"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg></button>
+    <button style="min-width: 48px; height: 44px; padding: 0 10px; border-radius: 10px; background: #26292E; font-size: 13px">粘贴</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

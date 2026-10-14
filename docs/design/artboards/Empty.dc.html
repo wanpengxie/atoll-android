@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>空状态与加载</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollShimmer{0%{opacity:.55}50%{opacity:1}100%{opacity:.55}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif; padding: 16px 12px">
+
+  <section aria-label="新频道" style="display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; text-align: center">
+    <span style="width: 44px; height: 44px; border-radius: 13px; background: #E2F1EE; color: #0F5F59; display: flex; align-items: center; justify-content: center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"></path></svg></span>
+    <h2 style="margin: 0; font-size: 16px; font-weight: 600">频道里还没有动态</h2>
+    <p style="margin: 0; font-size: 14px; line-height: 21px; color: #5C6169">@ 一个 Agent，告诉它要做什么。</p>
+    <div style="display: flex; gap: 8px">
+      <button style="height: 38px; padding: 0 14px; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 14px; font-weight: 500">写第一条消息</button>
+      <a href="Members.dc.html" style="height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid #D4D4CD; color: #15171A; font-size: 14px; display: flex; align-items: center">添加成员</a>
+    </div>
+  </section>
+
+  <section aria-label="与我相关为空" style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; text-align: center">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">没有与你相关的动态</h2>
+    <p style="margin: 0; font-size: 13px; line-height: 19px; color: #5C6169">频道里有 28 条其他动态。</p>
+    <button style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 14px">查看全部</button>
+  </section>
+
+  <section aria-label="Agent 筛选为空" style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 20px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; text-align: center">
+    <h2 style="margin: 0; font-size: 15px; font-weight: 600">planner 在这里还没有动态</h2>
+    <button style="height: 36px; padding: 0 14px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 14px">清除筛选</button>
+  </section>
+
+  <section aria-label="准备中" aria-busy="true" style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0">
+    <span style="font-size: 13px; color: #5C6169">正在准备频道记录…</span>
+    <div style="display: flex; gap: 12px; animation: atollShimmer 1.4s ease-in-out infinite"><span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #EBEBE5"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 8px"><span style="width: 40%; height: 12px; border-radius: 6px; background: #EBEBE5"></span><span style="height: 12px; border-radius: 6px; background: #F1F1EC"></span><span style="width: 75%; height: 12px; border-radius: 6px; background: #F1F1EC"></span></span></div>
+    <div style="display: flex; gap: 12px; animation: atollShimmer 1.4s ease-in-out .2s infinite"><span style="width: 32px; height: 32px; flex: none; border-radius: 16px; background: #EBEBE5"></span><span style="flex: 1; display: flex; flex-direction: column; gap: 8px"><span style="width: 30%; height: 12px; border-radius: 6px; background: #EBEBE5"></span><span style="width: 60%; height: 12px; border-radius: 6px; background: #F1F1EC"></span></span></div>
+  </section>
+
+  <div style="display: flex; align-items: center; justify-content: center; gap: 10px; padding: 4px; font-size: 12px; color: #5C6169"><span style="flex: 1; height: 1px; background: #E5E5E0"></span>频道记录从这里开始<span style="flex: 1; height: 1px; background: #E5E5E0"></span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

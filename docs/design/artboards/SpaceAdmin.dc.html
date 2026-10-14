@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>空间管理</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px">
+    <a href="Settings.dc.html" aria-label="返回" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="flex: 1; font-size: 17px; font-weight: 600">空间管理</span>
+    <button aria-label="刷新" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"></path></svg>
+    </button>
+  </header>
+
+  <nav role="tablist" style="flex: none; display: flex; gap: 8px; padding: 4px 16px 14px; overflow: hidden">
+    <button role="tab" aria-selected="false" style="height: 36px; flex: none; padding: 0 14px; border-radius: 18px; border: 1px solid #D4D4CD; font-size: 14px">Actor 描述 6</button>
+    <button role="tab" aria-selected="true" style="height: 36px; flex: none; padding: 0 14px; border-radius: 18px; background: #15171A; color: #FFFFFF; font-size: 14px; font-weight: 500">全局 key 4</button>
+    <button role="tab" aria-selected="false" style="height: 36px; flex: none; padding: 0 14px; border-radius: 18px; border: 1px solid #D4D4CD; font-size: 14px">设备 2</button>
+    <button role="tab" aria-selected="false" style="height: 36px; flex: none; padding: 0 14px; border-radius: 18px; border: 1px solid #D4D4CD; font-size: 14px">用户</button>
+  </nav>
+
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 0 12px 90px">
+    <p style="margin: 0 4px; font-size: 13px; line-height: 19px; color: #5C6169">成员配置里写 <code style="font-family: 'Geist Mono', monospace; color: #15171A">$global.名称</code> 引用这里的值。这里只显示名字，值不会再显示。</p>
+
+    <ul style="list-style: none; margin: 0; padding: 0; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 8px 0 14px; border-bottom: 1px solid #EFEFEA; background: #FFF8EC">
+        <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #FBF1DF; color: #8A4B00; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17v.5"></path></svg></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">deploy_token</span><span style="font-size: 12px; color: #6B4A12">未设置 · builder 正在引用</span></span>
+        <button style="height: 36px; padding: 0 12px; border-radius: 10px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 500">设置值</button>
+      </li>
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 8px 0 14px; border-bottom: 1px solid #EFEFEA">
+        <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #F1F1EC; color: #5C6169; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M17 6l3 3M15 8l2 2"></path></svg></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">provider_key</span><span style="font-size: 12px; color: #5C6169">3 个成员引用</span></span>
+        <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">修改值</button>
+      </li>
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 8px 0 14px; border-bottom: 1px solid #EFEFEA">
+        <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #F1F1EC; color: #5C6169; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M17 6l3 3M15 8l2 2"></path></svg></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">git_ssh_key</span><span style="font-size: 12px; color: #5C6169">1 个成员引用</span></span>
+        <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">修改值</button>
+      </li>
+      <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 8px 0 14px">
+        <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #F1F1EC; color: #5C6169; display: flex; align-items: center; justify-content: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><path d="M11 12l9-9M17 6l3 3M15 8l2 2"></path></svg></span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-family: 'Geist Mono', monospace; font-size: 14px; font-weight: 500">webhook_secret</span><span style="font-size: 12px; color: #5C6169">未被引用</span></span>
+        <button style="height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">修改值</button>
+      </li>
+    </ul>
+  </main>
+
+  <button style="position: absolute; right: 16px; bottom: 20px; height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 20px 0 16px; border-radius: 18px; background: #15171A; color: #FFFFFF; font-size: 15px; font-weight: 600; box-shadow: 0 6px 20px rgba(21,23,26,.22)">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>添加 key
+  </button>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

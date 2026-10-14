@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>连接状态</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: #FFFFFF">
+    <a href="Channels.dc.html" aria-label="返回频道列表" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="flex: 1; display: flex; flex-direction: column; gap: 1px">
+      <span style="font-size: 17px; font-weight: 600; line-height: 22px"><span style="color: #8B9097; font-weight: 500">#</span> atoll-web</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #8A4B00"><span style="width: 10px; height: 10px; border-radius: 5px; border: 2px solid #EAD3A8; border-top-color: #9A5800; box-sizing: border-box; animation: atollSpin .9s linear infinite"></span>重连中 · 第 3 次</span>
+    </span>
+  </header>
+
+  <div role="status" style="flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 16px; background: #FBF1DF; color: #5A3A05; font-size: 13px; line-height: 19px">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A4B00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex: none" aria-hidden="true"><path d="M2 8.5a15 15 0 0 1 20 0M5 12a10 10 0 0 1 9.5-2.6M8.5 15.5a5 5 0 0 1 4.5-1.3M3 3l18 18"></path></svg>
+    <span style="flex: 1">连接中断。你仍可浏览已缓存的记录，消息会先存在本机。</span>
+    <button style="height: 36px; padding: 0 10px; border-radius: 10px; font-weight: 600; color: #6B3A00">立即重试</button>
+  </div>
+
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 20px; padding: 0 16px 14px">
+    <article style="display: flex; gap: 12px; opacity: .55">
+      <span style="width: 32px; height: 32px; flex: none; border-radius: 9px; background: #4F46E5; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+        <span style="display: flex; gap: 6px; font-size: 14px"><b style="font-weight: 600">builder</b><span style="font-size: 12px; color: #5C6169">10:44 · 断线前最后状态</span></span>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">测试跑完了，42 项通过。准备推送前需要你的审批。</p>
+      </div>
+    </article>
+
+    <article style="display: flex; gap: 12px">
+      <span style="width: 32px; height: 32px; flex: none; border-radius: 16px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+        <span style="display: flex; gap: 6px; font-size: 14px"><b style="font-weight: 600">我</b><span style="font-size: 13px; color: #5C6169">→ builder</span></span>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">好的，推到 release/1.4。</p>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #6B4A12"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 7.5V12l3 2"></path><circle cx="12" cy="12" r="8.5"></circle></svg>发送结果待确认，正在用账本核对</span>
+      </div>
+    </article>
+
+    <article style="display: flex; gap: 12px">
+      <span style="width: 32px; height: 32px; flex: none; border-radius: 16px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+        <span style="display: flex; gap: 6px; font-size: 14px"><b style="font-weight: 600">我</b><span style="font-size: 13px; color: #5C6169">→ reviewer</span></span>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">推完之后再看一眼 diff。</p>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="2"></rect><path d="M9 9h6M9 13h4"></path></svg>已保存到本机，连接恢复后自动发送</span>
+      </div>
+    </article>
+
+    <article style="display: flex; gap: 12px">
+      <span style="width: 32px; height: 32px; flex: none; border-radius: 16px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
+        <span style="display: flex; gap: 6px; font-size: 14px"><b style="font-weight: 600">我</b><span style="font-size: 13px; color: #5C6169">→ planner</span></span>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">把这次修复加到 1.4 清单。</p>
+        <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+          <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9F1F14"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8v5M12 16v.5"></path></svg>发送失败：频道暂不可用</span>
+          <button style="height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid #D4D4CD; background: #FFFFFF; font-size: 12px; font-weight: 500">用原编号重试</button>
+        </span>
+      </div>
+    </article>
+  </main>
+
+  <div style="flex: none; margin: 0 8px 10px; border-radius: 22px; background: #FFFFFF; border: 1px dashed #C4C4BC">
+    <div style="padding: 10px 16px 0; font-size: 12px; color: #6B4A12">离线编辑 · 发送会先保存到本机</div>
+    <div role="textbox" aria-label="发送消息" style="padding: 4px 16px 6px; font-size: 16px; line-height: 23px; color: #5C6169">发消息，@ 指定成员，/ 使用命令</div>
+    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding: 4px 6px 6px">
+      <button aria-label="发送" disabled style="width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: #EBEBE5; color: #8B9097">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

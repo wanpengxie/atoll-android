@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>选择 Agent 与参数</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #5E6064; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <a href="Main.dc.html" aria-label="关闭" style="position: absolute; left: 0; right: 0; top: 0; height: 160px"></a>
+
+  <section role="dialog" aria-label="选择 Agent 与参数" style="position: absolute; left: 0; right: 0; bottom: 0; top: 150px; display: flex; flex-direction: column; background: #FFFFFF; border-radius: 24px 24px 0 0">
+    <div style="flex: none; display: flex; justify-content: center; padding: 8px 0 4px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #D4D4CD"></span></div>
+    <header style="flex: none; display: flex; align-items: center; padding: 4px 8px 8px 20px">
+      <h1 style="margin: 0; flex: 1; font-size: 18px; font-weight: 600">发送给</h1>
+      <a href="Main.dc.html" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-size: 15px; font-weight: 600; color: #0F766E">完成</a>
+    </header>
+
+    <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 18px; padding: 0 16px 16px">
+      <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+        <li style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 0 12px; border-radius: 14px; border: 1.5px solid #15171A">
+          <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #4F46E5; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 15px; font-weight: 600">builder</span><span style="font-size: 12px; color: #1D4FB0">运行中 02:14 · 新消息会排队</span></span>
+          <span role="checkbox" aria-checked="true" aria-label="选择 builder" style="width: 22px; height: 22px; border-radius: 7px; background: #15171A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 0 12px; border-radius: 14px; border: 1px solid #E5E5E0">
+          <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #FBF1DF; color: #8A4B00; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 15px; font-weight: 600">reviewer</span><span style="font-size: 12px; color: #5C6169">空闲 · 立即处理</span></span>
+          <span role="checkbox" aria-checked="false" aria-label="选择 reviewer" style="width: 22px; height: 22px; box-sizing: border-box; border-radius: 7px; border: 1.5px solid #B9B9B1"></span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; min-height: 60px; padding: 0 12px; border-radius: 14px; border: 1px solid #E5E5E0">
+          <span style="width: 36px; height: 36px; flex: none; border-radius: 10px; background: #E2F1EE; color: #0F5F59; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px"><span style="font-size: 15px; font-weight: 600">planner</span><span style="font-size: 12px; color: #5C6169">空闲 · 立即处理</span></span>
+          <span role="checkbox" aria-checked="false" aria-label="选择 planner" style="width: 22px; height: 22px; box-sizing: border-box; border-radius: 7px; border: 1.5px solid #B9B9B1"></span>
+        </li>
+      </ul>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid #E5E5E0">
+        <h2 style="margin: 12px 0 0; font-size: 13px; font-weight: 600; color: #5C6169">builder 的参数</h2>
+        <label style="display: flex; align-items: center; justify-content: space-between; min-height: 48px; padding: 0 14px; border-radius: 14px; background: #F6F6F2">
+          <span style="font-size: 15px">模型</span>
+          <span style="display: flex; align-items: center; gap: 6px; font-family: 'Geist Mono', monospace; font-size: 14px">[模型名]<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C6169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
+        </label>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 15px; padding: 0 2px">推理强度</span>
+          <div role="radiogroup" aria-label="推理强度" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 3px; border-radius: 14px; background: #EBEBE5">
+            <button role="radio" aria-checked="false" style="height: 38px; border-radius: 11px; font-size: 14px; color: #5C6169">低</button>
+            <button role="radio" aria-checked="false" style="height: 38px; border-radius: 11px; font-size: 14px; color: #5C6169">中</button>
+            <button role="radio" aria-checked="true" style="height: 38px; border-radius: 11px; font-size: 14px; font-weight: 600; background: #FFFFFF; box-shadow: 0 1px 2px rgba(21,23,26,.1)">高</button>
+            <button role="radio" aria-checked="false" style="height: 38px; border-radius: 11px; font-size: 14px; color: #5C6169">最高</button>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: #F6F6F2">
+          <span style="display: flex; justify-content: space-between; font-size: 13px"><span>上下文</span><span style="font-family: 'Geist Mono', monospace; color: #5C6169">156k / 200k</span></span>
+          <span style="height: 6px; border-radius: 3px; background: #E0E0DA; overflow: hidden; display: flex"><span style="width: 78%; background: #9A5800; border-radius: 3px"></span></span>
+          <span style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #6B4A12">已使用 78%，接近上限<a href="Commands.dc.html" style="height: 32px; padding: 0 10px; border-radius: 10px; border: 1px solid #D4D4CD; background: #FFFFFF; color: #15171A; display: flex; align-items: center; font-family: 'Geist Mono', monospace; font-size: 12px">/compact</a></span>
+        </div>
+        <p style="margin: 0; font-size: 12px; line-height: 18px; color: #5C6169">参数会随下一条消息一起发送，并记住为本频道里 builder 的默认值。</p>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>
