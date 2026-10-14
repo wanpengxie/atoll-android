@@ -69,7 +69,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             ConnectionPhase.CLOSED -> "已断开"
             ConnectionPhase.OPEN -> state.connection
         }), onBack, onMenu, connecting = connectionPhase == ConnectionPhase.CONNECTING || connectionPhase == ConnectionPhase.RECONNECTING)
-        if (connectionPhase != ConnectionPhase.OPEN) ReconnectNotice(onReconnect)
+        if (connectionPhase == ConnectionPhase.RECONNECTING || connectionPhase == ConnectionPhase.CLOSED) ReconnectNotice(onReconnect)
         ChannelTabs(section, state) { select(it) }
         if (contentOverride != null) {
             Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }

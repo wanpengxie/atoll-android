@@ -47,7 +47,7 @@ class ChannelNoticeUiTest {
     }
 
     @Test fun reconnectNoticeKeepsCachedContentBelowTheHeaderAndRetriesWithoutNavigating() {
-        val phase = mutableStateOf(ConnectionPhase.OPEN)
+        val phase = mutableStateOf(ConnectionPhase.CONNECTING)
         var retries = 0
         compose.setContent { AtollTheme {
             ChannelScreen(ConversationViewState(ChannelViewState("test", "atoll-web"), hasOlder = false, identityReady = false,
@@ -58,7 +58,8 @@ class ChannelNoticeUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("缓存中的记录").fetchSemanticsNodes().isNotEmpty() }
         val notice = "连接中断。你仍可浏览已缓存的记录，消息会先存在本机。"
         compose.onNodeWithText(notice).assertDoesNotExist()
-        for ((connection, caption) in listOf(ConnectionPhase.RECONNECTING to "重连中", ConnectionPhase.CONNECTING to "连接中", ConnectionPhase.CLOSED to "已断开")) {
+        compose.onNodeWithText("连接中").assertIsDisplayed()
+        for ((connection, caption) in listOf(ConnectionPhase.RECONNECTING to "重连中", ConnectionPhase.CLOSED to "已断开")) {
             compose.runOnIdle { phase.value = connection }
             compose.onNodeWithText(caption).assertIsDisplayed()
             compose.onNodeWithText(notice).assertIsDisplayed()
@@ -69,7 +70,10 @@ class ChannelNoticeUiTest {
             compose.onNodeWithText("立即重试").assertIsEnabled().performClick()
             if (connection == ConnectionPhase.RECONNECTING) screenshot("reconnect-banner")
         }
-        compose.runOnIdle { assertEquals(3, retries); phase.value = ConnectionPhase.OPEN }
+        compose.runOnIdle { assertEquals(2, retries); phase.value = ConnectionPhase.CONNECTING }
+        compose.onNodeWithText(notice).assertDoesNotExist()
+        compose.onNodeWithText("连接中").assertIsDisplayed()
+        compose.runOnIdle { phase.value = ConnectionPhase.OPEN }
         compose.onNodeWithText(notice).assertDoesNotExist()
         compose.onNodeWithText("已连接").assertIsDisplayed()
         compose.onNodeWithText("缓存中的记录").assertIsDisplayed()

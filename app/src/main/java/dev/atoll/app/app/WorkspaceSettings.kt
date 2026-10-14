@@ -19,6 +19,7 @@ import dev.atoll.app.terminal.TerminalPreferences
 import dev.atoll.app.terminal.TerminalTheme
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.screens.ConnectionPhase
+import dev.atoll.app.ui.screens.UpgradePanel
 import dev.atoll.app.ui.theme.AtollColors
 import dev.atoll.app.ui.theme.AtollMono
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,7 +40,7 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
     val canExport = services != null && services.boot.isNotEmpty() && channel?.id in services.selfIds &&
         state.navigation.connection == ConnectionPhase.OPEN && !state.exporting
     val account = state.navigation.account
-    var upgradeConfirmation by remember { mutableStateOf(false) }
+    var upgradeOpen by remember { mutableStateOf(false) }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         Surface(Modifier.fillMaxSize(), color = AtollColors.Ground) {
             Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState()).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -64,7 +65,7 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
                         if (onSpaceAdmin != null) GroupRow("空间管理", divider = state.navigation.upgrade != null, onClick = onSpaceAdmin)
                         state.navigation.upgrade?.let { update ->
                             GroupRow("节点版本", value = update.current, subtitle = update.label(state.navigation.connection), divider = false,
-                                onClick = if (update.canStart && onUpgrade != null) ({ upgradeConfirmation = true }) else null)
+                                onClick = { upgradeOpen = true })
                         }
                     } else state.navigation.upgrade?.let { GroupCard { GroupRow("节点版本", value = "${it.current}（只读）", divider = false) } }
                     GroupCard {
@@ -91,9 +92,7 @@ fun WorkspaceSettings(state: WorkspaceState, services: WorkspaceServices?, termi
             }
         }
     }
-    if (upgradeConfirmation) state.navigation.upgrade?.let { update -> AlertDialog(onDismissRequest = { upgradeConfirmation = false },
-        title = { Text("升级到 ${update.latest}？") },
-        text = { Text("升级会重启 Atoll，并暂时中断当前连接和正在进行的工作。频道记录、任务和工作区数据会保留。") },
-        confirmButton = { TextButton({ upgradeConfirmation = false; onUpgrade?.invoke() }) { Text("升级") } },
-        dismissButton = { TextButton({ upgradeConfirmation = false }) { Text("取消") } }) }
+    if (upgradeOpen) state.navigation.upgrade?.let { update ->
+        UpgradePanel(update, state.navigation.connection, { upgradeOpen = false }, onUpgrade)
+    }
 }
