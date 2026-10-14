@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>频道 · 动态</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollPulse{0%{box-shadow:0 0 0 0 rgba(29,95,209,.45)}70%{box-shadow:0 0 0 6px rgba(29,95,209,0)}100%{box-shadow:0 0 0 0 rgba(29,95,209,0)}}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
+@keyframes atollCaret{50%{opacity:0}}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <!-- App bar -->
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: #FFFFFF">
+    <a href="Channels.html" aria-label="返回频道列表" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A; border-radius: 22px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <a href="ChannelDetails.html" style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; color: #15171A">
+      <span style="font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: #8B9097; font-weight: 500">#</span> atoll-web</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: #5C6169"><span style="width: 6px; height: 6px; border-radius: 3px; background: #0F766E"></span>3 个 Agent 在线 · 1 个运行中</span>
+    </a>
+    <button aria-label="在频道中搜索" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 22px">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="M20 20l-4.2-4.2"></path></svg>
+    </button>
+    <a href="ChannelDetails.html" aria-label="频道菜单" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 22px; color: #15171A">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+    </a>
+  </header>
+
+  <nav aria-label="频道视图" style="height: 44px; flex: none; display: flex; align-items: stretch; gap: 22px; padding: 0 16px; background: #FFFFFF; border-bottom: 1px solid #E5E5E0">
+    <a href="Main.html" aria-current="page" style="display: flex; align-items: center; font-size: 15px; font-weight: 600; color: #15171A; border-bottom: 2px solid #15171A; margin-bottom: -1px">动态</a>
+    <a href="Tasks.html" style="display: flex; align-items: center; gap: 6px; font-size: 15px; color: #5C6169">任务<span style="min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: 9px; background: #FBF1DF; color: #8A4B00; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">3</span></a>
+    <a href="Files.html" style="display: flex; align-items: center; font-size: 15px; color: #5C6169">文件</a>
+    <a href="Members.html" style="display: flex; align-items: center; gap: 6px; font-size: 15px; color: #5C6169">成员<span style="font-size: 12px; color: #8B9097">5</span></a>
+  </nav>
+
+  <!-- Filter bar -->
+  <a href="Filters.html" style="height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px; overflow: hidden; color: #15171A">
+    <span style="display: flex; padding: 3px; border-radius: 17px; background: #EBEBE5; flex: none">
+      <span style="height: 28px; padding: 0 11px; border-radius: 14px; background: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; box-shadow: 0 1px 2px rgba(21,23,26,.08)">与我相关</span>
+      <span style="height: 28px; padding: 0 11px; border-radius: 14px; font-size: 13px; color: #5C6169; display: flex; align-items: center">全部</span>
+    </span>
+    <span style="height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 4px; border-radius: 16px; background: #FFFFFF; border: 1px solid #D4D4CD; font-size: 13px">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #4F46E5; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>builder<span style="width: 6px; height: 6px; border-radius: 3px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>
+    </span>
+    <span style="height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 4px; border-radius: 16px; background: #FFFFFF; border: 1px solid #D4D4CD; font-size: 13px">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #FBF1DF; color: #8A4B00; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span>reviewer
+    </span>
+    <span style="height: 32px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 4px; border-radius: 16px; background: #FFFFFF; border: 1px solid #D4D4CD; font-size: 13px">
+      <span style="width: 22px; height: 22px; border-radius: 6px; background: #E2F1EE; color: #0F5F59; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>planner
+    </span>
+  </a>
+
+  <!-- Timeline -->
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 0 10px 12px">
+
+    <!-- earlier completed turn (clipped) -->
+    <article style="border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+      <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <p style="margin: 0; font-size: 15px; line-height: 23px">审查完成，有 1 处需要处理：顶栏在 360dp 宽度下频道名被截断，建议标题区改为可伸缩布局。</p>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-top: 1px solid #EFEFEA; background: #FBFBF8; font-size: 12px; color: #5C6169">
+        <span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; background: #FFFFFF; display: flex; align-items: center">过程 5</span>
+        <span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; background: #FFFFFF; display: flex; align-items: center">调用 2</span>
+        <span style="flex: 1"></span>
+        <span style="display: flex; align-items: center; gap: 4px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>已完成 · 1 分 12 秒</span>
+      </div>
+    </article>
+
+    <div role="button" tabindex="0" aria-label="展开 3 条频道活动" style="align-self: center; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border-radius: 14px; background: #EBEBE5; font-size: 12px; color: #3B3F46; max-width: 100%; box-sizing: border-box">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10"></path></svg>
+      <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">频道活动 3 条 · builder 已加入 · 构建成功</span>
+    </div>
+
+    <!-- Turn card: running -->
+    <article aria-label="回合：我 → builder，处理中" style="border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+      <section style="padding: 12px 14px 12px; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; align-items: center; gap: 8px; height: 24px">
+          <span style="width: 24px; height: 24px; flex: none; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+          <span style="font-size: 14px; font-weight: 600">我</span>
+          <span style="font-size: 13px; color: #5C6169">→ builder</span>
+          <span style="flex: 1"></span>
+          <span style="font-size: 12px; color: #5C6169">10:42</span>
+        </div>
+        <a href="Main.html" style="display: flex; gap: 8px; padding: 6px 10px; border-radius: 10px; background: #F6F6F2; color: #3B3F46; font-size: 13px; line-height: 18px">
+          <span style="width: 2px; flex: none; border-radius: 1px; background: #E7C98F"></span>
+          <span style="min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><b style="font-weight: 600">回复 reviewer</b>：顶栏在 360dp 宽度下频道名被截断…</span>
+        </a>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">按这个修，顺带把登录页键盘遮挡也处理掉，改完跑一遍 UI 测试。</p>
+      </section>
+      <section style="padding: 12px 14px; border-top: 1px solid #EFEFEA; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; align-items: center; gap: 8px; height: 24px">
+          <span style="width: 24px; height: 24px; flex: none; border-radius: 7px; background: #4F46E5; color: #FFFFFF; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+          <span style="font-size: 14px; font-weight: 600">builder</span>
+          <span style="flex: 1"></span>
+          <a href="Process.html" style="display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 12px; background: #E9F0FC; color: #1D4FB0; font-size: 12px; font-weight: 500"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>处理中 02:14</a>
+        </div>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">两处都改好了：标题区用可伸缩布局；登录表单改成顶部对齐、随键盘滚动。正在跑 UI 测试<span style="display: inline-block; width: 2px; height: 17px; margin-left: 2px; vertical-align: -3px; background: #1D5FD1; animation: atollCaret 1s steps(1) infinite"></span></p>
+      </section>
+      <a href="TurnExpanded.html" aria-label="展开 builder 的工作" style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-top: 1px solid #EFEFEA; background: #FBFBF8; color: #15171A">
+        <span style="display: flex; align-items: center; gap: 8px; min-width: 0">
+          <span style="width: 13px; height: 13px; flex: none; border-radius: 7px; border: 2px solid #C9D8F5; border-top-color: #1D5FD1; box-sizing: border-box; animation: atollSpin .9s linear infinite"></span>
+          <span style="flex: 1; min-width: 0; font-family: 'Geist Mono', monospace; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">test-runner · connectedDebugAndroidTest</span>
+          <span style="font-size: 12px; color: #5C6169">第 9 步</span>
+        </span>
+        <span style="display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px">
+          <span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; background: #FFFFFF; display: flex; align-items: center">过程 8</span>
+          <span style="height: 26px; padding: 0 9px 0 4px; border-radius: 13px; border: 1px solid #E0E0DA; background: #FFFFFF; display: flex; align-items: center; gap: 5px"><span style="width: 18px; height: 18px; border-radius: 5px; background: #FBF1DF; color: #8A4B00; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span>协作 1</span>
+          <span style="height: 26px; padding: 0 9px; border-radius: 13px; background: #E9F0FC; color: #1D4FB0; display: flex; align-items: center; gap: 5px"><span style="width: 5px; height: 5px; border-radius: 3px; background: #1D5FD1"></span>子 Agent 2 · 1 进行中</span>
+          <span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; background: #FFFFFF; display: flex; align-items: center">调用 3</span>
+        </span>
+      </a>
+    </article>
+
+    <!-- Approval lifted from the thread -->
+    <article aria-label="builder 请你审批" style="margin-left: 18px; position: relative; border-radius: 16px; background: #FFFFFF; border: 1.5px solid #E7C98F; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <span style="position: absolute; left: -12px; top: -15px; width: 10px; height: 34px; border-left: 2px solid #E0E0DA; border-bottom: 2px solid #E0E0DA; border-bottom-left-radius: 8px"></span>
+      <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #8A4B00; font-weight: 600"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6z"></path></svg>builder 请你审批<span style="flex: 1"></span><span style="font-weight: 400; color: #6B4A12">剩 14 分钟</span></span>
+      <p style="margin: 0; font-size: 15px; line-height: 22px; font-weight: 500">测试通过后推送到 <code style="font-family: 'Geist Mono', monospace; font-size: 13px">release/1.4</code></p>
+      <span style="display: flex; gap: 8px">
+        <button style="flex: 1; height: 40px; border-radius: 11px; border: 1px solid #D4D4CD; font-size: 14px; font-weight: 500">拒绝</button>
+        <a href="HumanAsk.html" style="flex: 1; height: 40px; border-radius: 11px; background: #15171A; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">批准</a>
+      </span>
+    </article>
+  </main>
+
+  <!-- Waiting dock -->
+  <a href="Waiting.html" style="flex: none; margin: 0 12px; height: 40px; display: flex; align-items: center; gap: 10px; padding: 0 12px 0 14px; border-radius: 14px 14px 0 0; background: #FBF1DF; color: #15171A">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8A4B00" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>
+    <span style="flex: 1; min-width: 0; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><b style="font-weight: 600">2 条在等待</b><span style="color: #6B4A12"> · builder 本轮结束后发出</span></span>
+    <span style="font-size: 13px; font-weight: 500; color: #8A4B00">展开</span>
+  </a>
+
+  <!-- Composer -->
+  <div style="flex: none; margin: 0 8px 10px; border-radius: 22px; background: #FFFFFF; border: 1px solid #D4D4CD; box-shadow: 0 2px 10px rgba(21,23,26,.06)">
+    <div role="textbox" aria-label="发送消息" style="padding: 11px 16px 4px; font-size: 16px; line-height: 23px; color: #5C6169">发消息，@ 指定成员，/ 使用命令</div>
+    <div style="display: flex; align-items: center; gap: 2px; padding: 2px 6px 6px">
+      <a href="AgentPicker.html" style="height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 4px; border-radius: 18px; background: #F1F1EC; color: #15171A; font-size: 13px">
+        <span style="width: 26px; height: 26px; border-radius: 8px; background: #4F46E5; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>builder<span style="color: #5C6169">· 高</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C6169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+      </a>
+      <span style="flex: 1"></span>
+      <button aria-label="添加附件" style="width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #5C6169">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a2 2 0 0 1-2.8-2.8l7.9-7.9"></path></svg>
+      </button>
+      <a href="Commands.html" aria-label="命令" style="width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: #5C6169; font-family: 'Geist Mono', monospace; font-size: 18px">/</a>
+      <button aria-label="发送" disabled style="width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; background: #EBEBE5; color: #8B9097; margin-left: 2px">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

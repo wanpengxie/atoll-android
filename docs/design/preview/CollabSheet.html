@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>协作详情</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollPulse{0%{box-shadow:0 0 0 0 rgba(29,95,209,.45)}70%{box-shadow:0 0 0 6px rgba(29,95,209,0)}100%{box-shadow:0 0 0 0 rgba(29,95,209,0)}}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #5E6064; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <a href="TurnExpanded.html" aria-label="关闭" style="position: absolute; left: 0; right: 0; top: 0; height: 60px"></a>
+
+  <section role="dialog" aria-label="协作详情" style="position: absolute; left: 0; right: 0; top: 52px; bottom: 0; display: flex; flex-direction: column; background: #F6F6F2; border-radius: 24px 24px 0 0">
+    <div style="flex: none; display: flex; justify-content: center; padding: 8px 0 4px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #D4D4CD"></span></div>
+    <header style="flex: none; display: flex; align-items: center; gap: 10px; padding: 2px 8px 8px 20px">
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <h1 style="margin: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修顶栏截断和登录页键盘遮挡</h1>
+        <span style="font-size: 12px; color: #5C6169">builder 的回合 · 协作 4 · 最深 3 层</span>
+      </span>
+      <a href="TurnExpanded.html" aria-label="关闭" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+    </header>
+
+    <div role="tablist" style="flex: none; display: flex; gap: 18px; padding: 0 20px; border-bottom: 1px solid #E5E5E0; height: 40px; overflow: hidden">
+      <a href="Process.html" role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">过程 9</a>
+      <span role="tab" aria-selected="true" style="display: flex; align-items: center; font-size: 14px; font-weight: 600; border-bottom: 2px solid #15171A; margin-bottom: -1px">协作 4</span>
+      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">子任务 2</span>
+      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">调用 3</span>
+      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">账本</span>
+    </div>
+
+    <nav aria-label="线程路径" style="flex: none; display: flex; align-items: center; gap: 4px; padding: 10px 16px; overflow: hidden; font-size: 13px; white-space: nowrap">
+      <button style="height: 30px; padding: 0 8px; border-radius: 8px; color: #5C6169">builder</button>
+      <span aria-hidden="true" style="color: #8B9097">›</span>
+      <span aria-current="true" style="height: 30px; padding: 0 10px; border-radius: 8px; background: #15171A; color: #FFFFFF; font-weight: 500; display: flex; align-items: center">reviewer</span>
+    </nav>
+
+    <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 0 12px">
+      <article style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><b style="color: #15171A; font-weight: 600">builder → reviewer</b> · 10:43<span style="flex: 1"></span>✓ 已完成</span>
+        <div style="display: flex; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #F6F6F2; font-size: 13px; line-height: 19px; color: #3B3F46"><span style="width: 2px; flex: none; background: #D4D4CD; border-radius: 1px"></span>帮我看一下 LoginScreen 的 diff，重点是键盘弹出时的布局。</div>
+        <p style="margin: 0; font-size: 15px; line-height: 23px">没问题。建议给键盘场景补一个 UI 测试，我已经让 test-writer 起草，并问了用户要不要覆盖横屏。</p>
+        <span style="display: flex; gap: 6px; font-size: 12px"><span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; display: flex; align-items: center">过程 4</span><span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; display: flex; align-items: center">调用 1</span></span>
+      </article>
+
+      <h2 style="margin: 4px 4px 0; font-size: 13px; font-weight: 600; color: #5C6169">reviewer 发起的 · 2</h2>
+      <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
+        <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 10px 8px 14px; border-bottom: 1px solid #EFEFEA">
+          <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #E7E3F8; color: #3F3591; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 600">reviewer › test-writer</span>
+            <span style="font-size: 13px; color: #5C6169; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">起草键盘遮挡的 UI 测试</span>
+          </span>
+          <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #1D4FB0"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>00:41</span>
+          <span style="height: 22px; padding: 0 7px; border-radius: 11px; background: #EBEBE5; font-size: 11px; display: flex; align-items: center">下级 1</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 10px 8px 14px">
+          <span style="width: 28px; height: 28px; flex: none; border-radius: 14px; background: #15171A; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+            <span style="font-size: 14px; font-weight: 600">reviewer › 我 · 提问</span>
+            <span style="font-size: 13px; color: #5C6169; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">要不要覆盖横屏？ ↳ 先不用</span>
+          </span>
+          <span style="font-size: 12px; color: #5C6169">已回答</span>
+        </li>
+      </ul>
+      <p style="margin: 0 4px; font-size: 12px; line-height: 18px; color: #5C6169">点一行进入下一层，路径在上方，左滑或点路径返回。时间线里最多只缩进一级。</p>
+    </main>
+  </section>
+</div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>节点升级</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px">
+    <a href="Settings.html" aria-label="返回" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="flex: 1; font-size: 17px; font-weight: 600">节点版本</span>
+  </header>
+
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 8px 16px">
+    <section style="display: flex; align-items: center; gap: 12px; padding: 18px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 4px"><span style="font-size: 12px; color: #5C6169">当前</span><span style="font-family: 'Geist Mono', monospace; font-size: 18px; font-weight: 500">[当前版本]</span></span>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8B9097" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 4px; align-items: flex-end"><span style="font-size: 12px; color: #0F5F59">可升级到</span><span style="font-family: 'Geist Mono', monospace; font-size: 18px; font-weight: 600">[最新版本]</span></span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0">
+      <h2 style="margin: 0; font-size: 15px; font-weight: 600">升级时会发生什么</h2>
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 21px; color: #3B3F46">
+        <li style="display: flex; gap: 10px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A4B00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6"></path></svg>Atoll 会重启，当前连接暂时中断</li>
+        <li style="display: flex; gap: 10px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8A4B00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>正在运行的 2 个 Agent 回合会被打断</li>
+        <li style="display: flex; gap: 10px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1E7A4C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>频道记录、任务和工作区数据都会保留</li>
+      </ul>
+    </section>
+
+    <section aria-label="升级进度示例" style="display: flex; flex-direction: column; gap: 12px; padding: 16px 18px; border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0">
+      <h2 style="margin: 0; font-size: 13px; font-weight: 600; color: #5C6169">升级中</h2>
+      <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 14px">
+        <li style="display: flex; align-items: center; gap: 10px"><span style="width: 20px; height: 20px; border-radius: 10px; background: #15171A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></span>已请求升级</li>
+        <li style="display: flex; align-items: center; gap: 10px; color: #1D4FB0; font-weight: 500"><span style="width: 20px; height: 20px; border-radius: 10px; border: 2.5px solid #C9D8F5; border-top-color: #1D5FD1; box-sizing: border-box; animation: atollSpin .9s linear infinite"></span>节点重启中</li>
+        <li style="display: flex; align-items: center; gap: 10px; color: #5C6169"><span style="width: 20px; height: 20px; border-radius: 10px; border: 1.5px dashed #C4C4BC; box-sizing: border-box"></span>重新连接并核对版本</li>
+      </ol>
+    </section>
+  </main>
+
+  <div style="flex: none; padding: 12px 16px 16px">
+    <button style="width: 100%; height: 52px; border-radius: 14px; background: #15171A; color: #FFFFFF; font-size: 16px; font-weight: 600">升级到 [最新版本]</button>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>文件预览</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #FFFFFF; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+
+  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px">
+    <a href="Files.html" aria-label="返回文件" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px">
+      <span style="font-size: 16px; font-weight: 600; line-height: 21px">CHANGELOG.md</span>
+      <span style="font-size: 12px; line-height: 16px; color: #5C6169; font-family: 'Geist Mono', monospace">app/release · 6.2 KB</span>
+    </span>
+    <button aria-label="下载" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v12M7 11l5 5 5-5M5 20h14"></path></svg>
+    </button>
+    <button aria-label="更多" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg>
+    </button>
+  </header>
+
+  <div role="tablist" style="flex: none; display: flex; gap: 22px; padding: 0 16px; height: 42px; border-bottom: 1px solid #E5E5E0">
+    <button role="tab" aria-selected="true" style="font-size: 14px; font-weight: 600; border-bottom: 2px solid #15171A; margin-bottom: -1px">预览</button>
+    <button role="tab" aria-selected="false" style="font-size: 14px; color: #5C6169">源码</button>
+    <button role="tab" aria-selected="false" style="font-size: 14px; color: #5C6169">历史 4</button>
+  </div>
+
+  <article style="flex: 1; min-height: 0; overflow: hidden; padding: 20px 20px 0; display: flex; flex-direction: column; gap: 14px">
+    <h1 style="margin: 0; font-size: 24px; line-height: 30px; font-weight: 700">1.4.0</h1>
+    <p style="margin: 0; font-size: 13px; color: #5C6169">由 planner 整理 · 今天 09:40</p>
+    <h2 style="margin: 6px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">修复</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 23px">
+      <li>登录页在键盘弹出时可以滚动，提交按钮不再被遮挡。</li>
+      <li>顶栏频道名在窄屏上完整显示。</li>
+      <li>流式文本与结构化结果可一起复制。</li>
+    </ul>
+    <h2 style="margin: 6px 0 0; font-size: 18px; line-height: 24px; font-weight: 600">新增</h2>
+    <ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 23px">
+      <li>每个时间线视图独立记住浏览位置。</li>
+      <li>未确认的空频道显示“准备中”。</li>
+    </ul>
+    <pre style="margin: 4px 0 0; padding: 12px 14px; border-radius: 12px; background: #F6F6F2; border: 1px solid #E5E5E0; font-family: 'Geist Mono', monospace; font-size: 12.5px; line-height: 19px; overflow: hidden">./gradlew :app:assembleRelease
+scripts/deliver-apk.sh --frozen</pre>
+  </article>
+
+  <div style="flex: none; display: flex; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid #E5E5E0">
+    <button style="flex: 1; height: 46px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 15px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5 5 0 0 1-7.1-7.1l8.6-8.6a3.5 3.5 0 0 1 5 5l-8.6 8.6a2 2 0 0 1-2.8-2.8l7.9-7.9"></path></svg>作为附件发送
+    </button>
+    <button style="flex: 1; height: 46px; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"></path></svg>让 Agent 处理
+    </button>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

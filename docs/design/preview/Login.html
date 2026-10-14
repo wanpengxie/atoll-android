@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>登录</title>
+
+</head>
+<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<div class="dc-root">
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+input{font:inherit;color:inherit}
+a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+</style>
+
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif; padding: 72px 24px 24px">
+
+  <div style="display: flex; flex-direction: column; gap: 18px; margin-bottom: 36px">
+    <svg width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Atoll 标志"><circle cx="24" cy="24" r="17" fill="none" stroke="#15171A" stroke-width="6"></circle><circle cx="24" cy="24" r="7" fill="#0F766E"></circle></svg>
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-size: 30px; line-height: 36px; font-weight: 700; letter-spacing: -0.01em">登录 Atoll</h1>
+      <p style="margin: 0; font-size: 15px; line-height: 22px; color: #5C6169">连接你的节点，和 Agent 一起工作。</p>
+    </div>
+  </div>
+
+  <form style="display: flex; flex-direction: column; gap: 16px">
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; font-weight: 600; color: #3B3F46">服务器地址</span>
+      <input type="url" value="https://[节点地址]" style="height: 52px; padding: 0 16px; border-radius: 14px; border: 1px solid #D4D4CD; background: #FFFFFF; font-family: 'Geist Mono', monospace; font-size: 15px; outline: 0">
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; font-weight: 600; color: #3B3F46">账号</span>
+      <input value="[账号]" style="height: 52px; padding: 0 16px; border-radius: 14px; border: 1px solid #D4D4CD; background: #FFFFFF; font-size: 16px; outline: 0">
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 6px">
+      <span style="font-size: 13px; font-weight: 600; color: #3B3F46">密码</span>
+      <span style="height: 52px; display: flex; align-items: center; padding: 0 4px 0 16px; border-radius: 14px; border: 1.5px solid #B42318; background: #FFFFFF">
+        <input type="password" value="●●●●●●●●" aria-invalid="true" aria-describedby="login-error" style="flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 16px">
+        <button type="button" aria-label="显示密码" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #5C6169"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+      </span>
+      <span id="login-error" style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #9F1F14"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 8v5M12 16v.5"></path></svg>账号或密码不正确</span>
+    </label>
+    <a href="Channels.html" style="margin-top: 8px; height: 54px; border-radius: 16px; background: #15171A; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">进入 Atoll</a>
+  </form>
+
+  <div style="flex: 1"></div>
+  <p style="margin: 0; text-align: center; font-size: 15px; color: #5C6169">还没有账号？<a href="Register.html" style="font-weight: 600">注册</a></p>
+</div>
+</div>
+
+</body>
+</html>
