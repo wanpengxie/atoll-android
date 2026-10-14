@@ -379,6 +379,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     }
                                 },
                                 newerUnloaded = state.newerUnloaded,
+                                connectionPhase = state.navigation.connection, onReconnect = graph::reconnect,
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
                             if (features != null && !terminal) {
