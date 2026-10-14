@@ -156,6 +156,16 @@ class WaitingViewModel(
         rebuild()
     }
     fun insert(targetId: String) = enqueue { turn(targetId)?.let { target -> actions(target).insert?.let { control(target, it) } } }
+    /** Text steering names the execution, not the ledger request, to avoid steering its successor. */
+    fun guide(targetId: String, text: String) = enqueue {
+        val content = text.trim().takeIf(String::isNotEmpty) ?: return@enqueue
+        val target = turn(targetId) ?: return@enqueue
+        if (target.terminal != null || target.latestCoreStatus != "processing" || actions(target).insert == null) return@enqueue
+        val executionId = target.provisional.asReversed().firstNotNullOfOrNull { row ->
+            row.envelope.takeIf { it.status == "processing" }?.body?.text("turn_id")?.takeIf(String::isNotEmpty)
+        } ?: return@enqueue
+        control(target, WaitingControl("agent.steer", "插话引导", payload("text" to content, "expected_turn_id" to executionId)))
+    }
     fun stop(targetId: String) = enqueue {
         if (!active || detached || !mutable.value.online || mutable.value.edit.session != null) return@enqueue
         val target = turn(targetId) ?: return@enqueue
