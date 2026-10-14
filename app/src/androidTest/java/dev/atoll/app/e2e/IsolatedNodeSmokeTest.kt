@@ -326,7 +326,7 @@ class IsolatedNodeSmokeTest {
                 fixture = repo.upload(device, "", filename, emptyList(), { ByteArrayInputStream(bytes) }, bytes.size.toLong(), "text/plain")
                 fixtureRepository = repo
             } }
-            menu("打开文件"); waitFor(hasContentDescription("关闭文件"))
+            click("文件"); waitFor(hasContentDescription("关闭文件"))
             // Scroll only the vertical lazy file list, not any horizontal toolbar.
             val list = hasScrollToIndexAction()
             waitFor(list)
@@ -391,7 +391,7 @@ class IsolatedNodeSmokeTest {
             removeFixture() // Still authenticated; @After covers a failure before reaching logout.
             // Retirement already returned us to the channel list; keep the Activity
             // owned by the Compose rule instead of launching an unnecessary deep link.
-            click("退出"); waitFor(hasText("进入 Atoll"))
+            click("我"); click("退出当前账号"); waitFor(hasText("进入 Atoll"))
             compose.waitUntil(20_000) { graph.services.value == null }
             if (config.token.isNotEmpty()) {
                 // Assert our new cookie session's logout did not revoke the shared node token.

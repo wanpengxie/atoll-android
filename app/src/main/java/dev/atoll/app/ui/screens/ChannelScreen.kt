@@ -15,9 +15,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -25,7 +29,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.AtollShapes
 import dev.atoll.app.ui.screens.ChannelMenuAction.Item
+
+/** The four channel views; files and terminal share the 文件 tab. */
+private enum class ChannelSection(val label: String) { Conversation("动态"), Tasks("任务"), Files("文件"), Members("成员") }
 
 @Composable
 fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab: ChannelTab,
@@ -36,178 +44,206 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
     onAttachment: MessageAttachmentHandler? = null,
     messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null) {
-    var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(AtollColors.Workspace).safeDrawingPadding().imePadding()) {
-        BoxWithConstraints(Modifier.fillMaxWidth().height(44.dp)) {
-            val titleWidth = (maxWidth / 2 - 90.dp).coerceAtLeast(0.dp)
-            Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onBack, Modifier.size(44.dp)) { Text("‹", fontSize = 24.sp, color = AtollColors.Text) }
-                Text(state.channel.name, Modifier.widthIn(max = titleWidth), fontSize = 13.sp,
-                    fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.weight(1f))
-                TextButton({ onMenu(Item.Members) }, Modifier.size(44.dp), contentPadding = PaddingValues(0.dp)) { Text("成员", fontSize = 11.sp, color = AtollColors.Muted) }
-                Box {
-                    IconButton({ menuOpen = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(20.dp)) }
-                    DropdownMenu(menuOpen, { menuOpen = false }) {
-                        val choices = listOf(Item.Details, Item.Timers, Item.Resources, Item.NewChild, Item.ExportPerformance, Item.Restart,
-                            if (state.filesOpen) Item.CloseFiles else Item.OpenFiles, Item.Recent, Item.Stars, Item.Running,
-                            if (state.terminalOpen) Item.CloseTerminal else Item.OpenTerminal)
-                        choices.forEach { action -> DropdownMenuItem(text = { Text(if (action == Item.Running) "${action.label}(${state.runningCount})" else action.label, fontSize = 13.sp) },
-                            enabled = action != Item.Restart, onClick = { menuOpen = false; onMenu(action) }) }
-                    }
-                }
-            }
-            Row(Modifier.align(Alignment.Center)) {
-                ChannelTab.entries.forEach { choice ->
-                    Column(Modifier.width(44.dp).fillMaxHeight().clickable { onTab(choice) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                        Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                            Text(if (choice == ChannelTab.Conversation) "动态" else "任务", fontSize = 11.sp,
-                                fontWeight = if (tab == choice) FontWeight.Bold else FontWeight.Normal,
-                                color = if (tab == choice) AtollColors.Text else AtollColors.Muted)
-                        }
-                        Box(Modifier.width(24.dp).height(2.dp).background(if (tab == choice) AtollColors.Text else AtollColors.Workspace))
-                    }
-                }
-            }
+    val section = when {
+        tab == ChannelTab.Tasks -> ChannelSection.Tasks
+        state.filesOpen || state.terminalOpen -> ChannelSection.Files
+        else -> ChannelSection.Conversation
+    }
+    fun select(target: ChannelSection) { when (target) {
+        ChannelSection.Conversation -> {
+            if (state.terminalOpen) onMenu(Item.CloseTerminal)
+            if (state.filesOpen) onMenu(Item.CloseFiles)
+            if (tab != ChannelTab.Conversation) onTab(ChannelTab.Conversation)
         }
-        HorizontalDivider(color = AtollColors.Line)
+        ChannelSection.Tasks -> onTab(ChannelTab.Tasks)
+        ChannelSection.Files -> if (!state.filesOpen) onMenu(Item.OpenFiles)
+        ChannelSection.Members -> onMenu(Item.Members)
+    } }
+    Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding().imePadding()) {
+        ChannelHeader(state, onBack, onMenu)
+        ChannelTabs(section, state) { select(it) }
         if (contentOverride != null) {
             Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else if (tab == ChannelTab.Conversation) {
+            FilterBar(state, onScope, onActor)
             Box(Modifier.weight(1f).fillMaxWidth()) {
-            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 3.dp, end = 3.dp, top = 52.dp, bottom = 6.dp)) {
-                if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                    TextButton(onOlder, enabled = !state.loadingOlder) { Text(if (state.loadingOlder) "正在加载历史…" else "加载更早消息", fontSize = 11.sp) }
-                } }
-                if (!state.hasOlder && !state.loadingOlder && state.entries.isNotEmpty()) {
-                    state.historyStartLabel?.takeIf { it.isNotBlank() }?.let { label ->
-                        item("history-start", contentType = "history-status") { TimelineHistoryStart(label) }
+                LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 12.dp)) {
+                    if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+                        TextButton(onOlder, Modifier.heightIn(min = 44.dp), enabled = !state.loadingOlder) {
+                            if (state.loadingOlder) { Spinner(12.dp, AtollColors.Muted, AtollColors.Line); Spacer(Modifier.width(8.dp)) }
+                            Text(if (state.loadingOlder) "正在加载历史…" else "加载更早消息", fontSize = 13.sp, color = AtollColors.Body)
+                        }
+                    } }
+                    if (!state.hasOlder && !state.loadingOlder && state.entries.isNotEmpty()) {
+                        state.historyStartLabel?.takeIf { it.isNotBlank() }?.let { label ->
+                            item("history-start", contentType = "history-status") { TimelineHistoryStart(label) }
+                        }
+                    }
+                    items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
+                        is TimelineEntry.Day -> DaySeparator(entry.text)
+                        is TimelineEntry.Notice -> WeakNotice(entry.text)
+                        is TimelineEntry.Message -> {
+                            val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment,
+                                onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) }) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
+                            if (messageContent != null) messageContent(entry.value, default) else default()
+                        }
+                    } }
+                    if (state.entries.isEmpty()) state.emptyKind?.let { kind ->
+                        item("empty", contentType = "empty-feedback") {
+                            TimelineEmptyFeedback(kind, state.emptySettled, Modifier.fillParentMaxHeight(.52f))
+                        }
                     }
                 }
-                items(state.entries, key = { it.key }, contentType = { it::class.simpleName }) { entry -> when (entry) {
-                    is TimelineEntry.Day -> DaySeparator(entry.text)
-                    is TimelineEntry.Notice -> WeakNotice(entry.text)
-                    is TimelineEntry.Message -> {
-                        val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment,
-                            onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) }) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
-                        if (messageContent != null) messageContent(entry.value, default) else default()
-                    }
-                } }
-                if (state.entries.isEmpty()) state.emptyKind?.let { kind ->
-                    item("empty", contentType = "empty-feedback") {
-                        TimelineEmptyFeedback(kind, state.emptySettled, Modifier.fillParentMaxHeight(.52f))
+                if (state.newMessages > 0 || listState.canScrollForward) {
+                    Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp).shadow(6.dp, CircleShape).clip(CircleShape)
+                        .background(AtollColors.Ink).clickable(onClick = onJumpToBottom).heightIn(min = 40.dp).padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Icon(Icons.Outlined.ArrowDownward, null, Modifier.size(16.dp), tint = Color.White)
+                        Text(if (state.newMessages > 0) "${state.newMessages} 条新动态" else "回到最新", fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold, color = Color.White)
                     }
                 }
             }
-            if (state.newMessages > 0 || listState.canScrollForward) {
-                Surface(Modifier.align(Alignment.BottomCenter).padding(8.dp), color = AtollColors.Workspace,
-                    shape = CircleShape, shadowElevation = 4.dp, border = BorderStroke(1.dp, AtollColors.ControlLine)) {
-                    TextButton(onJumpToBottom) {
-                        Text(if (state.newMessages > 0) "↓ ${state.newMessages} 条新动态" else "↓", fontSize = 12.sp, color = AtollColors.Text)
-                    }
-                }
-            }
-            FloatingFilters(state, onScope, onActor, Modifier.align(Alignment.TopEnd).padding(8.dp))
-            }
-            if (state.waitingCount > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp).background(AtollColors.MutedSurface, RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)).padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("${state.waitingCount} 条等待消息", Modifier.weight(1f), fontSize = 12.sp)
-                TextButton({ onMenu(Item.Waiting) }) { Text("展开", fontSize = 12.sp) }
+            if (state.waitingCount > 0) Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).clip(RoundedCornerShape(topStart = 14.dp, topEnd = 14.dp))
+                .background(AtollColors.WarningSurface).clickable { onMenu(Item.Waiting) }.heightIn(min = 44.dp).padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Icon(Icons.Outlined.Schedule, null, Modifier.size(17.dp), tint = AtollColors.Warning)
+                Text("${state.waitingCount} 条等待消息", Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("展开", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AtollColors.Warning)
             }
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else TasksScreen(state.tasks, Modifier.weight(1f)) { onMenu(it) }
     }
 }
+
 @Composable
-fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> Unit, onAction: (ChannelMenuAction) -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Surface(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp), color = AtollColors.Input,
-        shape = RoundedCornerShape(16.dp), border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 3.dp) {
-        Column(Modifier.padding(6.dp)) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                BasicTextField(state.text, onText, Modifier.weight(1f).heightIn(min = 44.dp, max = 150.dp).onFocusChanged { focused = it.isFocused }.padding(8.dp), textStyle = TextStyle(color = AtollColors.Text, fontSize = 16.sp, lineHeight = 24.sp),
-                    decorationBox = { inner -> if (state.text.isEmpty()) Text("输入消息；@ 选择成员，/ 使用命令", color = AtollColors.Muted, fontSize = 16.sp); inner() })
-                IconButton(onSend, enabled = state.text.isNotBlank() && !state.sending,
-                    modifier = Modifier.background(if (state.text.isBlank()) AtollColors.MutedSurface else AtollColors.Accent, RoundedCornerShape(10.dp))) {
-                    Icon(Icons.Outlined.ArrowUpward, "发送", tint = if (state.text.isBlank()) AtollColors.Muted else AtollColors.Workspace)
-                }
+private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMenu: (ChannelMenuAction) -> Unit) {
+    var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
+    Row(Modifier.fillMaxWidth().background(AtollColors.Surface).heightIn(min = 56.dp).padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onBack, Modifier.size(44.dp)) { Icon(Icons.Outlined.ChevronLeft, "返回频道列表", Modifier.size(24.dp)) }
+        Column(Modifier.weight(1f).clip(RoundedCornerShape(10.dp)).clickable { onMenu(Item.Details) }.padding(horizontal = 4.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("# ", fontSize = 17.sp, color = AtollColors.Faint)
+                Text(state.channel.name, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            if (state.text.isNotEmpty() || focused) Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton({ onAction(Item.SelectAgent) }, Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 6.dp)) {
-                    Text(listOf(state.agent, state.model, state.effort).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { "选择 Agent" }, fontSize = 11.sp, color = AtollColors.Muted, maxLines = 1)
-                }
-                IconButton({ onAction(Item.Attachments) }) { Icon(Icons.Outlined.AttachFile, "添加附件", tint = AtollColors.Muted) }
-                IconButton({ onAction(Item.ComposerMore) }) { Icon(Icons.Outlined.Add, "更多操作", tint = AtollColors.Muted) }
-            }
-        }
-    }
-}
-@Composable
-fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAction: (ChannelMenuAction) -> Unit) {
-    Column(modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("WORK ITEMS", color = AtollColors.Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-            Text("任务", style = MaterialTheme.typography.titleLarge)
-            Text("审批、运行中回合、恢复事项和自动动作在这里按真实来源汇总。", fontSize = 12.sp, color = AtollColors.Muted)
-            Row {
-                OutlinedButton({ onAction(Item.Schedule) }, shape = MaterialTheme.shapes.small) { Text("安排自动动作", fontSize = 11.sp) }
-                TextButton({ onAction(Item.NewTask) }) { Text("新建任务", fontSize = 11.sp) }
+            val running = state.agents.count { it.active }
+            val connected = state.connection == "已连接"
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                PulseDot(if (connected) AtollColors.Lagoon else AtollColors.Warning, pulsing = !connected)
+                Text(when {
+                    !connected -> state.connection
+                    state.agents.isEmpty() -> "已连接"
+                    running > 0 -> "${state.agents.size} 个 Agent · $running 个运行中"
+                    else -> "${state.agents.size} 个 Agent"
+                }, fontSize = 12.sp, color = if (connected) AtollColors.Muted else AtollColors.Warning, maxLines = 1)
             }
         }
-        HorizontalDivider(color = AtollColors.Line)
-        Row(Modifier.padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton({ onAction(Item.WorkItems) }) { Text("工作项 ${tasks.size}", fontSize = 12.sp) }
-            TextButton({ onAction(Item.Waiting) }) { Text("等待区", fontSize = 12.sp, color = AtollColors.Muted) }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp).background(AtollColors.MutedSurface, RoundedCornerShape(6.dp))) {
-            TextButton({ onAction(Item.Mine) }, Modifier.weight(1f)) { Text("与我相关", fontSize = 12.sp, color = AtollColors.Text) }
-            TextButton({ onAction(Item.All) }, Modifier.weight(1f)) { Text("全部", fontSize = 12.sp, color = AtollColors.Muted) }
-        }
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton({ onAction(Item.StatusFilter) }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("待处理 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
-            OutlinedButton({ onAction(Item.TypeFilter) }, Modifier.weight(1f), shape = MaterialTheme.shapes.small) { Text("全部类型 ⌄", fontSize = 12.sp, color = AtollColors.Text) }
-        }
-        LazyColumn(contentPadding = PaddingValues(16.dp)) {
-            items(tasks, key = { it.id }) { task ->
-                Column(Modifier.fillMaxWidth().clickable { onAction(ChannelMenuAction.Task(task.id)) }.padding(vertical = 14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(task.kind, color = AtollColors.Warning, fontSize = 11.sp)
-                    Text(task.title, style = MaterialTheme.typography.titleMedium)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text(task.assignee, color = AtollColors.Muted, fontSize = 12.sp)
-                        Text("${task.state} ›", color = AtollColors.Muted, fontSize = 12.sp)
-                    }
-                }
-                HorizontalDivider(color = AtollColors.Line)
+        Box {
+            IconButton({ menuOpen = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.MoreHoriz, "频道菜单", Modifier.size(22.dp)) }
+            DropdownMenu(menuOpen, { menuOpen = false }) {
+                val choices = listOf(Item.Details, Item.Stars, Item.Recent, Item.Running, Item.Timers,
+                    if (state.terminalOpen) Item.CloseTerminal else Item.OpenTerminal, Item.Resources, Item.NewChild, Item.ExportPerformance, Item.Restart)
+                choices.forEach { action -> DropdownMenuItem(
+                    text = { Text(if (action == Item.Running) "${action.label}（${state.runningCount}）" else action.label, fontSize = 15.sp) },
+                    enabled = action != Item.Restart, onClick = { menuOpen = false; onMenu(action) }) }
             }
         }
     }
 }
 
 @Composable
-private fun FloatingFilters(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit, modifier: Modifier) {
-    if (!state.identityReady) return
-    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (state.mineOnly) state.agents.forEach { agent ->
-            Surface(shape = CircleShape, color = if (agent.id in state.actorFilters) AtollColors.Selected else AtollColors.Workspace,
-                border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 2.dp) {
-                Row(Modifier.heightIn(min = 44.dp).clickable { onActor(agent.id) }.semantics { selected = agent.id in state.actorFilters }.padding(horizontal = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (agent.active) Box(Modifier.size(6.dp).background(AtollColors.Online, CircleShape))
-                    Text(agent.name, fontSize = 10.sp)
+private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, onSelect: (ChannelSection) -> Unit) {
+    Row(Modifier.fillMaxWidth().background(AtollColors.Surface).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+        ChannelSection.entries.forEach { choice ->
+            val active = choice == section
+            Column(Modifier.heightIn(min = 44.dp).semantics { selected = active }.clickable(role = Role.Tab) { onSelect(choice) },
+                horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(Modifier.heightIn(min = 42.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(choice.label, fontSize = 15.sp, fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (active) AtollColors.Ink else AtollColors.Muted)
+                    if (choice == ChannelSection.Tasks && state.tasks.isNotEmpty()) CountBadge(state.tasks.size.toString(), Tone.Waiting)
+                    if (choice == ChannelSection.Members && state.agents.isNotEmpty()) Text(state.agents.size.toString(), fontSize = 12.sp, color = AtollColors.Faint)
                 }
+                Box(Modifier.height(2.dp).fillMaxWidth().background(if (active) AtollColors.Ink else Color.Transparent))
             }
+        }
+    }
+    HorizontalDivider(color = AtollColors.Line)
+}
+
+/** Scope and actor filters sit above the list instead of floating over it. */
+@Composable
+private fun FilterBar(state: ConversationViewState, onScope: () -> Unit, onActor: (String) -> Unit) {
+    if (!state.identityReady) return
+    ChipRow(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
+        SegmentedControl(listOf("与我相关", "全部"), if (state.mineOnly) 0 else 1, { index -> if ((index == 0) != state.mineOnly) onScope() })
+        if (state.mineOnly && (state.agents.isNotEmpty() || state.actorFilters.isNotEmpty())) Box(Modifier.size(1.dp, 20.dp).background(AtollColors.ControlLine))
+        if (state.mineOnly) state.agents.forEach { agent ->
+            ActorChip(agent.name, agent.id, agent.id in state.actorFilters, agent.active) { onActor(agent.id) }
         }
         if (state.mineOnly) (state.actorFilters - state.agents.map { it.id }.toSet()).forEach { staleId ->
-            Surface(shape = CircleShape, color = AtollColors.Selected, border = BorderStroke(1.dp, AtollColors.ControlLine)) {
-                Box(Modifier.heightIn(min = 44.dp).clickable { onActor(staleId) }.semantics { selected = true }.padding(horizontal = 10.dp), contentAlignment = Alignment.Center) {
-                    Text("已失效 · $staleId", color = AtollColors.Muted, fontSize = 10.sp)
+            TextChip("已失效 · $staleId", selected = false, tone = Tone.Neutral, onClick = { onActor(staleId) })
+        }
+    }
+}
+
+@Composable
+fun Composer(state: ComposerViewState, onText: (String) -> Unit, onSend: () -> Unit, onAction: (ChannelMenuAction) -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    val canSend = state.text.isNotBlank() && !state.sending
+    Column(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, bottom = 10.dp).clip(AtollShapes.Field).background(AtollColors.Surface)
+        .border(if (focused) 1.5.dp else 1.dp, if (focused) AtollColors.Ink else AtollColors.ControlLine, AtollShapes.Field)) {
+        BasicTextField(state.text, onText, Modifier.fillMaxWidth().heightIn(min = 44.dp, max = 160.dp).onFocusChanged { focused = it.isFocused }
+            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp), textStyle = TextStyle(color = AtollColors.Ink, fontSize = 16.sp, lineHeight = 23.sp),
+            decorationBox = { inner -> if (state.text.isEmpty()) Text("发消息，@ 指定成员，/ 使用命令", color = AtollColors.Muted, fontSize = 16.sp); inner() })
+        Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 36.dp).clip(AtollShapes.Pill).background(AtollColors.Subtle).clickable { onAction(Item.SelectAgent) }
+                .padding(start = 10.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(listOf(state.agent, state.model, state.effort).filter { it.isNotBlank() }.joinToString(" · ").ifEmpty { "选择 Agent" },
+                    Modifier.widthIn(max = 180.dp), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Icon(Icons.Outlined.KeyboardArrowDown, null, Modifier.size(16.dp), tint = AtollColors.Muted)
+            }
+            Spacer(Modifier.weight(1f))
+            IconButton({ onAction(Item.Attachments) }, Modifier.size(44.dp)) { Icon(Icons.Outlined.AttachFile, "添加附件", tint = AtollColors.Muted) }
+            IconButton({ onAction(Item.ComposerMore) }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Add, "更多操作", tint = AtollColors.Muted) }
+            IconButton(onSend, Modifier.size(40.dp).clip(CircleShape).background(if (canSend) AtollColors.Ink else AtollColors.Sunken), enabled = canSend) {
+                Icon(Icons.Outlined.ArrowUpward, "发送", tint = if (canSend) Color.White else AtollColors.Faint)
+            }
+        }
+    }
+}
+
+@Composable
+fun TasksScreen(tasks: List<TaskViewState>, modifier: Modifier = Modifier, onAction: (ChannelMenuAction) -> Unit) {
+    Column(modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            SegmentedControl(listOf("与我相关", "全部"), 0, { index -> onAction(if (index == 0) Item.Mine else Item.All) })
+            Spacer(Modifier.weight(1f))
+            TextChip("待处理", onClick = { onAction(Item.StatusFilter) })
+            TextChip("全部类型", onClick = { onAction(Item.TypeFilter) })
+        }
+        LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            item("label") { SectionLabel("工作项", trailing = tasks.size.toString()) }
+            items(tasks, key = { it.id }) { task ->
+                Column(Modifier.fillMaxWidth().clip(AtollShapes.Card).background(AtollColors.Surface).border(1.dp, AtollColors.Line, AtollShapes.Card)
+                    .clickable { onAction(ChannelMenuAction.Task(task.id)) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    StatusPill(task.kind, Tone.Waiting)
+                    Text(task.title, style = MaterialTheme.typography.titleMedium)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Text(task.assignee, color = AtollColors.Muted, fontSize = 13.sp)
+                        Text("${task.state} ›", color = AtollColors.Muted, fontSize = 13.sp)
+                    }
                 }
             }
         }
-        Surface(shape = CircleShape, color = AtollColors.Workspace, border = BorderStroke(1.dp, AtollColors.ControlLine), shadowElevation = 4.dp) {
-            Box(Modifier.heightIn(min = 44.dp).clickable(onClick = onScope).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-                Text(if (state.mineOnly) "与我相关" else "全部", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            }
+        Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            AtollButton("安排自动动作", { onAction(Item.Schedule) }, Modifier.weight(1f), kind = ButtonKind.Secondary)
+            AtollButton("新建任务", { onAction(Item.NewTask) }, Modifier.weight(1f))
         }
     }
 }

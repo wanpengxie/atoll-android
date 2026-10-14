@@ -129,6 +129,8 @@ class AppGraph(private val context: Context) {
     fun resources() { post(Resources) }
     fun terminal(open: Boolean) { post(Terminal(open)) }
     fun back() { post(Back) }
+    /** Leave the open channel for the channel list; Back returns to it. */
+    fun home() { post(Home) }
     fun forward() { post(Forward) }
     fun closeFocus() { post(CloseFocus) }
     fun panel(value: WorkspacePanel) { post(Panel(value)) }
@@ -229,6 +231,7 @@ class AppGraph(private val context: Context) {
             }
             Back -> if (history.canBack) restoreLocation(history.back(WorkspaceLocation(route, globalPanel)))
                 else navigate(if (globalPanel != null) route else route?.takeIf { it.focus != null }?.copy(focus = null), false)
+            Home -> if (route != null || globalPanel != null) navigate(null, true)
             Forward -> if (history.canForward) restoreLocation(history.forward(WorkspaceLocation(route, globalPanel)))
             CloseFocus -> if (globalPanel != null || route?.focus != null) {
                 if (history.canBack) restoreLocation(history.back(WorkspaceLocation(route, globalPanel)))
@@ -709,6 +712,7 @@ class AppGraph(private val context: Context) {
     private data class Controller(val epoch: Long, val world: Long, val id: String, val value: ChannelRuntimeState) : Event
     private data class Navigate(val route: AppRoute, val push: Boolean, val restoreSurface: Boolean = false) : Event
     private data object Back : Event
+    private data object Home : Event
     private data object Forward : Event
     private data object CloseFocus : Event
     private data class Panel(val value: WorkspacePanel) : Event

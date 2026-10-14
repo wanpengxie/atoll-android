@@ -153,7 +153,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         if (conversation == null) {
                             val access = state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.access
                             if (state.channelError != null) StatusPage("频道读取失败", state.channelError!!, "重试", { graph.retryChannel(state.route!!.channel) })
-                            else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = { drawer = true })
+                            else StatusPage(if (access == ChannelAccess.Denied) "无权访问此频道" else if (!state.identityConfirmed) "正在确认身份 · ${state.navigation.channels.firstOrNull { it.id == state.route!!.channel }?.name.orEmpty()}" else "正在读取频道…", button = "频道列表", action = graph::home)
                         } else key(browseViewKey(conversation.mineOnly, conversation.actorFilters)) {
                             val readingView = browseViewKey(conversation.mineOnly, conversation.actorFilters)
                             val headerCount = timelineHeaderCount(conversation)
@@ -315,7 +315,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             Box(Modifier.weight(1f)) {
                             ChannelScreen(conversation, ComposerViewState(""),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
-                                onBack = { drawer = true }, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter,
+                                onBack = graph::home, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter,
                                 onText = {}, onSend = {}, composerVisible = false,
                                 onMenu = { action -> when (action) {
                                     Item.OpenFiles -> graph.files(true)
@@ -400,7 +400,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     }
                 }
-                if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() })
+                if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() },
+                    onSpaceAdmin = if (state.navigation.account.root && features != null) ({ settingsOpen = false; spaceOpen = true }) else null,
+                    onUpgrade = graph::upgrade)
                 if (features != null && (governanceOpen || spaceOpen && state.navigation.account.root)) Dialog(
                     onDismissRequest = { if (spaceOpen) spaceOpen = false else graph.closeFocus() },
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
@@ -500,10 +502,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 }
                 if (features != null) UiFormsHost(features.forms, state.roster.associate { it.id to it.name }, state.navigation.channels.associate { it.id to it.name })
                 if (activityOpen) Dialog(onDismissRequest = graph::closeFocus, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-                    Surface(Modifier.fillMaxSize()) { Column(Modifier.safeDrawingPadding()) {
-                        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("活动中心", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-                            TextButton(graph::closeFocus) { Text("关闭") }
+                    Surface(Modifier.fillMaxSize(), color = dev.atoll.app.ui.theme.AtollColors.Ground) { Column(Modifier.safeDrawingPadding()) {
+                        dev.atoll.app.ui.components.PageTitle("活动") {
+                            TextButton(graph::closeFocus, Modifier.heightIn(min = 44.dp)) { Text("关闭", color = dev.atoll.app.ui.theme.AtollColors.Muted) }
                         }
                         ActivityCenterScreen(activity, Modifier.weight(1f), onSource = { source ->
                             taskSourceLink(source)?.let(graph::route)

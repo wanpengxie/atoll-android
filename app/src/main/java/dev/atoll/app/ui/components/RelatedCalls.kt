@@ -1,16 +1,16 @@
 package dev.atoll.app.ui.components
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -20,43 +20,49 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.AtollMono
 
+/**
+ * Collaboration (agent to agent or person) is shown open; plain tool and system calls sit behind
+ * one "N 次关联调用" chip. Depth is told by the sender › recipient path, and the indent stops
+ * after one level so deep threads stay readable on a phone.
+ */
 @Composable
 fun RelatedCalls(messageId: String, calls: List<RelatedCallViewState>, onLink: ((String) -> Unit)? = null,
     onAttachment: MessageAttachmentHandler? = null, onProcess: (String) -> Unit = {}) {
     val (conversations, ordinary) = remember(calls) { calls.partition { it.conversation } }
-    if (conversations.isNotEmpty()) CallTree(messageId, conversations, true, onLink, onAttachment, onProcess)
+    if (conversations.isNotEmpty()) CallList(messageId, conversations, true, onLink, onAttachment, onProcess)
     if (ordinary.isNotEmpty()) {
         var expanded by rememberSaveable(messageId) { mutableStateOf(false) }
         val running = ordinary.count { it.status == MessageStatus.Processing || it.status == MessageStatus.Queued }
         val failed = ordinary.count { it.status == MessageStatus.Failed }
-        TextButton({ expanded = !expanded }, contentPadding = PaddingValues(horizontal = 7.dp),
-            modifier = Modifier.semantics { stateDescription = if (expanded) "已展开" else "已折叠" }) {
-            Text("${ordinary.size} 次关联调用", fontSize = 10.sp, color = AtollColors.Muted)
-            Text(when { running > 0 -> "$running 处理中"; failed > 0 -> "$failed 失败"; else -> "已完成" },
-                Modifier.padding(start = 7.dp), fontSize = 9.sp, color = if (failed > 0 && running == 0) AtollColors.Warning else AtollColors.Muted)
-            Text(if (expanded) " ⌃" else " ⌄", fontSize = 10.sp, color = AtollColors.Muted)
+        Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(10.dp)).clickable { expanded = !expanded }
+            .semantics { stateDescription = if (expanded) "已展开" else "已折叠" }.padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("${ordinary.size} 次关联调用", fontSize = 13.sp, color = AtollColors.Body)
+            when {
+                running > 0 -> StatusPill("$running 处理中", Tone.Running, live = true)
+                failed > 0 -> StatusPill("$failed 失败", Tone.Danger)
+                else -> Text("已完成", fontSize = 12.sp, color = AtollColors.Muted)
+            }
+            Spacer(Modifier.weight(1f))
+            Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = AtollColors.Muted)
         }
         // Closed calls do not compose or measure any result, Markdown or progress widgets.
-        if (expanded) CallTree(messageId, ordinary, false, onLink, onAttachment, onProcess)
+        if (expanded) CallList(messageId, ordinary, false, onLink, onAttachment, onProcess)
     }
 }
 
 @Composable
-private fun CallTree(messageId: String, calls: List<RelatedCallViewState>, conversation: Boolean,
+private fun CallList(messageId: String, calls: List<RelatedCallViewState>, conversation: Boolean,
     onLink: ((String) -> Unit)?, onAttachment: MessageAttachmentHandler?, onProcess: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 6.dp,
-        start = if (conversation) 16.dp else 0.dp).semantics {
-        contentDescription = if (conversation) "Agent 协作消息" else "关联调用"
-    }, verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        calls.forEach { call -> key(call.id) {
-            val step = if (conversation) 23 else 14
-            Box(Modifier.fillMaxWidth().padding(start = ((call.depth.coerceAtLeast(1) - 1) * step).dp)
-                .drawBehind {
-                    val y = 20.dp.toPx().coerceAtMost(size.height)
-                    drawLine(AtollColors.ControlLine, Offset.Zero, Offset(0f, size.height), 1.dp.toPx())
-                    drawLine(AtollColors.ControlLine, Offset(0f, y), Offset(9.dp.toPx(), y), 1.dp.toPx())
-                }.padding(start = 9.dp)) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(AtollColors.Surface)
+        .border(1.dp, AtollColors.Line, RoundedCornerShape(12.dp)).semantics {
+            contentDescription = if (conversation) "Agent 协作消息" else "关联调用"
+        }) {
+        calls.forEachIndexed { index, call -> key(call.id) {
+            if (index > 0) HorizontalDivider(color = AtollColors.LineSoft)
+            Box(Modifier.fillMaxWidth().padding(start = if (call.depth > 1) 12.dp else 0.dp)) {
                 CallLeaf(messageId, call, onLink, onAttachment, onProcess)
             }
         } }
@@ -72,42 +78,47 @@ private fun CallLeaf(messageId: String, call: RelatedCallViewState, onLink: ((St
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Column(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { expanded = !expanded }
             .semantics { contentDescription = toggleDescription; stateDescription = if (expanded) "已展开" else "已折叠" }
-            .padding(horizontal = 7.dp, vertical = 5.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            if (!call.conversation) Text(call.title, fontSize = 11.sp, fontWeight = FontWeight.Medium,
-                color = if (call.status == MessageStatus.Failed) AtollColors.Warning else AtollColors.Text,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (call.conversation) Box(Modifier.size(20.dp).background(AtollColors.Selected, RoundedCornerShape(6.dp)),
-                    contentAlignment = Alignment.Center) { Text(recipients.take(1).uppercase(), fontSize = 9.sp, color = AtollColors.Muted) }
-                Text(if (call.conversation) recipients else "${call.sender} → $recipients", Modifier.weight(1f),
-                    fontSize = if (call.conversation) 12.sp else 9.sp, color = AtollColors.Muted,
-                    fontWeight = if (call.conversation) FontWeight.SemiBold else FontWeight.Normal,
+            .padding(horizontal = 12.dp, vertical = 9.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (call.conversation) ActorAvatar(recipients, recipients, agent = true, size = 18.dp)
+                Text(if (call.conversation) "${call.sender} › $recipients" else call.title, Modifier.weight(1f),
+                    fontSize = if (call.conversation) 13.sp else 12.sp, fontWeight = if (call.conversation) FontWeight.SemiBold else FontWeight.Normal,
+                    fontFamily = if (call.conversation) null else AtollMono,
+                    color = if (call.status == MessageStatus.Failed) AtollColors.Danger else AtollColors.Ink,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(call.status.label, fontSize = 9.sp,
-                    color = when (call.status) { MessageStatus.Completed -> AtollColors.Online;
-                        MessageStatus.Failed -> AtollColors.Warning; else -> AtollColors.Muted })
-                Text(call.time, fontSize = 9.sp, color = AtollColors.Muted)
-                Text(if (expanded) "⌃" else "⌄", fontSize = 10.sp, color = AtollColors.Muted)
+                CallStatus(call.status)
             }
-            if (call.conversation && !expanded) Text(call.title, Modifier.padding(start = 25.dp),
-                fontSize = 11.sp, color = AtollColors.Muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!call.conversation) Text("${call.sender} → $recipients · ${call.time}", fontSize = 11.sp, color = AtollColors.Muted,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (call.conversation && !expanded) Text(call.title, fontSize = 13.sp, lineHeight = 19.sp, color = AtollColors.Body,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
-        if (expanded) Column(Modifier.fillMaxWidth().padding(horizontal = 7.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            if (call.conversation && call.request.isNotEmpty()) Surface(color = AtollColors.MutedSurface, shape = RoundedCornerShape(4.dp)) {
-                Column(Modifier.fillMaxWidth().drawBehind {
-                    drawLine(AtollColors.ControlLine, Offset.Zero, Offset(0f, size.height), 2.dp.toPx())
-                }.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("回复 ${call.sender} · ${call.time}", fontSize = 9.sp, color = AtollColors.Muted)
+        if (expanded) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (call.conversation && call.request.isNotEmpty()) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AtollColors.Ground)
+                .padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(Modifier.width(2.dp).heightIn(min = 18.dp).background(AtollColors.ControlLine))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("回复 ${call.sender} · ${call.time}", fontSize = 11.sp, color = AtollColors.Muted)
                     Markdown("$messageId:${call.id}:request", call.request, onLink = onLink)
                 }
             }
             if (call.text.isNotEmpty()) FoldableMarkdown("$messageId:${call.id}:response", call.text, onLink = onLink)
             call.result?.let { StructuredResult(it) }
             if (!call.conversation && call.text.isEmpty() && call.result == null && call.status != MessageStatus.Completed)
-                Text("还没有终态。", fontSize = 10.sp, color = AtollColors.Muted)
+                Text("还没有终态。", fontSize = 12.sp, color = AtollColors.Muted)
             if (call.attachments.isNotEmpty()) MessageAttachments(call.attachments, onLink, onAttachment)
             call.trail?.let { ProgressTrail(it) { onProcess(call.id) } }
             if (call.conversation && call.subTasks.isNotEmpty()) SubTaskTree(call.subTasks, onOpen = onProcess)
         }
+    }
+}
+
+@Composable
+private fun CallStatus(status: MessageStatus) {
+    when (status) {
+        MessageStatus.Processing -> PulseDot()
+        MessageStatus.Queued -> Text(status.label, fontSize = 11.sp, color = AtollColors.Warning)
+        MessageStatus.Failed -> Text(status.label, fontSize = 11.sp, color = AtollColors.Danger)
+        MessageStatus.Completed -> Text(status.label, fontSize = 11.sp, color = AtollColors.Muted)
     }
 }

@@ -4,6 +4,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.text.AnnotatedString
@@ -24,8 +25,8 @@ import org.junit.runner.RunWith
 class MessageCopyUiTest {
     @get:Rule val compose = createComposeRule()
 
-    @Test fun buttonCopiesStreamingTextAndCompleteTerminalJson() = checkCopy(longPress = false)
-    @Test fun longPressCopiesStreamingTextAndCompleteTerminalJson() = checkCopy(longPress = true)
+    @Test fun accessibilityActionCopiesStreamingTextAndCompleteTerminalJson() = checkCopy(longPress = false)
+    @Test fun longPressMenuCopiesStreamingTextAndCompleteTerminalJson() = checkCopy(longPress = true)
 
     private fun checkCopy(longPress: Boolean) {
         var copied: AnnotatedString? = null
@@ -47,8 +48,12 @@ class MessageCopyUiTest {
                 }
             }
         }
-        if (longPress) compose.onAllNodesWithText(message.text, useUnmergedTree = true).onLast().performTouchInput { longClick() }
-        else compose.onNodeWithText("复制").performClick()
+        if (longPress) {
+            compose.onAllNodesWithText(message.text, useUnmergedTree = true).onLast().performTouchInput { longClick() }
+            compose.onNodeWithText("复制").performClick()
+        } else compose.onNodeWithTag("atoll.message.${message.id}").performSemanticsAction(SemanticsActions.CustomActions) { actions ->
+            actions.first { it.label == "复制" }.action()
+        }
         compose.onNodeWithText("✓ 已复制").assertExists()
         compose.runOnIdle {
             assertEquals("流式正文\n\n```json\n{\n  \"answer\": 42,\n  \"complete\": true\n}\n```", copied?.text)

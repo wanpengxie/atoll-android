@@ -28,7 +28,10 @@ data class MessageViewState(val id: String, val sender: String, val text: String
     val agent: Boolean = false, val self: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
     val progress: String? = null, val recipient: String? = null, val latest: Boolean = false,
     val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null, val subTasks: List<SubTaskViewState> = emptyList(),
-    val attachments: List<MessageAttachmentViewState> = emptyList(), val relatedCalls: List<RelatedCallViewState> = emptyList())
+    val attachments: List<MessageAttachmentViewState> = emptyList(), val relatedCalls: List<RelatedCallViewState> = emptyList(),
+    val part: MessagePart = MessagePart.Single)
+/** Where a message sits in its turn card: a request and its answer render as one card. */
+enum class MessagePart { Single, Request, Answer }
 sealed interface TimelineEntry {
     val key: String
     data class Message(val value: MessageViewState) : TimelineEntry { override val key get() = value.id }

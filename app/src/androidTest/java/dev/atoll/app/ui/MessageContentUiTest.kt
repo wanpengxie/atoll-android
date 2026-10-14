@@ -254,25 +254,24 @@ class MessageContentUiTest {
     }
 
     @Test fun selfContinuationReplacesHeaderAndAvatarButPreservesContentAlignment() {
+        // Own messages sit on the left like everyone else's: the "我" avatar and name, then the recipient.
         val continuation = mutableStateOf(false)
         val result = ResultViewState(errorCode = "forbidden", detail = "连续消息结果")
         val message = MessageViewState("continuation", "root", "", "12:01", self = true, recipient = "worker",
             result = result, attachments = listOf(attachment))
         compose.setContent { TestContent { MessageFrame(message.copy(continuation = continuation.value)) } }
-        compose.onNodeWithText("root").assertIsDisplayed()
-        compose.onNodeWithText("R").assertIsDisplayed()
-        compose.onNodeWithText("发送给 worker").assertIsDisplayed()
+        compose.onAllNodesWithText("我").assertCountEquals(2)
+        compose.onNodeWithText("→ worker").assertIsDisplayed()
         val before = compose.onNodeWithText("连续消息结果").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle { continuation.value = true }
-        compose.onNodeWithText("root").assertDoesNotExist()
-        compose.onNodeWithText("R").assertDoesNotExist()
-        compose.onNodeWithText("发送给 worker").assertDoesNotExist()
+        compose.onAllNodesWithText("我").assertCountEquals(0)
+        compose.onNodeWithText("→ worker").assertDoesNotExist()
         val time = compose.onNodeWithContentDescription("root，12:01").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val after = compose.onNodeWithText("连续消息结果").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertEquals(before.left, after.left, 1f)
         assertEquals(before.right, after.right, 1f)
         assertTrue(after.top < before.top)
-        assertTrue(time.left > after.right)
+        assertTrue(time.right < after.left)
         compose.onNodeWithText("报告.pdf").assertIsDisplayed()
         screenshot("self-continuation")
     }
@@ -283,13 +282,13 @@ class MessageContentUiTest {
             result = ResultViewState(errorCode = "forbidden", detail = "连续回复结果"))
         compose.setContent { TestContent { MessageFrame(message.copy(continuation = continuation.value)) } }
         compose.onNodeWithText("worker").assertIsDisplayed()
-        compose.onNodeWithText("AI").assertIsDisplayed()
-        compose.onNodeWithText("✦").assertIsDisplayed()
+        compose.onNodeWithText("Agent").assertIsDisplayed()
+        compose.onNodeWithText("W").assertIsDisplayed()
         val before = compose.onNodeWithText("连续回复结果").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle { continuation.value = true }
         compose.onNodeWithText("worker").assertDoesNotExist()
-        compose.onNodeWithText("AI").assertDoesNotExist()
-        compose.onNodeWithText("✦").assertDoesNotExist()
+        compose.onNodeWithText("Agent").assertDoesNotExist()
+        compose.onNodeWithText("W").assertDoesNotExist()
         val time = compose.onNodeWithContentDescription("worker，12:02").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val after = compose.onNodeWithText("连续回复结果").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertEquals(before.left, after.left, 1f)

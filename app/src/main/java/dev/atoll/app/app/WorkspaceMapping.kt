@@ -134,6 +134,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
             val related = if (superseded && turn.provisional.isEmpty()) emptyList() else
                 relatedCallViews(turn,entry.thread.filterNot { it.id in interactiveIds },names,tasksByRequest,newerUnloaded,superseded,::time)
             val relatedOnRequest = superseded && streamed.isEmpty() && !turn.terminalClosureOnly
+            val cardStart = result.size
             message(turn.request, "$key:request", text=requestText, continuation = continuation,
                 relatedStates=if(relatedOnRequest) related else emptyList())
             if (terminal != null) {
@@ -164,6 +165,13 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                         process?.takeUnless { it["kind"].string()=="stage" && it["stage"].string()=="text" }?.get("text").string().takeIf(String::isNotBlank),
                         trailState=trail,taskStates=ownedTasks,relatedStates=related)
                 }
+            }
+            // A request followed by its own answer renders as one turn card.
+            val request = result.getOrNull(cardStart) as? UiEntry.Message
+            val answer = result.getOrNull(cardStart + 1) as? UiEntry.Message
+            if (request != null && answer != null && request.value.id == "$key:request" && answer.value.id == "$key:answer") {
+                result[cardStart] = UiEntry.Message(request.value.copy(part = MessagePart.Request))
+                result[cardStart + 1] = UiEntry.Message(answer.value.copy(part = MessagePart.Answer))
             }
             interactive.forEach { turn(it,"$key:${it.id}",false) }
         }
