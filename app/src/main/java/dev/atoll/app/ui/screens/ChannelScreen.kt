@@ -43,7 +43,8 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     listState: LazyListState = rememberLazyListState(), onJumpToBottom: () -> Unit = {},
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
     onAttachment: MessageAttachmentHandler? = null,
-    messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null) {
+    messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null,
+    newerUnloaded: Boolean = false) {
     val section = when {
         tab == ChannelTab.Tasks -> ChannelSection.Tasks
         state.filesOpen || state.terminalOpen -> ChannelSection.Files
@@ -67,6 +68,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
             if (composerVisible) Composer(composer, onText, onSend, onMenu)
         } else if (tab == ChannelTab.Conversation) {
             FilterBar(state, onScope, onActor)
+            if (newerUnloaded) HistoryWindowNotice(onJumpToBottom)
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 12.dp)) {
                     if (state.hasOlder) item("load-older") { Box(Modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
