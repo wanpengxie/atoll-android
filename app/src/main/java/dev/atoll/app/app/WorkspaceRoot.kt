@@ -29,7 +29,9 @@ import dev.atoll.app.roster.RosterPanel
 import dev.atoll.app.roster.ActorDetail
 import dev.atoll.app.governance.GovernanceScreen
 import dev.atoll.app.governance.SpaceAdministrationScreen
-import dev.atoll.app.governance.ChannelCreateDialog
+import dev.atoll.app.governance.ChannelCreateScreen
+import dev.atoll.app.ui.components.FullScreenForm
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import dev.atoll.app.core.string
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -139,7 +141,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
             WorkspacePhase.Incompatible -> StatusPage("客户端版本与节点不兼容", state.incompatible, "刷新页面", graph::reconnect)
             WorkspacePhase.Workspace -> {
                 BackHandler(state.route != null || state.canBack || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
-                Column(Modifier.fillMaxSize()) {
+                Box(Modifier.fillMaxSize()) {
+                val formOverlayOpen = createChannelOpen && features != null || actorOpen && roster != null
+                Column(Modifier.fillMaxSize().then(if (formOverlayOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
                     if (state.canForward) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(graph::forward) { Text("前进 ›") } }
                     state.notice?.let { text -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -440,16 +444,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             if (id.isNotEmpty() && state.route != null) {
                                 graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, id))
                             }
-                        }, onEnterChannel = graph::openChannel, onClose = graph::closeFocus)
+                        }, onEnterChannel = graph::openChannel, onClose = graph::closeFocus,
+                            onCreateChannel = { createChannelOpen = true; state.route?.channel?.let(graph::openChannel) })
                     }
                 }
-                if (createChannelOpen && features != null) ChannelCreateDialog(features.governance,
-                    onEnterChannel = { createChannelOpen = false; enterCreatedChannel(it) }, onClose = { createChannelOpen = false })
-                if (rosterOpen && roster != null) Dialog(onDismissRequest = graph::closeFocus,
+                if (rosterOpen && !actorOpen && roster != null) Dialog(onDismissRequest = graph::closeFocus,
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
                     Surface(Modifier.fillMaxSize()) {
-                        if (actorOpen) ActorDetail(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus)
-                        else RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus, onSelect = { actor -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, actor.id)) })
+                        RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus, onSelect = { actor -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, actor.id)) })
                     }
                 }
                 if (routeFocus?.kind == FocusKind.Turn) key(routeFocus.key) {
@@ -555,6 +557,14 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 }
                 if (drawer) ChannelDrawer(state.navigation, { drawer = false }, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { drawer = false; graph.panel(WorkspacePanel.Activity) },
                     onCreate = { drawer = false; createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) { drawer = false; spaceOpen = true } })
+                if (actorOpen && roster != null) FullScreenForm(graph::back) {
+                    ActorDetail(roster, Modifier.safeDrawingPadding(), onClose = graph::back)
+                }
+                if (createChannelOpen && features != null) FullScreenForm({ createChannelOpen = false }) {
+                    ChannelCreateScreen(features.governance,
+                        onEnterChannel = { createChannelOpen = false; enterCreatedChannel(it) }, onClose = { createChannelOpen = false })
+                }
+                }
             }
         }
         }

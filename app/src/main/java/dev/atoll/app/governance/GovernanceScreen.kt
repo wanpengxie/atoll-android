@@ -31,15 +31,21 @@ import kotlinx.serialization.json.*
 
 /** Host owns the VM/access facts; opening a panel only refreshes OBS, never writes. */
 @Composable
-fun GovernanceScreen(viewModel: GovernanceViewModel,modifier: Modifier=Modifier,initialTab: String="members",onActor: ((JsonObject)->Unit)?=null,onEnterChannel: ((String)->Unit)?=null,onClose: (() -> Unit)?=null) {
+fun GovernanceScreen(viewModel: GovernanceViewModel,modifier: Modifier=Modifier,initialTab: String="members",onActor: ((JsonObject)->Unit)?=null,onEnterChannel: ((String)->Unit)?=null,onClose: (() -> Unit)?=null,onCreateChannel: (() -> Unit)?=null) {
     val state by viewModel.state.collectAsState()
     var tab by remember(state.channel,initialTab) { mutableStateOf(initialTab.takeIf { it in setOf("members","settings","danger") } ?: "members") }
     var confirm by remember(state.channel) { mutableStateOf<GovernanceConfirmation?>(null) }
     var create by remember(state.channel) { mutableStateOf(false) }
     LaunchedEffect(state.channel) { viewModel.refresh() }
+    if (create) {
+        dev.atoll.app.ui.components.FullScreenForm({ create = false }) {
+            ChannelCreateScreen(viewModel, onEnterChannel, onClose = { create = false })
+        }
+        return
+    }
     Column(modifier.fillMaxSize().background(AtollColors.Ground)) {
         GovernanceHeader("频道详情",onClose) {
-            TextButton(onClick={ create=true },enabled=state.writable) { Text("新建子频道") }
+            TextButton(onClick={ if (onCreateChannel != null) onCreateChannel() else create=true },enabled=state.writable) { Text("新建子频道") }
         }
         GovernanceTabs(listOf("members" to "成员","settings" to "设置","danger" to "危险操作"),tab) { tab=it }
         GovernanceStatus(state)
@@ -51,7 +57,6 @@ fun GovernanceScreen(viewModel: GovernanceViewModel,modifier: Modifier=Modifier,
     }
     confirm?.let { entry -> GovernanceConfirmationDialog(entry,state.busy,onDismiss={ confirm=null }) { viewModel.execute(entry.command,entry.success);confirm=null } }
     state.memberView?.let { member -> AlertDialog(onDismissRequest=viewModel::dismissMember,title={ Text("成员详情") },text={ SelectionContainer { Text(member.toString()) } },confirmButton={ TextButton(onClick=viewModel::dismissMember) { Text("关闭") } }) }
-    if (create) ChannelCreateDialog(viewModel,onEnterChannel,onClose={ create=false })
 }
 internal data class GovernanceConfirmation(val title: String,val detail: String,val command: GovernanceCommand,val success: String="操作终态已确认")
 @Composable internal fun GovernanceConfirmationDialog(entry: GovernanceConfirmation,busy: Boolean,onDismiss: ()->Unit,onConfirm: ()->Unit) {

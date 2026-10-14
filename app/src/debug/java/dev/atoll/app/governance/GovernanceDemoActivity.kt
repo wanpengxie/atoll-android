@@ -36,7 +36,7 @@ class GovernanceDemoActivity:ComponentActivity() {
                 "activity" -> { val operations by model.vm.activityOperations.collectAsState();ActivityCenterScreen(selectActivity(listOf(ChannelActivityInput("demo","c0.dev.web",emptyList())),operations=operations),Modifier.weight(1f)) }
                 else -> GovernanceScreen(model.vm,Modifier.weight(1f),onEnterChannel={ model.entered=it })
             }
-            if (model.mode=="create") ChannelCreateDialog(model.vm,onEnterChannel={ model.entered=it;model.mode="channel" },onClose={ model.mode="channel" })
+            if (model.mode=="create") ChannelCreateScreen(model.vm,onEnterChannel={ model.entered=it;model.mode="channel" },onClose={ model.mode="channel" })
         } } } }
     }
 }
