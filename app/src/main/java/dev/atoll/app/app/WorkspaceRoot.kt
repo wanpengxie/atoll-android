@@ -58,6 +58,7 @@ import dev.atoll.app.waiting.WaitingViewModel
 import dev.atoll.app.waiting.WaitingUiState
 import dev.atoll.app.tasks.TasksViewModel
 import dev.atoll.app.tasks.TasksState
+import dev.atoll.app.tasks.TaskCommandState
 import dev.atoll.app.roster.RosterViewModel
 import androidx.compose.foundation.gestures.scrollBy
 
@@ -101,6 +102,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val messageIndex by viewModel.messageTargets.collectAsStateWithLifecycle()
     val messageTargets = messageIndex.targets.takeIf { messageIndex.channelId == state.route?.channel }.orEmpty()
     val activity by viewModel.activity.collectAsStateWithLifecycle()
+    val emptyApprovalCommands = remember { MutableStateFlow<Map<String, TaskCommandState>>(emptyMap()) }
+    val approvalCommands by (features?.approvals?.state ?: emptyApprovalCommands).collectAsStateWithLifecycle()
     fun enterCreatedChannel(id: String) {
         val operation = features?.governance?.creations?.value?.lastOrNull { it.targetId == id }
         if (operation != null) graph.channelCreated(id, operation.parentId, operation.name, features!!.services, enter = true) else graph.openChannel(id)
@@ -507,7 +510,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         dev.atoll.app.ui.components.PageTitle("活动") {
                             TextButton(graph::closeFocus, Modifier.heightIn(min = 44.dp)) { Text("关闭", color = dev.atoll.app.ui.theme.AtollColors.Muted) }
                         }
-                        ActivityCenterScreen(activity, Modifier.weight(1f), onSource = { source ->
+                        ActivityCenterScreen(activity, Modifier.weight(1f), approvalCommands = approvalCommands,
+                            onResolve = if (features == null) null else ({ row, action -> viewModel.resolveActivity(row.key, action) }), onSource = { source ->
                             taskSourceLink(source)?.let(graph::route)
                         })
                     } }

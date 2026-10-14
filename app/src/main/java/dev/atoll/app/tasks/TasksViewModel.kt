@@ -40,6 +40,7 @@ class TasksViewModel(
     private val submissionOwner: TaskSubmissionOwner? = null,
     private val now: ()->Long = System::currentTimeMillis,
     dispatcher: CoroutineDispatcher = Dispatchers.Main.immediate,
+    private val approvals: ApprovalResolver = ApprovalResolver(services.wire, now),
 ) : ViewModel(), AutoCloseable {
     private val scope=CoroutineScope(SupervisorJob()+dispatcher)
     private val inputs=MutableStateFlow(TaskInputs(snapshot,null,services.selfIds[channelId].orEmpty(),emptyList(),false))
@@ -53,6 +54,11 @@ class TasksViewModel(
     private val clock=MutableStateFlow(now())
     private var expiry: Job? = null
     init {
+        scope.launch { approvals.state.collect { states ->
+            val shared = states.filterKeys { it.startsWith("approval:$channelId:") }
+                .flatMap { (key, state) -> listOf("$key:${TaskAction.APPROVE}" to state, "$key:${TaskAction.REJECT}" to state) }.toMap()
+            mutable.value = mutable.value.copy(commandStates = mutable.value.commandStates + shared)
+        } }
         scope.launch(start=CoroutineStart.UNDISPATCHED) { services.wire.state.collect { automation.observe(it) } }
         scope.launch { combine(inputs,pending,timers,manifests,services.wire.state) { input,local,records,capabilities,connection ->
             ProjectionInput(input,local,records.filter { it.channelId==channelId },capabilities,connection is WireState.Attached,clock.value)
@@ -150,10 +156,12 @@ class TasksViewModel(
     }
     suspend fun execute(item: TaskFact,action: String,note: String="",text: String="") {
         require(action in item.actions) { "当前事实没有声明可用操作" }
+        if (action in setOf(TaskAction.APPROVE, TaskAction.REJECT)) {
+            approvals.resolve(item, action, ApprovalAuthority(inputs.value.selfId, inputs.value.writable), note, text)
+            return
+        }
         command("${item.key}:$action") {
             when (action) {
-                TaskAction.APPROVE,TaskAction.REJECT -> { requireWritable();check(item.state=="waiting" && inputs.value.selfId in item.assigneeActorIds)
-                    services.wire.request(Up.RESOLVE,approvalResolvePayload(item,if (action==TaskAction.APPROVE) "approve" else "reject",note,text)) }
                 TaskAction.RETRY -> { check(item.submission?.state==SendState.REJECTED && submissionOwner!=null);submissionOwner.retry(item.submission.messageId) }
                 TaskAction.CANCEL -> { if (item.submission!=null) { check(submissionOwner!=null);submissionOwner.cancel(item.submission.messageId) } else { requireWritable();services.wire.request(Up.CANCEL,buildJsonObject { put("channel_id",channelId);put("req_id",item.requestId.ifEmpty { item.id }) }) } }
                 TaskAction.CANCEL_TIMER -> cancelTimer(item.nativeId)
@@ -192,5 +200,6 @@ fun approvalResolvePayload(item: TaskFact,decision: String,note: String="",text:
         else -> throw IllegalArgumentException("此请求不是可回答的 human.ask/human.approve")
     }
 }
-fun createTasksViewModel(services: WorkspaceServices,channelId: String,snapshot: TimelineSnapshot?=null,owner: TaskSubmissionOwner?=null,automation: AutomationSession): TasksViewModel =
-    TasksViewModel(services,channelId,snapshot,automation,owner)
+fun createTasksViewModel(services: WorkspaceServices,channelId: String,snapshot: TimelineSnapshot?=null,owner: TaskSubmissionOwner?=null,automation: AutomationSession,
+    approvals: ApprovalResolver = ApprovalResolver(services.wire)): TasksViewModel =
+    TasksViewModel(services,channelId,snapshot,automation,owner,approvals=approvals)

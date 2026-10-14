@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import dev.atoll.app.tasks.AutomationSession
 import dev.atoll.app.tasks.TasksViewModel
+import dev.atoll.app.tasks.ApprovalResolver
 import dev.atoll.app.tasks.TaskSubmissionOwner
 import dev.atoll.app.tasks.UiFormController
 import dev.atoll.app.tasks.createTasksViewModel
@@ -59,13 +60,14 @@ class SessionFeatures(private val context: Context, val services: WorkspaceServi
         override fun cancel(id: String) = composer.cancel(id)
     }
     val automation = AutomationSession(services.boot)
+    val approvals = ApprovalResolver(services.wire)
     private val mutableTasks = MutableStateFlow<TasksViewModel?>(null)
     val tasks = mutableTasks.asStateFlow()
     fun tasks(channel: String): TasksViewModel {
         val current = mutableTasks.value
         if (current?.channelId == channel) return current
         current?.close()
-        return createTasksViewModel(services, channel, owner = taskOwner, automation = automation).also { mutableTasks.value = it }
+        return createTasksViewModel(services, channel, owner = taskOwner, automation = automation, approvals = approvals).also { mutableTasks.value = it }
     }
     init { scope.launch(start = CoroutineStart.UNDISPATCHED) { services.wire.state.collect { automation.observe(it) } } }
     private val usageSeq = mutableMapOf<Pair<String, String>, Long>()

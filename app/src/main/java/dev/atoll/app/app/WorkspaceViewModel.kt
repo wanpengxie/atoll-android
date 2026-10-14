@@ -52,9 +52,11 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 val current = session(services)
                 if (current == null) { mutableActivity.value = ActivitySnapshot(emptyList(), emptyList(), true); return@collectLatest }
                 combine(graph.state, current.governance.creations,current.composer.submissions,current.automation.records) { state, operations,submissions,timers ->
-                    ActivityBinding(state.activityInputs, state.activityRuns, operations.map(::creationActivity), state.navigation.connection == ConnectionPhase.OPEN,submissions,timers,services?.selfIds.orEmpty())
+                    val authorities = state.navigation.channels.associate { channel -> channel.id to ApprovalAuthority(
+                        services?.selfIds?.get(channel.id).orEmpty(), composerWritable(channel.access, services?.selfIds?.get(channel.id).orEmpty())) }
+                    ActivityBinding(state.activityInputs, state.activityRuns, operations.map(::creationActivity), state.navigation.connection == ConnectionPhase.OPEN,submissions,timers,services?.selfIds.orEmpty(),authorities)
                 }.distinctUntilChanged().mapLatest { binding -> withContext(Dispatchers.Default) {
-                    selectActivity(mergeActivityInputs(binding.inputs,binding.submissions,binding.timers,binding.selfIds,System.currentTimeMillis()), binding.runs, binding.operations, binding.connected)
+                    selectActivity(mergeActivityInputs(binding.inputs,binding.submissions,binding.timers,binding.selfIds,System.currentTimeMillis()), binding.runs, binding.operations, binding.connected, binding.authorities)
                 } }.collect { mutableActivity.value = it }
             }
         }
@@ -132,7 +134,22 @@ class WorkspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private var recentProjection: RecentProjection? = null
     private var recentAgent = ""
     private data class ActivityBinding(val inputs: List<ChannelActivityInput>, val runs: List<ActivityAgentRun>, val operations: List<ActivityOperation>, val connected: Boolean,
-        val submissions: List<dev.atoll.app.compose.LocalSubmission>,val timers: List<AutomationRecord>,val selfIds: Map<String,String>)
+        val submissions: List<dev.atoll.app.compose.LocalSubmission>,val timers: List<AutomationRecord>,val selfIds: Map<String,String>,val authorities: Map<String,ApprovalAuthority>)
+    /** Re-read the current inbox and membership at click time; never switch the visible tasks owner. */
+    fun resolveActivity(key: String, action: String) {
+        viewModelScope.launch {
+            val services = graph.services.value ?: return@launch
+            val features = session(services) ?: return@launch
+            val item = mutableActivity.value.activities.firstOrNull { it.key == key }?.approval ?: return@launch
+            val channel = graph.state.value.navigation.channels.firstOrNull { it.id == item.channelId } ?: return@launch
+            val self = services.selfIds[item.channelId].orEmpty()
+            val authority = ApprovalAuthority(self, composerWritable(channel.access, self))
+            if (item.state == "waiting" && action !in approvalActions(item, authority, graph.state.value.navigation.connection == ConnectionPhase.OPEN, System.currentTimeMillis())) return@launch
+            try { features.approvals.resolve(item, action, authority) }
+            catch (error: CancellationException) { throw error }
+            catch (_: Exception) { /* The shared command state presents the failure and enables retry. */ }
+        }
+    }
     private var writable = emptyMap<String, Boolean>()
     private fun updateComposerAccess(features: SessionFeatures, services: WorkspaceServices, state: WorkspaceState) {
         val next = state.navigation.channels.associate { it.id to composerWritable(it.access, services.selfIds[it.id].orEmpty()) }
