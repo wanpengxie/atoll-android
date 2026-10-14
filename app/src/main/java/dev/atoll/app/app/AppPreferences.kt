@@ -8,7 +8,7 @@ import java.security.MessageDigest
 
 private val Context.workspacePreferences by preferencesDataStore("workspace")
 
-data class ChannelViewOptions(val mineOnly: Boolean = true, val actorFilters: Set<String> = emptySet())
+data class ChannelViewOptions(val mineOnly: Boolean = true, val actorFilters: Set<String> = emptySet(), val showChannelActivity: Boolean = true)
 
 interface ViewPreferences {
     suspend fun get(namespace: String, key: String): String?
@@ -29,12 +29,14 @@ class AppPreferences(context: Context) : ViewPreferences {
     override suspend fun options(namespace: String, channel: String): ChannelViewOptions {
         val prefs = data.data.first()
         return ChannelViewOptions(prefs[stringPreferencesKey("$namespace.$channel.scope")] != "all",
-            prefs[stringSetPreferencesKey("$namespace.$channel.actors")].orEmpty())
+            prefs[stringSetPreferencesKey("$namespace.$channel.actors")].orEmpty(),
+            prefs[booleanPreferencesKey("$namespace.$channel.activities")] != false)
     }
     override suspend fun saveOptions(namespace: String, channel: String, options: ChannelViewOptions) {
         data.edit {
             it[stringPreferencesKey("$namespace.$channel.scope")] = if (options.mineOnly) "mine" else "all"
             it[stringSetPreferencesKey("$namespace.$channel.actors")] = options.actorFilters
+            it[booleanPreferencesKey("$namespace.$channel.activities")] = options.showChannelActivity
         }
     }
     suspend fun bootstrap(server: String, account: String) = BootstrapCache.decode(get(accountNamespace(server, account), "bootstrap"))

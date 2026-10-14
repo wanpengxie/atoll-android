@@ -4,7 +4,7 @@ import dev.atoll.app.model.TimelineEntry
 import dev.atoll.app.model.TimelineSnapshot
 
 /** A visible request does not imply that its later, off-screen answer was read. */
-internal fun timelineRowSequences(snapshot: TimelineSnapshot): Map<String, Long> = buildMap {
+internal fun timelineRowSequences(snapshot: TimelineSnapshot, entries: List<dev.atoll.app.ui.screens.TimelineEntry> = emptyList()): Map<String, Long> = buildMap {
     fun visit(entry: TimelineEntry, key: String) {
         if (entry.local) return
         val turn = entry.turn
@@ -19,4 +19,7 @@ internal fun timelineRowSequences(snapshot: TimelineSnapshot): Map<String, Long>
         }
     }
     snapshot.items.forEach { visit(it.entry, it.key) }
+    entries.filterIsInstance<dev.atoll.app.ui.screens.TimelineEntry.ChannelActivity>().forEach { group ->
+        group.items.lastOrNull()?.let { put(group.key, it.seq) }
+    }
 }

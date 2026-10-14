@@ -139,6 +139,7 @@ class AppGraph(private val context: Context) {
     fun browse(channel: String, view: String, key: String, offset: Int, following: Boolean) { post(Browse(channel, view, key, offset, following)) }
     fun localPlacement(channel: String, owner: WorkspaceServices, echoes: List<dev.atoll.app.model.TimelineEntry>, placed: Set<String>) { post(LocalPlacement(channel, owner.boot, owner.wire, echoes, placed)) }
     fun scopeToggle() { post(ScopeToggle) }
+    fun channelActivity(show: Boolean) { post(ActivityVisibility(show)) }
     fun filter(actor: String) { post(Filter(actor)) }
     fun older() { post(Older) }
     fun retryChannel(id: String) { post(RetryChannel(id)) }
@@ -289,6 +290,7 @@ class AppGraph(private val context: Context) {
             is LocalPlacement -> if (event.channel == route?.channel && event.owner === mutableServices.value?.wire && event.boot == mutableServices.value?.boot)
                 controllers[event.channel]?.localPlacement(event.echoes, event.placed)
             ScopeToggle -> controllers[route?.channel]?.toggleScope()
+            is ActivityVisibility -> controllers[route?.channel]?.channelActivity(event.show)
             is Filter -> controllers[route?.channel]?.filter(event.id)
             Older -> controllers[route?.channel]?.loadOlder()
             is RetryChannel -> if (event.id == route?.channel) {
@@ -730,6 +732,7 @@ class AppGraph(private val context: Context) {
     private data class Browse(val channel: String, val view: String, val key: String, val offset: Int, val following: Boolean) : Event
     private data class LocalPlacement(val channel: String, val boot: String, val owner: WireClient, val echoes: List<dev.atoll.app.model.TimelineEntry>, val placed: Set<String>) : Event
     private data object ScopeToggle : Event
+    private data class ActivityVisibility(val show: Boolean) : Event
     private data class Filter(val id: String?) : Event
     private data object Older : Event
     private data class RetryChannel(val id: String) : Event
