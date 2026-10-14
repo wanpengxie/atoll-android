@@ -18,7 +18,7 @@ import org.junit.rules.RuleChain
 import org.junit.runner.RunWith
 import java.io.File
 
-/** Read-only visual walk-through against the team's isolated node. */
+/** Reads existing content on the isolated node; logs out only its fresh UI cookie. */
 @RunWith(AndroidJUnit4::class)
 class DesignQaNodeUiTest {
     private val args = InstrumentationRegistry.getArguments()
@@ -65,7 +65,7 @@ class DesignQaNodeUiTest {
         compose.onNodeWithText("我的频道").assertIsDisplayed(); screenshot("Channels")
         compose.onNodeWithText("我", useUnmergedTree = true).performClick()
         compose.onNodeWithText("退出当前账号").assertExists(); screenshot("Settings")
-        compose.onNodeWithText("关闭").performClick()
+        compose.onNode(hasText("频道") and hasClickAction()).performClick()
         compose.runOnIdle { graph.openChannel(channel) }
         compose.waitUntil(30_000) { graph.state.value.route?.channel == channel && graph.state.value.timelineSource?.timeline?.isNotEmpty() == true }
         compose.onNodeWithText("动态", useUnmergedTree = true).assertIsDisplayed(); screenshot("Main")
@@ -75,6 +75,15 @@ class DesignQaNodeUiTest {
         compose.runOnIdle { graph.files(false); graph.panel(WorkspacePanel.Members) }
         compose.waitUntil(20_000) { compose.onAllNodesWithText("刷新名册").fetchSemanticsNodes().isNotEmpty() }
         screenshot("Members")
-        compose.runOnIdle { graph.closeFocus() }
+        compose.runOnIdle { graph.closeFocus(); graph.home() }
+        compose.waitUntil(20_000) { graph.state.value.route == null && graph.state.value.globalPanel == null }
+        compose.onNode(hasText("我") and hasClickAction()).performClick()
+        compose.onNodeWithText("退出当前账号").performScrollTo().performClick()
+        compose.waitUntil(20_000) { graph.services.value == null && graph.state.value.phase == WorkspacePhase.Login }
+        compose.onNodeWithText("进入 Atoll").assertExists()
+        // Logout belongs to the fresh UI cookie, never the shared automation session.
+        val token = args.getString("atollToken").orEmpty()
+        if (token.isNotEmpty()) okhttp3.OkHttpClient().newCall(okhttp3.Request.Builder().url("$server/api/identity/session")
+            .header("Authorization", "Bearer $token").build()).execute().use { check(it.code == 200) { "Shared test session was revoked" } }
     }
 }

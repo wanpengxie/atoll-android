@@ -140,14 +140,21 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
             WorkspacePhase.Workspace -> {
                 BackHandler(state.route != null || state.canBack || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
                 Column(Modifier.fillMaxSize()) {
-                    if (state.canForward) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(graph::forward) { Text("前进 ›") } }
+                    if (state.canForward && !settingsOpen) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(graph::forward) { Text("前进 ›") } }
                     state.notice?.let { text -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
                         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(text, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
                             TextButton(graph::dismissNotice) { Text("关闭") }
                         }
                     } }
-                    if (state.route == null) {
+                    if (settingsOpen) {
+                        WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export,
+                            { settingsOpen = false; graph.logout() },
+                            onSpaceAdmin = if (state.navigation.account.root && features != null) ({ spaceOpen = true }) else null,
+                            onUpgrade = graph::upgrade,
+                            onChannels = { settingsOpen = false; graph.home() },
+                            onActivity = { settingsOpen = false; graph.home(); graph.panel(WorkspacePanel.Activity) })
+                    } else if (state.route == null) {
                         ChannelListScreen(state.navigation, graph::openChannel, onLogout = graph::logout, onUpgrade = graph::upgrade, onSettings = { drawer = false; settingsOpen = true }, onActivity = { graph.panel(WorkspacePanel.Activity) },
                             onCreate = { createChannelOpen = true }, onSpaceAdmin = { if (state.navigation.account.root) spaceOpen = true })
                         LaunchedEffect(state.navigation.channels.isNotEmpty()) {
@@ -426,9 +433,6 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         }
                     }
                 }
-                if (settingsOpen) WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export, { settingsOpen = false; graph.logout() },
-                    onSpaceAdmin = if (state.navigation.account.root && features != null) ({ settingsOpen = false; spaceOpen = true }) else null,
-                    onUpgrade = graph::upgrade)
                 if (features != null && (governanceOpen || spaceOpen && state.navigation.account.root)) Dialog(
                     onDismissRequest = { if (spaceOpen) spaceOpen = false else graph.closeFocus() },
                     properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
