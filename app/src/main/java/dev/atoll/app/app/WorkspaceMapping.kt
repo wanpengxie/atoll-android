@@ -213,7 +213,7 @@ internal fun timelineFocusIndex(entries: List<UiEntry>, targets: Map<String,Time
 }
 
 /** One flat ledger thread is split into the web collaboration tree and remaining call list. */
-private fun relatedCallViews(root: Turn, thread: List<dev.atoll.app.model.TimelineEntry>, names: Map<String,String>,
+internal fun relatedCallViews(root: Turn, thread: List<dev.atoll.app.model.TimelineEntry>, names: Map<String,String>,
     tasks: Map<String,List<SubTaskViewState>>, detached: Boolean, superseded: Boolean,
     time: (Long)->String): List<RelatedCallViewState> {
     val turns = thread.mapNotNull { it.turn }
@@ -226,21 +226,8 @@ private fun relatedCallViews(root: Turn, thread: List<dev.atoll.app.model.Timeli
     val members = turns.filter { conversation(it.request) }
     val memberIds = members.map { it.requestId }.toHashSet()
     val children = members.groupBy { it.request.parentId.takeIf(memberIds::contains) ?: root.requestId }
-    fun view(turn: Turn, depth: Int, conversational: Boolean): RelatedCallViewState {
-        val terminal = turn.terminal
-        val answer = when {
-            turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
-            terminal != null -> terminalResult(terminal,turn.request.type)
-            conversational -> MappedResult()
-            else -> MappedResult("还没有终态。")
-        }
-        val request = turn.request
-        return RelatedCallViewState(turn.requestId,dev.atoll.app.tasks.compactWorkTitle(prose(request.body).ifEmpty { request.type }),
-            names[request.senderId] ?: request.senderId,request.audience.map { names[it] ?: it },time(request.ts),
-            if(terminal==null) MessageStatus.Processing else if(terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed,
-            depth,answer.text,answer.result,progressTrail(turn,emptyList(),terminal==null && !detached,time),
-            terminal?.let { messageAttachments(it.body) }.orEmpty(),conversational,messageText(request),tasks[turn.requestId].orEmpty())
-    }
+    fun view(turn: Turn, depth: Int, conversational: Boolean) =
+        relatedCallView(turn,names,tasks,detached,time,depth,conversational)
     val output = mutableListOf<RelatedCallViewState>()
     // Iterative preorder keeps projection cheap and does not consume the stack for deep threads.
     val stack = ArrayDeque<Pair<Turn,Int>>()
@@ -263,6 +250,30 @@ private fun relatedCallViews(root: Turn, thread: List<dev.atoll.app.model.Timeli
         output += view(turn,depth,false)
     }
     return output
+}
+
+internal fun relatedCallView(turn: Turn,names: Map<String,String>,tasks: Map<String,List<SubTaskViewState>>,
+    detached: Boolean,time: (Long)->String,depth: Int=0,conversational: Boolean=true): RelatedCallViewState {
+    val terminal = turn.terminal
+    val answer = when {
+        turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
+        terminal != null -> terminalResult(terminal,turn.request.type)
+        conversational -> MappedResult()
+        else -> MappedResult("还没有终态。")
+    }
+    val request = turn.request
+    val streamed = turn.provisional.mapNotNull { row ->
+        (row.envelope.body["process"] as? JsonObject)?.takeIf { it["kind"].string()=="stage" && it["stage"].string()=="text" }
+            ?.get("text").string().takeIf(String::isNotBlank)
+    }
+    val finalText = terminal?.body?.get("text").string().trim()
+    val tail = streamed.lastOrNull()?.trim()?.removeSuffix("…[truncated]").orEmpty()
+    val visible = if (finalText.isNotEmpty() && tail.isNotEmpty() && finalText.startsWith(tail)) streamed.dropLast(1) else streamed
+    return RelatedCallViewState(turn.requestId,dev.atoll.app.tasks.compactWorkTitle(prose(request.body).ifEmpty { request.type }),
+        names[request.senderId] ?: request.senderId,request.audience.map { names[it] ?: it },time(request.ts),
+        if(terminal==null) MessageStatus.Processing else if(terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed,
+        depth,(visible + answer.text).filter(String::isNotBlank).joinToString("\n\n"),answer.result,progressTrail(turn,emptyList(),terminal==null && !detached,time),
+        terminal?.let { messageAttachments(it.body) }.orEmpty(),conversational,messageText(request),tasks[turn.requestId].orEmpty(),request.parentId,request.type)
 }
 
 /** Listed attachments take precedence over files, then append non-duplicate resource links. */
@@ -407,7 +418,7 @@ internal fun progressTrail(turn: Turn,calls: List<dev.atoll.app.model.TimelineEn
 }
 
 /** Same sender/task identity as the web tree; resumed calls do not create extra leaves. */
-private fun subTaskViews(steps: List<Envelope>,names: Map<String,String>):List<SubTaskViewState> {
+internal fun subTaskViews(steps: List<Envelope>,names: Map<String,String>):List<SubTaskViewState> {
     if(steps.isEmpty()) return emptyList()
     val identity=BackgroundTasks.subTaskIdentity(steps)
     val tasks=linkedMapOf<String,SubTaskViewState>()
