@@ -22,7 +22,8 @@ data class RelatedCallViewState(val id: String, val title: String, val sender: S
     val time: String, val status: MessageStatus, val depth: Int = 1, val text: String = "",
     val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null,
     val attachments: List<MessageAttachmentViewState> = emptyList(), val conversation: Boolean = false,
-    val request: String = "", val subTasks: List<SubTaskViewState> = emptyList())
+    val request: String = "", val subTasks: List<SubTaskViewState> = emptyList(),
+    val parentId: String = "", val requestType: String = "")
 @Immutable
 data class MessageViewState(val id: String, val sender: String, val text: String, val time: String,
     val agent: Boolean = false, val self: Boolean = false, val continuation: Boolean = false, val status: MessageStatus? = null,
