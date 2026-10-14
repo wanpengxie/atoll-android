@@ -210,6 +210,34 @@ Each package owns its files; live checks run on our test node.
   structured result copies both (text, blank line, JSON fence); web copies
   only the terminal's textOf, which is the JSON.
 
+## Wave 5 (UI redesign; source: docs/design/README.md on branch `redesign`)
+
+Integration branch is `redesign` (from origin/claude/peaceful-shannon-lbid4f
+@ 4868dd7), not `main`. Base every worker branch on `redesign`. The data layer
+must not change shape unless an item needs it; ask first.
+
+- Phase 1, one owner (sol-3): make `redesign` build. Run
+  `./gradlew :app:assembleDebug :app:testDebugUnitTest
+  :app:assembleDebugAndroidTest`, fix every compile error and failing test,
+  then run MessageContentUiTest, MessageCopyUiTest (`--class`) and the 17-step
+  suite. For a failing UI test, first decide whether the test or the UI is
+  wrong, against the artboards. Others do not edit code until this lands.
+- Phase 2, the README's "Not yet implemented" list, each against its artboard:
+  - sol-4 (ui/components, ui/screens/ContentPanels): #1 work strip chips
+    expanding in place (TurnExpanded); #2 process panel tabs (Process).
+  - sol-1 (WorkspaceMapping, new collab UI): #3 collaboration detail with path
+    navigation (CollabSheet); #4 narration grouped as 频道活动 N 条 and the
+    switch in 全部 scope (Main, Filters).
+  - sol-2 (compose/**, waiting/**): #5 merged/preempted one-liners, 重新发送,
+    已编辑 (TurnStates); #7 timed presets (Schedule); #10 long-press bottom
+    sheet with 查看过程 (MessageActions).
+  - sol-3 (app/**): #6 history window banner (Filters); #8 approve/reject on
+    activity cards (Activity); #9 reconnect banner (Connection).
+  - #11 inner layouts (NewChannel, MemberConfig, Starred, Upgrade): first
+    worker to finish.
+- Gate per item: JVM tests, the matching UI test via `--class`, and the
+  17-step suite; attach a screenshot next to the artboard.
+
 ## Status (lead keeps this current)
 
 | Task | Owner | State |
