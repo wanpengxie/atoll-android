@@ -124,6 +124,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     }
     val activityOpen = state.globalPanel == WorkspacePanel.Activity
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var upgradeOpen by rememberSaveable { mutableStateOf(false) }
     var drawer by rememberSaveable { mutableStateOf(false) }
     var loggedList by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -134,8 +135,8 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
         } },
         onDownload = { reference, destination -> features?.files(reference.channelId)?.download(context, reference, destination) },
         downloading = { state.route?.channel?.let { features?.files(it)?.state?.value?.download != null } == true })
-    LaunchedEffect(state.phase, state.route, settingsOpen) { graph.telemetry.screen.set(if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
-    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; drawer = false } }
+    LaunchedEffect(state.phase, state.route, settingsOpen, upgradeOpen) { graph.telemetry.screen.set(if (upgradeOpen) "upgrade" else if (settingsOpen) "settings" else state.route?.let { "channel:${it.channel}/${it.tab}" } ?: state.phase.name) }
+    LaunchedEffect(state.phase) { if (state.phase != WorkspacePhase.Workspace) { settingsOpen = false; upgradeOpen = false; drawer = false } }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     val markdownCache = remember(services?.wire, services?.boot) { MarkdownCache() }
     AtollTheme {
@@ -148,7 +149,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
             WorkspacePhase.Workspace -> {
                 BackHandler(state.route != null || state.canBack || drawer || settingsOpen) { if (settingsOpen) settingsOpen = false else if (drawer) drawer = false else graph.back() }
                 Box(Modifier.fillMaxSize()) {
-                val formOverlayOpen = createChannelOpen && features != null || actorOpen && roster != null
+                val formOverlayOpen = createChannelOpen && features != null || actorOpen && roster != null || upgradeOpen && state.navigation.upgrade != null
                 Column(Modifier.fillMaxSize().then(if (formOverlayOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
                     if (state.canForward && !settingsOpen) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(graph::forward) { Text("前进 ›") } }
                     state.notice?.let { text -> Surface(color = MaterialTheme.colorScheme.errorContainer) {
@@ -161,7 +162,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                         WorkspaceSettings(state, services, features?.terminalPreferences, { settingsOpen = false }, graph::export,
                             { settingsOpen = false; graph.logout() },
                             onSpaceAdmin = if (state.navigation.account.root && features != null) ({ spaceOpen = true }) else null,
-                            onUpgrade = graph::upgrade,
+                            onVersion = { upgradeOpen = true },
                             onChannels = { settingsOpen = false; graph.home() },
                             onActivity = { settingsOpen = false; graph.home(); graph.panel(WorkspacePanel.Activity) })
                     } else if (state.route == null) {
@@ -572,6 +573,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                 if (createChannelOpen && features != null) FullScreenForm({ createChannelOpen = false }) {
                     ChannelCreateScreen(features.governance,
                         onEnterChannel = { createChannelOpen = false; enterCreatedChannel(it) }, onClose = { createChannelOpen = false })
+                }
+                val update = state.navigation.upgrade
+                if (upgradeOpen && update != null) FullScreenForm({ upgradeOpen = false }) {
+                    UpgradePanel(update, state.navigation.connection, { upgradeOpen = false }, graph::upgrade)
                 }
                 }
             }

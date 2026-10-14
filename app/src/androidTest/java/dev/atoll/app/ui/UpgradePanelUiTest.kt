@@ -1,6 +1,16 @@
 package dev.atoll.app.ui
 
 import android.graphics.Bitmap
+import android.graphics.Rect
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
+import androidx.test.runner.lifecycle.Stage
+import dev.atoll.app.app.WorkspaceSettings
+import dev.atoll.app.app.WorkspaceState
+import dev.atoll.app.ui.components.FullScreenForm
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -9,6 +19,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.theme.AtollTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -44,6 +55,7 @@ class UpgradePanelUiTest {
         for (phase in listOf("available", "starting", "downloading", "verifying", "installing", "restarting", "checking", "current", "unsupported", "unavailable", "failed")) {
             compose.runOnIdle { update.value = UpgradeViewState(if (phase == "current") "v2" else "v1", "v2", phase,
                 available = phase !in setOf("current", "unsupported", "unavailable", "checking")) }
+            assertFooterInsideVisibleWindow()
             if (phase in setOf("available", "failed")) compose.onNodeWithTag("upgrade-action").assertIsEnabled()
             else compose.onNodeWithTag("upgrade-action").assertIsNotEnabled()
             if (phase == "restarting") {
@@ -65,12 +77,57 @@ class UpgradePanelUiTest {
         compose.onNodeWithTag("upgrade-action").assertIsNotEnabled()
     }
 
+    @Test fun enteringFromMeAndBothBackActionsReturnToMeWithoutAnUpgradeRequest() {
+        val open = mutableStateOf(false)
+        val state = WorkspaceState(navigation = ChannelNavigationViewState(emptyList(), ConnectionPhase.OPEN,
+            AccountViewState("self", "测试账号", root = true), upgrade = UpgradeViewState("v1", "v2")))
+        var requests = 0
+        compose.setContent { AtollTheme { Box {
+            Box(if (open.value) Modifier.clearAndSetSemantics {} else Modifier) {
+                WorkspaceSettings(state, null, null, {}, {}, {}, onVersion = { open.value = true })
+            }
+            if (open.value) FullScreenForm({ open.value = false }) {
+                UpgradePanel(state.navigation.upgrade!!, state.navigation.connection, { open.value = false }, { requests++ })
+            }
+        } } }
+        compose.onNodeWithText("节点版本").performScrollTo().performClick()
+        assertFooterInsideVisibleWindow()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNode(hasText("我") and hasClickAction()).assertIsDisplayed().assertIsSelected()
+        compose.onNodeWithText("节点版本").performScrollTo().performClick()
+        assertFooterInsideVisibleWindow()
+        compose.runOnUiThread {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).single() as ComponentActivity
+            activity.onBackPressedDispatcher.onBackPressed()
+        }
+        compose.onNode(hasText("我") and hasClickAction()).assertIsDisplayed().assertIsSelected()
+        compose.runOnIdle { assertEquals(0, requests) }
+    }
+
+    private fun assertFooterInsideVisibleWindow() {
+        compose.onAllNodes(isDialog()).assertCountEquals(0)
+        compose.onNodeWithTag("upgrade-action").assertIsDisplayed()
+        val button = compose.onNodeWithTag("upgrade-action").fetchSemanticsNode().boundsInWindow
+        val visible = Rect()
+        val origin = IntArray(2)
+        compose.runOnUiThread {
+            val activity = ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.RESUMED).single()
+            activity.window.decorView.getWindowVisibleDisplayFrame(visible)
+            activity.window.decorView.getLocationOnScreen(origin)
+        }
+        assertTrue("Footer $button must be inside visible window $visible", button.top + origin[1] >= visible.top &&
+            button.bottom + origin[1] <= visible.bottom && button.left + origin[0] >= visible.left &&
+            button.right + origin[0] <= visible.right)
+    }
+
     private fun screenshot(name: String) {
         val directory = File(InstrumentationRegistry.getArguments().getString("additionalTestOutputDir")
             ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output", "upgrade-panel")
         check(directory.mkdirs() || directory.isDirectory)
         compose.waitForIdle()
-        val bitmap = checkNotNull(InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot())
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        automation.waitForIdle(500, 3000)
+        val bitmap = checkNotNull(automation.takeScreenshot())
         File(directory, "$name.png").outputStream().use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
         }
