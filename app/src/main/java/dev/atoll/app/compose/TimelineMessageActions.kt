@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,6 +32,7 @@ import dev.atoll.app.ui.screens.MessagePart
 import dev.atoll.app.ui.screens.TurnKind
 import dev.atoll.app.ui.components.TurnStateRow
 import dev.atoll.app.ui.components.TurnFailureActions
+import dev.atoll.app.ui.components.LocalMarkdownSelectionEnabled
 import dev.atoll.app.ui.theme.AtollColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,6 +56,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     val actions = TimelineActionPolicy.actions(envelope, turn, message.text, selfId, roster,
         writable, online, newerUnloaded, safeEditActors)
     var menu by remember(message.id) { mutableStateOf(false) }
+    var selecting by remember(message.id) { mutableStateOf(false) }
     var copied by remember(message.id) { mutableStateOf("") }
     var feedback by remember(message.id) { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
@@ -67,12 +70,16 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     val canStar = onToggleStar != null && envelope.id.isNotEmpty() && envelope.channelId.isNotEmpty()
     val canStop = actions.stopTargetId.isNotEmpty() && onStop != null
     val stopEnabled = editingTargetId.isEmpty() && turn?.request?.audience?.firstOrNull() !in busyActors
-    val hasMenu = copyText.isNotEmpty() || canStar || actions.reply != null || actions.editTargetId.isNotEmpty() || onCreateTask != null || canStop
+    val processId = messageProcessId(message, envelope, turn)
+    val canOpenProcess = onOpenProcess != null && processId.isNotEmpty()
+    val hasMenu = canOpenProcess || copyText.isNotEmpty() || canStar || actions.reply != null || actions.editTargetId.isNotEmpty() || onCreateTask != null || canStop
     val reply = actions.reply
     val threshold = with(LocalDensity.current) { 64.dp.toPx() }
     var drag by remember(message.id) { mutableFloatStateOf(0f) }
     val shift by animateFloatAsState(drag, label = "reply-swipe")
     val accessibility = buildList {
+        if (hasMenu) add(CustomAccessibilityAction("消息操作") { menu = true; true })
+        if (canOpenProcess) add(CustomAccessibilityAction("查看过程") { onOpenProcess?.invoke(processId); true })
         if (copyText.isNotEmpty()) add(CustomAccessibilityAction("复制") { copy(); true })
         if (reply != null) add(CustomAccessibilityAction("回复") { onReply(reply); true })
         if (canStar) add(CustomAccessibilityAction(if (starred) "取消星标" else "星标") { onToggleStar?.invoke(envelope, message.text); true })
@@ -99,19 +106,7 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
                 .then(if (hasMenu) Modifier.combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
                     onClick = {}, onLongClickLabel = "消息操作", onLongClick = { menu = true }) else Modifier)) {
                 if (message.turnState?.compact == true) TurnStateRow(message, onOpenProcess ?: {}, onResend, resendEnabled)
-                else content()
-                DropdownMenu(menu, { menu = false }) {
-                    if (copyText.isNotEmpty()) DropdownMenuItem(text = { Text("复制", fontSize = 15.sp) }, onClick = { menu = false; copy() })
-                    if (reply != null) DropdownMenuItem(text = { Text("回复", fontSize = 15.sp) }, onClick = { menu = false; onReply(reply) })
-                    if (canStar) DropdownMenuItem(text = { Text(if (starred) "取消星标" else "星标", fontSize = 15.sp) },
-                        onClick = { menu = false; onToggleStar?.invoke(envelope, message.text) })
-                    if (actions.editTargetId.isNotEmpty()) DropdownMenuItem(text = { Text("编辑", fontSize = 15.sp) },
-                        enabled = editingTargetId.isEmpty(), onClick = { menu = false; onEdit(actions.editTargetId) })
-                    if (onCreateTask != null) DropdownMenuItem(text = { Text("从这里新建任务", fontSize = 15.sp) },
-                        enabled = writable && online, onClick = { menu = false; onCreateTask(envelope, turn) })
-                    if (canStop) DropdownMenuItem(text = { Text("停止", fontSize = 15.sp, color = AtollColors.Danger) },
-                        enabled = stopEnabled, onClick = { menu = false; onStop?.invoke(actions.stopTargetId) })
-                }
+                else CompositionLocalProvider(LocalMarkdownSelectionEnabled provides false) { content() }
             }
         }
         if (message.turnState?.kind == TurnKind.Failed && message.part != MessagePart.Request && onResend != null) {
@@ -126,4 +121,30 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
             if (copied.isNotEmpty()) Text(copied, fontSize = 12.sp, color = AtollColors.Muted)
         }
     }
+    if (menu) MessageActionsSheet(onDismiss = { menu = false }) {
+        fun runAction(action: () -> Unit) { menu = false; action() }
+        if (canOpenProcess) MessageActionRow("查看过程与相关调用", Icons.Outlined.FormatListBulleted,
+            detail = (message.trail?.records.orEmpty().size + message.relatedCalls.size + message.subTasks.size)
+                .takeIf { it > 0 }?.let { "$it 条" }.orEmpty()) { runAction { onOpenProcess?.invoke(processId) } }
+        if (reply != null) MessageActionRow(if (reply.senderId.startsWith("agent:")) "追问 ${reply.senderName}" else "回复 ${reply.senderName}",
+            Icons.AutoMirrored.Outlined.Reply) { runAction { onReply(reply) } }
+        if (onCreateTask != null) MessageActionRow("从这里新建任务", Icons.Outlined.AccountTree,
+            enabled = writable && online) { runAction { onCreateTask(envelope, turn) } }
+        if (copyText.isNotEmpty()) {
+            MessageActionRow("复制正文与结构化结果", Icons.Outlined.ContentCopy) { runAction(::copy) }
+            MessageActionRow("选择文本", Icons.Outlined.Notes) { menu = false; selecting = true }
+        }
+        if (canStar) MessageActionRow(if (starred) "取消星标" else "星标", Icons.Outlined.StarBorder) {
+            runAction { onToggleStar?.invoke(envelope, message.text) }
+        }
+        if (actions.editTargetId.isNotEmpty()) MessageActionRow("编辑", Icons.Outlined.Edit,
+            enabled = editingTargetId.isEmpty()) { runAction { onEdit(actions.editTargetId) } }
+        if (canStop) {
+            HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), color = AtollColors.Line)
+            MessageActionRow("停止本轮", Icons.Outlined.Stop, enabled = stopEnabled, danger = true) {
+                runAction { onStop?.invoke(actions.stopTargetId) }
+            }
+        }
+    }
+    if (selecting) MessageTextSelectionSheet(copyText, onDismiss = { selecting = false })
 }
