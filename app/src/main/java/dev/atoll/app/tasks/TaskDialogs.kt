@@ -2,18 +2,26 @@ package dev.atoll.app.tasks
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import dev.atoll.app.ui.theme.AtollColors
+import kotlinx.coroutines.delay
+import java.time.Instant
 import kotlinx.serialization.json.*
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -54,39 +62,103 @@ fun CreateTaskDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
     }
 }
 @Composable
-fun TimedActionsDialog(viewModel: TasksViewModel,onClose: ()->Unit) {
+fun TimedActionsDialog(viewModel: TasksViewModel, onClose: () -> Unit) {
     val state by viewModel.state.collectAsState()
-    var duration by remember { mutableStateOf("5000") };var type by remember { mutableStateOf("agent.ask") };var payload by remember { mutableStateOf("{\"text\":\"定时提醒\"}") }
-    var cancelId by remember { mutableStateOf("") };var busy by remember { mutableStateOf(false) };var error by remember { mutableStateOf("") };var notice by remember { mutableStateOf("") }
-    fun perform(block: suspend TasksViewModel.()->String) {
-        busy=true;error="";notice=""
-        viewModel.perform { try { notice=block() } catch (e:Exception) { error=e.message.orEmpty();throw e } finally { busy=false } }
-    }
-    TaskDialog("定时动作",onClose,busy=busy) {
-        LazyColumn(Modifier.fillMaxWidth().weight(1f,false),contentPadding=PaddingValues(16.dp),verticalArrangement=Arrangement.spacedBy(12.dp)) {
-            item { Text("本次会话已安排的定时动作",style=MaterialTheme.typography.titleSmall) }
-            item { OutlinedTextField(duration,{ duration=it },label={ Text("延迟（毫秒）") },keyboardOptions=KeyboardOptions(keyboardType=KeyboardType.Number),modifier=Modifier.fillMaxWidth(),enabled=!busy) }
-            item { OutlinedTextField(type,{ type=it },label={ Text("消息类型") },modifier=Modifier.fillMaxWidth(),enabled=!busy) }
-            item { OutlinedTextField(payload,{ payload=it },label={ Text("Payload JSON") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=3,maxLines=6) }
-            item { Button(onClick={ perform {
-                val delay=duration.toLongOrNull()?.takeIf { it>0 } ?: throw IllegalArgumentException("延迟必须是正整数毫秒")
-                val body=runCatching { Json.parseToJsonElement(payload) as? JsonObject }.getOrNull() ?: throw IllegalArgumentException("Payload 必须是 JSON 对象")
-                val id=schedule(delay,type,body);cancelId=id;"已安排 $id"
-            } },enabled=!busy && state.writable) { Text(if (busy) "正在提交…" else "创建定时动作") } }
-            if (error.isNotEmpty()) item { Text(error,color=MaterialTheme.colorScheme.error) }
-            if (notice.isNotEmpty()) item { Text(notice,style=MaterialTheme.typography.bodySmall) }
-            item { OutlinedTextField(cancelId,{ cancelId=it },label={ Text("取消已知 timer_id") },modifier=Modifier.fillMaxWidth(),enabled=!busy) }
-            item { TextButton(onClick={ perform { cancelTimer(cancelId.trim());"已确认取消 ${cancelId.trim()}" } },enabled=!busy && state.writable && cancelId.isNotBlank()) { Text("取消定时动作") } }
-            items(state.timers,key={ it.timerId }) { timer ->
-                Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)) {
-                    WorkTitle(timer.payload.text("text").ifEmpty { timer.msgType })
-                    Text("${when (timer.state) { "scheduled" -> "已安排";"fired" -> "已触发";else -> "已取消" }} · ${taskDate(timer.dueAt.toString())}",style=MaterialTheme.typography.bodySmall)
-                    Text(timer.timerId,style=MaterialTheme.typography.bodySmall)
-                    if (timer.state=="scheduled") TextButton(onClick={ perform { cancelTimer(timer.timerId);"已确认取消 ${timer.timerId}" } },enabled=!busy && state.writable) { Text("取消") }
-                } }
-            }
-            if (state.timers.isEmpty()) item { Text("本次会话还没有定时记录。",style=MaterialTheme.typography.bodySmall) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    var notice by remember { mutableStateOf("") }
+    fun perform(block: suspend TasksViewModel.() -> String) {
+        if (busy) return
+        busy = true; error = ""; notice = ""
+        viewModel.perform {
+            try { notice = block() }
+            catch (e: Exception) { error = e.message.orEmpty(); throw e }
+            finally { busy = false }
         }
+    }
+    TaskDialog("定时动作", onClose, busy = busy) {
+        TimedActionsForm(state.timers, state.writable, busy, error, notice,
+            onSchedule = { duration, type, payload -> perform { "已安排 ${schedule(duration, type, payload)}" } },
+            onCancel = { id -> perform { cancelTimer(id); "已确认取消 $id" } },
+            modifier = Modifier.fillMaxWidth().weight(1f, false))
+    }
+}
+
+/** View-only form; the existing session timer owner remains the only writer. */
+@Composable
+internal fun TimedActionsForm(timers: List<AutomationRecord>, writable: Boolean, busy: Boolean = false,
+    error: String = "", notice: String = "", onSchedule: (Long, String, JsonObject) -> Unit,
+    onCancel: (String) -> Unit, modifier: Modifier = Modifier,
+    clock: () -> Instant = Instant::now, zone: ZoneId = ZoneId.systemDefault(),
+    pickCustom: ((LocalDateTime, (LocalDateTime) -> Unit) -> Unit)? = null) {
+    val context = LocalContext.current
+    var preset by rememberSaveable { mutableStateOf(SchedulePreset.OneHour) }
+    var custom by rememberSaveable { mutableStateOf<LocalDateTime?>(null) }
+    var advanced by rememberSaveable { mutableStateOf(false) }
+    var type by rememberSaveable { mutableStateOf("agent.ask") }
+    var payload by rememberSaveable { mutableStateOf("{\"text\":\"定时提醒\"}") }
+    var cancelId by rememberSaveable { mutableStateOf("") }
+    var validation by remember { mutableStateOf("") }
+    val now by produceState(clock(), clock) { while (true) { delay(60_000); value = clock() } }
+    val body = remember(payload) { runCatching { Json.parseToJsonElement(payload) as? JsonObject }.getOrNull() }
+    val future = runCatching { scheduleDelayMillis(preset, now, zone, custom) }.isSuccess
+    fun chooseCustom() {
+        val initial = custom ?: clock().atZone(zone).toLocalDateTime().plusHours(1)
+        val selected: (LocalDateTime) -> Unit = { custom = it; validation = "" }
+        if (pickCustom != null) pickCustom(initial, selected)
+        else DatePickerDialog(context, { _, year, month, day ->
+            TimePickerDialog(context, { _, hour, minute -> selected(LocalDateTime.of(year, month + 1, day, hour, minute)) },
+                initial.hour, initial.minute, true).show()
+        }, initial.year, initial.monthValue - 1, initial.dayOfMonth).show()
+    }
+    Column(modifier.background(AtollColors.Surface)) {
+        LazyColumn(Modifier.fillMaxWidth().weight(1f, false).testTag("schedule.form.list"), contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            item("presets") { SchedulePresetSelector(preset, custom, now, zone,
+                { preset = it; validation = "" }, ::chooseCustom, enabled = !busy) }
+            item("reminder") {
+                OutlinedTextField(body?.text("text").orEmpty(), { text ->
+                    payload = JsonObject(body.orEmpty() + ("text" to JsonPrimitive(text))).toString()
+                }, label = { Text("提醒内容") }, modifier = Modifier.fillMaxWidth(), enabled = !busy && body != null, minLines = 3, maxLines = 6)
+            }
+            item("advanced") {
+                Column {
+                    Text(if (advanced) "高级：消息类型与 JSON 负载 ⌃" else "高级：消息类型与 JSON 负载 ⌄",
+                        Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable(enabled = !busy) { advanced = !advanced }.padding(vertical = 12.dp), fontSize = 14.sp)
+                    if (advanced) Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        OutlinedTextField(type, { type = it }, label = { Text("消息类型") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                        OutlinedTextField(payload, { payload = it }, label = { Text("Payload JSON") }, modifier = Modifier.fillMaxWidth(), enabled = !busy,
+                            isError = body == null, minLines = 3, maxLines = 6,
+                            supportingText = { if (body == null) Text("Payload 必须是 JSON 对象") })
+                        OutlinedTextField(cancelId, { cancelId = it }, label = { Text("取消已知 timer_id") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
+                        TextButton({ onCancel(cancelId.trim()) }, enabled = !busy && writable && cancelId.isNotBlank()) { Text("取消定时动作") }
+                    }
+                }
+            }
+            if (error.isNotEmpty() || validation.isNotEmpty()) item("error") { Text(validation.ifEmpty { error }, color = AtollColors.Danger) }
+            if (notice.isNotEmpty()) item("notice") { Text(notice, style = MaterialTheme.typography.bodySmall) }
+            item("timers-heading") { Text("本次会话已安排", fontSize = 13.sp, color = AtollColors.Muted) }
+            items(timers, key = { it.timerId }) { timer ->
+                Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = AtollColors.Ground)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        WorkTitle(timer.payload.text("text").ifEmpty { timer.msgType })
+                        Text("${when (timer.state) { "scheduled" -> "已安排"; "fired" -> "已触发"; else -> "已取消" }} · ${taskDate(timer.dueAt.toString())}", style = MaterialTheme.typography.bodySmall)
+                        if (timer.state == "scheduled") TextButton({ onCancel(timer.timerId) }, enabled = !busy && writable) { Text("取消", color = AtollColors.Danger) }
+                    }
+                }
+            }
+            if (timers.isEmpty()) item("empty") { Text("本次会话还没有定时记录。", style = MaterialTheme.typography.bodySmall) }
+        }
+        HorizontalDivider(color = AtollColors.Line)
+        Button({
+            try {
+                val duration = scheduleDelayMillis(preset, clock(), zone, custom)
+                requireNotNull(body) { "Payload 必须是 JSON 对象" }
+                validation = ""; onSchedule(duration, type.trim(), body)
+            } catch (e: IllegalArgumentException) { validation = e.message.orEmpty() }
+        }, Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp).heightIn(min = 50.dp),
+            enabled = !busy && writable && future && body != null && type.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(containerColor = AtollColors.Ink)) { Text(if (busy) "正在提交…" else "安排定时动作", fontSize = 16.sp) }
     }
 }
 
