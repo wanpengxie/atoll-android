@@ -22,20 +22,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.theme.AtollColors
 
 /** Creation lives in the world VM after this dialog closes. Never retry an uncertain request. */
 @Composable
-fun ChannelCreateDialog(viewModel: GovernanceViewModel, onEnterChannel: ((String) -> Unit)? = null, onClose: () -> Unit) {
+fun ChannelCreateScreen(viewModel: GovernanceViewModel, onEnterChannel: ((String) -> Unit)? = null, onClose: () -> Unit) {
     val state by viewModel.state.collectAsState()
     val creations by viewModel.creations.collectAsState()
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        ChannelCreateContent(state, viewModel.principalId, creations, viewModel::create,
-            viewModel::readEntries, viewModel::refreshCreation, onEnterChannel, onClose)
-    }
+    ChannelCreateContent(state, viewModel.principalId, creations, viewModel::create,
+        viewModel::readEntries, viewModel::refreshCreation, onEnterChannel, onClose)
 }
 
 /** The three design steps summarize all four convergence facts, without declaring readiness early. */
@@ -64,7 +60,7 @@ internal fun ChannelCreateContent(state: GovernanceState, principalId: String, c
     val principals = governancePrincipals(state.directory.principals).filter { it.text("id") != principalId }
     val entries = state.entries.orEmpty().filter { it.text("id").isNotEmpty() }
     Surface(Modifier.fillMaxSize(), color = AtollColors.Surface) {
-        Column(Modifier.safeDrawingPadding().imePadding()) {
+        Column(Modifier.fillMaxSize().safeDrawingPadding().navigationBarsPadding().imePadding()) {
             Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onClose) { Icon(Icons.Outlined.Close, "关闭", Modifier.size(20.dp)) }
                 Text("新建频道", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
