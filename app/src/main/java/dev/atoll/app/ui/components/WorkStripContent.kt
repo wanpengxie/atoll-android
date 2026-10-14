@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.screens.*
-import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 import dev.atoll.app.ui.theme.AtollMono
 import kotlinx.coroutines.delay
 
@@ -43,16 +43,16 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
     val records = message.trail?.records.orEmpty()
     val running = message.status == MessageStatus.Processing || message.trail?.running == true
     fun toggle(bit: Int) { expanded = expanded xor bit; onExpanded?.invoke(expanded != 0) }
-    Column(Modifier.fillMaxWidth().then(if (inset) Modifier.background(AtollColors.Raised) else Modifier)
+    Column(Modifier.fillMaxWidth().then(if (inset) Modifier.background(ChatColors.Bar) else Modifier)
         .padding(horizontal = if (inset) 12.dp else 0.dp, vertical = if (inset) 10.dp else 0.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        if (inset) HorizontalDivider(color = AtollColors.LineSoft)
+        if (inset) HorizontalDivider(color = ChatColors.LineInWhite)
         val latest = message.progress ?: records.lastOrNull()?.line
         if (latest != null || running) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (running) Spinner(13.dp)
+            if (running) ChatSpinner()
             Text(latest ?: "思考中…", Modifier.weight(1f), fontSize = 13.sp,
-                color = if (running) AtollColors.RunningText else AtollColors.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                color = if (running) ChatColors.Gray else ChatColors.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (running) WorkElapsed(message.trail?.startedAtMillis ?: 0)
         }
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -64,7 +64,7 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
             if (groups.second.isNotEmpty()) WorkCountChip("调用 ${groups.second.size}", expanded and CALLS != 0,
                 danger = groups.second.any { it.status == MessageStatus.Failed }, onClick = { toggle(CALLS) })
             if (expanded != 0) TextButton({ expanded = 0; onExpanded?.invoke(false) }, Modifier.heightIn(min = 44.dp)) {
-                Text("收起", fontSize = 12.sp, color = AtollColors.Muted)
+                Text("收起", fontSize = 12.sp, color = ChatColors.Gray)
             }
         }
         if (expanded != 0 && records.isNotEmpty()) {
@@ -76,7 +76,7 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
                         if (running && index == minOf(records.size, 2) - 1) MessageStatus.Processing else MessageStatus.Completed)
                     Text(record.line, Modifier.weight(1f), fontSize = 12.sp, fontFamily = AtollMono,
                         maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(record.time, fontSize = 12.sp, color = AtollColors.Muted)
+                    Text(record.time, fontSize = 12.sp, color = ChatColors.Gray)
                 }
             } }
         }
@@ -99,7 +99,7 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
         }
         if (expanded != 0 || showTurnProcessLink(message) && records.isEmpty() && groups.first.isEmpty() && groups.second.isEmpty() && message.subTasks.isEmpty())
             TextButton(onProcess, Modifier.align(Alignment.CenterHorizontally).heightIn(min = 44.dp)) {
-                Text(if (expanded != 0) "在面板中查看全部 ›" else "查看过程 ›", fontSize = 13.sp, color = AtollColors.Lagoon)
+                Text(if (expanded != 0) "在面板中查看全部 ›" else "查看过程 ›", fontSize = 13.sp, color = ChatColors.Link)
             }
     }
 }
@@ -110,25 +110,25 @@ private fun WorkCountChip(text: String, selected: Boolean?, danger: Boolean = fa
         .semantics { if (selected != null) { this.selected = selected; stateDescription = if (selected) "已展开" else "已折叠" } },
         contentAlignment = Alignment.Center) {
         Box(Modifier.height(26.dp).clip(RoundedCornerShape(13.dp))
-            .background(if (selected == true) AtollColors.Ink else AtollColors.Surface)
-            .border(1.dp, if (selected == true) AtollColors.Ink else AtollColors.Line, RoundedCornerShape(13.dp))
+            .background(if (selected == true) ChatColors.Ink else ChatColors.Block)
+            .border(1.dp, if (selected == true) ChatColors.Ink else ChatColors.LineInWhite, RoundedCornerShape(13.dp))
             .padding(horizontal = 9.dp), contentAlignment = Alignment.Center) {
-            Text(text, fontSize = 12.sp, color = if (selected == true) Color.White else if (danger) AtollColors.Danger else AtollColors.Ink)
+            Text(text, fontSize = 12.sp, color = if (selected == true) Color.White else if (danger) ChatColors.Red else ChatColors.Ink)
         }
     }
 }
 
 @Composable private fun WorkPreview(title: String, count: Int, onAll: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
     WorkHeading(title)
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(AtollColors.Surface)
-        .border(1.dp, AtollColors.Line, RoundedCornerShape(12.dp)), content = content)
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(ChatColors.Block)
+        .border(1.dp, ChatColors.LineInWhite, RoundedCornerShape(12.dp)), content = content)
     if (count > PREVIEW_LIMIT) TextButton(onAll, Modifier.heightIn(min = 44.dp)) {
-        Text("查看全部 $count 项 ›", fontSize = 12.sp, color = AtollColors.Lagoon)
+        Text("查看全部 $count 项 ›", fontSize = 12.sp, color = ChatColors.Link)
     }
 }
 
 @Composable internal fun WorkHeading(text: String) {
-    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Muted)
+    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = ChatColors.Gray)
 }
 
 /** Shared compact rows. They never parse an answer, compose JSON, or recurse into children. */
@@ -141,18 +141,18 @@ internal fun CallSummary(call: RelatedCallViewState, onClick: () -> Unit) {
             Text(if (call.conversation) "${call.sender} › ${call.recipients.joinToString("、")}" else call.title,
                 Modifier.weight(1f), fontSize = if (call.conversation) 13.sp else 12.sp,
                 fontFamily = if (call.conversation) null else AtollMono,
-                color = if (call.status == MessageStatus.Failed) AtollColors.Danger else AtollColors.Ink,
+                color = if (call.status == MessageStatus.Failed) ChatColors.Red else ChatColors.Ink,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
             WorkMark(call.status)
-            Text(call.status.label, fontSize = 12.sp, color = if (call.status == MessageStatus.Failed) AtollColors.Danger else AtollColors.Muted)
+            Text(call.status.label, fontSize = 12.sp, color = if (call.status == MessageStatus.Failed) ChatColors.Red else ChatColors.Gray)
         }
         if (call.conversation) {
             Text(call.title, fontSize = 14.sp, lineHeight = 20.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (call.text.isNotBlank()) Text("↳ ${call.text.take(180).replace('\n', ' ')}", fontSize = 13.sp,
-                color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                color = ChatColors.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
-    HorizontalDivider(color = AtollColors.LineSoft)
+    HorizontalDivider(color = ChatColors.LineInWhite)
 }
 
 @Composable
@@ -163,20 +163,20 @@ internal fun SubTaskSummary(task: SubTaskViewState, onClick: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text("${task.owner} · ${task.title}", fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(task.latest.ifEmpty { "${task.kind.label} · ${task.phase.label}" }, fontSize = 12.sp,
-                fontFamily = if (task.latest.isNotEmpty()) AtollMono else null, color = AtollColors.Muted,
+                fontFamily = if (task.latest.isNotEmpty()) AtollMono else null, color = ChatColors.Gray,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         if (task.phase == SubTaskPhase.Running) WorkElapsed(task.startedAtMillis)
     }
-    HorizontalDivider(color = AtollColors.LineSoft)
+    HorizontalDivider(color = ChatColors.LineInWhite)
 }
 
 @Composable internal fun WorkMark(status: MessageStatus) {
     when (status) {
-        MessageStatus.Processing -> Spinner(13.dp)
-        MessageStatus.Queued -> PulseDot(AtollColors.Warning, pulsing = false)
-        MessageStatus.Failed -> Icon(Icons.Outlined.Close, null, Modifier.size(14.dp), tint = AtollColors.Danger)
-        MessageStatus.Completed -> Icon(Icons.Outlined.Check, null, Modifier.size(14.dp), tint = AtollColors.Muted)
+        MessageStatus.Processing -> ChatSpinner()
+        MessageStatus.Queued -> Box(Modifier.size(10.dp).border(1.5.dp, ChatColors.Hint, androidx.compose.foundation.shape.CircleShape))
+        MessageStatus.Failed -> Icon(Icons.Outlined.Close, null, Modifier.size(14.dp), tint = ChatColors.Red)
+        MessageStatus.Completed -> Icon(Icons.Outlined.Check, null, Modifier.size(14.dp), tint = ChatColors.Gray)
     }
 }
 
@@ -186,5 +186,5 @@ internal fun SubTaskSummary(task: SubTaskViewState, onClick: () -> Unit) {
     val now by produceState(System.currentTimeMillis(), startedAt) {
         while (true) { delay(1000); value = System.currentTimeMillis() }
     }
-    Text(activityDuration(startedAt, now), fontSize = 12.sp, fontFamily = AtollMono, color = AtollColors.RunningText)
+    Text(activityDuration(startedAt, now), fontSize = 13.sp, color = dev.atoll.app.ui.theme.ChatColors.Gray)
 }

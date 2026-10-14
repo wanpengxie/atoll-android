@@ -33,8 +33,9 @@ class ProcessNodeUiTest {
         compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("过程面板").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("插话引导").assertIsNotEnabled()
         for ((tab, name) in listOf("过程" to "process", "协作" to "collaboration", "子任务" to "tasks", "调用" to "calls", "账本" to "ledger")) {
-            compose.onNodeWithText(tab, useUnmergedTree = true).performClick()
-            if (tab == "协作") compose.onNodeWithContentDescription("线程路径").assertExists()
+            // Only the sheet's own tab; the timeline behind the scrim also says 过程.
+            compose.onAllNodes(hasText(tab, substring = true) and hasClickAction() and hasAnyAncestor(hasContentDescription("过程面板"))).onFirst().performClick()
+            if (tab == "协作") compose.onAllNodesWithText("的回合", substring = true).onFirst().assertExists()
             if (tab == "账本") {
                 compose.onNodeWithText(turn.requestId).assertIsDisplayed()
                 compose.onNodeWithText(turn.terminal!!.id).assertIsDisplayed()
@@ -44,7 +45,7 @@ class ProcessNodeUiTest {
             val directory = File(args.getString("additionalTestOutputDir") ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output", "process-node").also { it.mkdirs() }
             File(directory, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }; bitmap.recycle()
         }
-        compose.onNodeWithContentDescription("关闭过程面板").performClick()
+        compose.onNodeWithText("收起").performClick()
         compose.onNodeWithContentDescription("过程面板").assertDoesNotExist()
     }
 }

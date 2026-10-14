@@ -9,7 +9,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 import kotlinx.serialization.json.*
 
 @Immutable
@@ -31,26 +31,26 @@ private val ERROR_LABELS = mapOf(
 @Composable
 fun StructuredResult(state: ResultViewState) {
     if (state.errorCode != null) {
-        Surface(color = AtollColors.DangerSurface, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
+        Surface(color = ChatColors.Bar, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(failureTitle(state.errorCode), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Danger)
-                Text(state.errorCode, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = AtollColors.DangerText)
+                Text(failureTitle(state.errorCode), fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = ChatColors.Red)
+                Text(state.errorCode, fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = ChatColors.Red)
                 if (state.detail.isNotEmpty()) Text(state.detail, fontSize = 14.sp, lineHeight = 21.sp)
                 state.errorData?.let { JsonTree(it) }
             }
         }
-    } else if (state.emptyText) Text("返回了空文本", color = AtollColors.Muted, fontSize = 13.sp)
-    else if (state.acknowledgement) Text("✓ 已完成", color = AtollColors.Muted, fontSize = 13.sp)
+    } else if (state.emptyText) Text("返回了空文本", color = ChatColors.Gray, fontSize = 13.sp)
+    else if (state.acknowledgement) Text("✓ 已完成", color = ChatColors.Gray, fontSize = 13.sp)
     else state.value?.let { value ->
         var expanded by remember(value) { mutableStateOf(false) }
-        Surface(shape = MaterialTheme.shapes.medium, color = AtollColors.Surface, border = BorderStroke(1.dp, AtollColors.Line)) {
+        Surface(shape = MaterialTheme.shapes.medium, color = ChatColors.Block, border = BorderStroke(1.dp, ChatColors.LineInWhite)) {
             Column(Modifier.fillMaxWidth()) {
                 Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).clickable { expanded = !expanded }.padding(horizontal = 12.dp, vertical = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(state.title, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Body)
-                    Text(summary(value), fontSize = 12.sp, color = AtollColors.Muted)
-                    Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = AtollColors.Lagoon)
+                    Text(state.title, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = ChatColors.Body)
+                    Text(summary(value), fontSize = 12.sp, color = ChatColors.Gray)
+                    Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = ChatColors.Link)
                 }
-                if (expanded) { HorizontalDivider(color = AtollColors.LineSoft); JsonTree(value, Modifier.padding(12.dp)) }
+                if (expanded) { HorizontalDivider(color = ChatColors.LineInWhite); JsonTree(value, Modifier.padding(12.dp)) }
             }
         }
     }
@@ -62,21 +62,21 @@ fun JsonTree(value: JsonElement, modifier: Modifier = Modifier, depth: Int = 0) 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         when (value) {
             is JsonObject, is JsonArray -> {
-                if (value is JsonObject && value.isEmpty()) Text("空对象", color = AtollColors.Muted, fontSize = 12.sp)
+                if (value is JsonObject && value.isEmpty()) Text("空对象", color = ChatColors.Gray, fontSize = 12.sp)
                 else {
-                    Text((if (expanded) "⌄ " else "› ") + summary(value), Modifier.clickable { expanded = !expanded }.padding(vertical = 5.dp), fontSize = 12.sp, color = AtollColors.Muted)
+                    Text((if (expanded) "⌄ " else "› ") + summary(value), Modifier.clickable { expanded = !expanded }.padding(vertical = 5.dp), fontSize = 12.sp, color = ChatColors.Gray)
                     if (expanded) {
                         val entries = if (value is JsonObject) value.entries.map { it.key to it.value } else (value as JsonArray).mapIndexed { index, element -> "${index + 1}" to element }
                         entries.take(20).forEach { (key, child) ->
                             Row(Modifier.fillMaxWidth().padding(start = 10.dp, top = 4.dp, bottom = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(key, Modifier.width(80.dp), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = AtollColors.Muted)
+                                Text(key, Modifier.width(80.dp), fontSize = 12.sp, fontFamily = FontFamily.Monospace, color = ChatColors.Gray)
                                 JsonTree(child, Modifier.weight(1f), depth = depth + 1)
                             }
                         }
                     }
                 }
             }
-            JsonNull -> Text("null", color = AtollColors.Muted, fontSize = 12.sp)
+            JsonNull -> Text("null", color = ChatColors.Gray, fontSize = 12.sp)
             is JsonPrimitive -> Text(value.booleanOrNull?.let { if (it) "是" else "否" } ?: value.content, fontSize = 13.sp, lineHeight = 19.sp)
         }
     }

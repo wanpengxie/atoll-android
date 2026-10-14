@@ -22,7 +22,7 @@ interface WaitingPort {
 
 data class WaitingRow(val turn: Turn, val actions: WaitingActions, val labels: List<String>, val localSubmission: LocalSubmission? = null)
 data class WaitingGroup(val actorId: String, val name: String, val rows: List<WaitingRow>, val paused: Boolean = false, val busy: Boolean = false)
-data class WaitingUiState(val groups: List<WaitingGroup> = emptyList(), val collapsed: Boolean = false,
+data class WaitingUiState(val groups: List<WaitingGroup> = emptyList(), val collapsed: Boolean = true,
     val edit: EditState = EditState(), val warningTarget: Turn? = null, val warning: String = "", val error: String = "", val online: Boolean = false,
     /** Shared by timeline edit entries; the dock remains the owner of capability probing. */
     val safeEditActors: Set<String> = emptySet(), val busyActors: Set<String> = emptySet(),

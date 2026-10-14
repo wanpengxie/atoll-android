@@ -13,19 +13,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 
 /** Detached history remains readable; returning to the tail is owned by the channel controller. */
 @Composable
 fun HistoryWindowNotice(onLatest: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 8.dp)
-        .background(AtollColors.RunningSurface, RoundedCornerShape(12.dp))
-        .padding(start = 12.dp, end = 8.dp, top = 9.dp, bottom = 9.dp),
-        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-        Icon(Icons.Outlined.Schedule, null, Modifier.size(16.dp), tint = AtollColors.RunningInk)
+    Row(Modifier.fillMaxWidth().background(ChatColors.Bar).padding(start = 16.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("正在看较早的记录。这里不显示运行和等待状态。", Modifier.weight(1f),
-            color = AtollColors.RunningInk, fontSize = 13.sp, lineHeight = 18.sp)
-        TextButton(onLatest, Modifier.height(32.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
-            Text("回到最新", color = AtollColors.RunningText, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            color = ChatColors.Gray, fontSize = 13.sp, lineHeight = 18.sp)
+        TextButton(onLatest, Modifier.heightIn(min = 44.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
+            Text("回到最新", color = ChatColors.Link, fontSize = 13.sp)
         }
     }
 }

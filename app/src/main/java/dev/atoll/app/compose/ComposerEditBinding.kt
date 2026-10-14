@@ -10,7 +10,7 @@ import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 
 /** An edit session owns its input; ordinary channel drafts and attachments remain untouched. */
 data class ComposerEditBinding(
@@ -34,10 +34,10 @@ internal fun EditingComposer(binding: ComposerEditBinding, modifier: Modifier) {
         binding.onExternalText(text, cursor, cursor)
     }
     Column(modifier.padding(horizontal = 10.dp, vertical = 5.dp)) {
-        Text("编辑 @${binding.actorName}", color = AtollColors.Agent, fontSize = 12.sp)
-        if (!binding.editable) Text(if (binding.submitting) "修改提交中，正在确认 Agent 接纳…" else "正在暂停 Agent 并确认编辑状态…", color = AtollColors.Muted, fontSize = 12.sp)
-        if (binding.error.isNotEmpty()) Text(binding.error, color = AtollColors.Accent, fontSize = 12.sp)
-        binding.attachmentNames.forEach { Text("◇ $it · 编辑时保留原附件", color = AtollColors.Muted, fontSize = 12.sp) }
+        Text("编辑 @${binding.actorName}", color = ChatColors.Link, fontSize = 12.sp)
+        if (!binding.editable) Text(if (binding.submitting) "修改提交中，正在确认 Agent 接纳…" else "正在暂停 Agent 并确认编辑状态…", color = ChatColors.Gray, fontSize = 12.sp)
+        if (binding.error.isNotEmpty()) Text(binding.error, color = ChatColors.Red, fontSize = 12.sp)
+        binding.attachmentNames.forEach { Text("◇ $it · 编辑时保留原附件", color = ChatColors.Gray, fontSize = 12.sp) }
         key(binding.sessionId) {
             NativeComposerEditor(binding.command, Modifier.fillMaxWidth(), binding.editable, 6,
                 onValue = { editor = it; binding.onText(it.text) },

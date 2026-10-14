@@ -194,7 +194,7 @@ class WorkspaceMappingContentTest {
         val answer=mapped(row(1,"q","request",json("""{"text":"question"}""")),
             row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"partial answer"}}"""),parent="q"),
             row(3,"a","response",json("""{"status":"failed","reason":"interrupted"}"""),parent="q")).last()
-        assertEquals("partial answer\n\n✗ 已停止 · 发消息即继续",answer.text);assertNull(answer.result)
+        assertEquals("partial answer",answer.text);assertNull(answer.result)
     }
 
     @Test fun newestTurnDoesNotFoldAndAppendReusesOlderMappedResults() {

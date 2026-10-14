@@ -72,19 +72,48 @@ object AtollColors {
     val Scrim = Color(0x995E6064)
 }
 
-/** Agents get a rounded square, people a circle; the tint comes from the actor id. */
+/**
+ * Conversation v2 (WeChat values). The conversation and every surface opened from it use these;
+ * screens outside the conversation keep [AtollColors] until their boards are redrawn.
+ * Running and queued are never coloured: a grey spinner and grey text.
+ */
+object ChatColors {
+    val Ground = Color(0xFFEDEDED)
+    val Bar = Color(0xFFF7F7F7)
+    val Block = Color.White
+    val Ink = Color(0xFF191919)
+    val Body = Color(0xFF333333)
+    val Gray = Color(0xFF888888)
+    val Hint = Color(0xFFB2B2B2)
+    val Line = Color(0xFFDCDCDC)
+    val LineInWhite = Color(0xFFE5E5E5)
+    val Mine = Color(0xFF95EC69)
+    val Link = Color(0xFF576B95)
+    val Red = Color(0xFFFA5151)
+    val Green = Color(0xFF07C160)
+    val Secondary = Color(0xFFF2F2F2)
+    val Quote = Color(0xFFE2E2E2)
+    val Popover = Color(0xFF4C4C4C)
+    val Scrim = Color(0x80000000)
+}
+
+/** Agents get a rounded square, people a circle; the colour is fixed per actor id (same as the web client). */
 object AtollAvatarTints {
     data class Tint(val background: Color, val content: Color)
-    private val tints = listOf(
-        Tint(Color(0xFF4F46E5), Color.White),
-        Tint(Color(0xFFFBF1DF), Color(0xFF8A4B00)),
-        Tint(Color(0xFFE2F1EE), Color(0xFF0F5F59)),
-        Tint(Color(0xFFE7E3F8), Color(0xFF3F3591)),
-        Tint(Color(0xFFFCECEA), Color(0xFF9F1F14)),
-        Tint(Color(0xFFE9F0FC), Color(0xFF1D4FB0)),
-    )
+    private val palette = listOf(
+        Color(0xFF5477AD), Color(0xFF3F8C80), Color(0xFF6E8243), Color(0xFFA87548),
+        Color(0xFFB0605F), Color(0xFF7F64A8), Color(0xFF44835F), Color(0xFF96628C),
+    ).map { Tint(it, Color.White) }
     val Self = Tint(AtollColors.Ink, Color.White)
-    fun of(id: String): Tint = tints[Math.floorMod(id.hashCode(), tints.size)]
+    /** FNV-1a 32-bit over the UTF-8 bytes, unsigned mod 8. Never String.hashCode(). */
+    fun of(id: String): Tint {
+        var h = 0x811c9dc5.toInt()
+        for (b in id.encodeToByteArray()) {
+            h = h xor (b.toInt() and 0xff)
+            h *= 0x01000193
+        }
+        return palette[Integer.remainderUnsigned(h, palette.size)]
+    }
 }
 
 object AtollSpacing {

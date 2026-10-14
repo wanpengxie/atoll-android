@@ -69,7 +69,13 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 if (exception is CancellationException) throw exception
                 NarrationPresentation(snapshot.items) // Let the existing per-entry boundary isolate the narration error.
             }
-        for (item in presentation.items) {
+        // ChatStates ④: replies quote their original unless it is the row right above.
+        val owners = HashMap<String, Int>()
+        val originals = HashMap<String, Envelope>()
+        presentation.items.forEachIndexed { index, item ->
+            listOfNotNull(item.entry.envelope, item.entry.turn?.request, item.entry.turn?.terminal).forEach { owners[it.id] = index; originals[it.id] = it }
+        }
+        for ((position, item) in presentation.items.withIndex()) {
             retained += item.key
             val latest = item.entry.id == snapshot.currentEntryCandidate?.id
             var lifecycleKey = ""
@@ -89,7 +95,14 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                     .also { cache[item.key] = Cached(item.contentRevision, item.continuation, newerUnloaded, latest, lifecycleKey, it) }
             }
             if (value.isNotEmpty() && item.dayKey.isNotEmpty() && item.dayKey != day) { day=item.dayKey;entries+=UiEntry.Day("day:$day:${item.key}",day) }
-            entries += value
+            entries += value.map { entry ->
+                val message = (entry as? UiEntry.Message)?.value ?: return@map entry
+                val owner = owners[message.replyTo]?.takeIf { message.replyTo.isNotEmpty() && it != position && it != position - 1 } ?: return@map entry
+                val original = originals.getValue(message.replyTo)
+                val excerpt = messageText(original).replace(Regex("\\s+"), " ").take(120)
+                UiEntry.Message(message.copy(quote = "${if (original.senderId == selfId) "我" else names[original.senderId] ?: original.senderId}：$excerpt",
+                    quoteKey = presentation.items[owner].key))
+            }
         }
         cache.keys.retainAll(retained)
         return entries
@@ -97,6 +110,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
 
     private fun render(item: PresentationItem, self: String, names: Map<String, String>, newerUnloaded: Boolean,
         source: TimelineSource?, restarts: Map<String,Long>, instant: Long, narration: List<Row>?): List<UiEntry> {
+        if (item.entry.kind=="hidden") return listOf(UiEntry.Filtered(item.key, item.entry.hiddenCount))
         if (item.entry.kind=="narration") {
             val rows = narration ?: source?.narration.orEmpty().filter { it.seq in item.seqLow..item.seqHigh }
             val activities = rows.mapNotNull { row ->
@@ -113,7 +127,8 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList(), relatedStates: List<RelatedCallViewState> = emptyList(), turnState: TurnViewState? = null) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body), relatedCalls = relatedStates, turnState = turnState))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body), relatedCalls = relatedStates, turnState = turnState, senderId = envelope.senderId,
+                replyTo = envelope.parentId.takeIf { envelope.kind == "request" }.orEmpty()))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
@@ -167,7 +182,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
                 val answer = when {
                     turn.terminalClosureOnly -> MappedResult("终态详情不可用，请刷新或重新进入频道")
-                    interrupted -> MappedResult("✗ 已停止 · 发消息即继续")
+                    interrupted -> MappedResult() // The block's status line says 已中断.
                     superseded -> MappedResult()
                     else -> terminalResult(terminal, turn.request.type)
                 }

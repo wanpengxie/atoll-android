@@ -44,6 +44,8 @@ data class TimelineEntry(
     val subTasks: List<Envelope> = emptyList(),
     val subTaskRevision: String = "",
     val local: Boolean = false,
+    /** kind "hidden": how many entries 与我相关 left out between two visible ones. */
+    val hiddenCount: Int = 0,
 ) {
     val id: String get() = turn?.requestId ?: envelope?.id?.ifEmpty { null } ?: "$kind:$seq"
     fun envelopes(): List<Envelope> = if (turn == null) listOfNotNull(envelope) else

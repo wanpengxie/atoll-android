@@ -50,7 +50,7 @@ class MessageCopyUiTest {
         }
         if (longPress) {
             compose.onAllNodesWithText(message.text, useUnmergedTree = true).onLast().performTouchInput { longClick() }
-            compose.onNodeWithText("复制正文与结构化结果").performClick()
+            compose.onNodeWithText("复制").performClick()
         } else {
             val actions = compose.onNodeWithTag("atoll.message.${message.id}").fetchSemanticsNode()
                 .config[SemanticsActions.CustomActions]

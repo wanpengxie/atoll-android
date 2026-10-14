@@ -109,6 +109,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     }.collectAsStateWithLifecycle(initialValue = RosterHeaderState())
     var spaceOpen by remember(services?.wire, services?.boot) { mutableStateOf(false) }
     var createChannelOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
+    var channelInfoOpen by remember(state.route?.channel) { mutableStateOf(false) }
     val routeFocus = RouteFocus.parse(state.route?.focus, state.route?.tab.orEmpty())
     val actorOpen = routeFocus?.kind == FocusKind.Participant
     val rosterOpen = actorOpen || routeFocus?.kind == FocusKind.Panel && routeFocus.key == WorkspacePanel.Members.key
@@ -342,6 +343,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     TextButton({ graph.dismissChannelError(state.route!!.channel, failure) }) { Text("关闭") }
                                 }
                             } }
+                            // Same call order with or without features: a constant flow stands in.
+                            val composerTarget by remember(features) {
+                                features?.composer?.state?.map { it.targetAgent?.id.orEmpty() } ?: kotlinx.coroutines.flow.flowOf("")
+                            }.collectAsStateWithLifecycle("")
                             Box(Modifier.weight(1f)) {
                             ChannelScreen(conversation, ComposerViewState(""),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
@@ -381,7 +386,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                     val approval = taskState?.items?.firstOrNull { it.kind == "approval" && it.id == target?.envelope?.id }
                                     if (approval != null && tasks != null && taskState != null) {
                                         val command = taskState.commandStates.entries.firstOrNull { it.key.startsWith("${approval.key}:") && it.value.state == "submitting" }?.value
-                                        ApprovalCard(approval, taskState.actorNames, busy = command != null,
+                                        ApprovalCard(approval, taskState.actorNames, busy = command != null, timeline = true,
                                             error = taskState.commandStates.filterKeys { it.startsWith("${approval.key}:") }.values.firstOrNull { it.error.isNotEmpty() }?.error.orEmpty(),
                                             onResolve = { action, text, note -> tasks.perform { execute(approval, action, note, text) } })
                                     } else if (target != null && features != null) {
@@ -412,13 +417,16 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 connectionPhase = state.navigation.connection, onReconnect = graph::reconnect,
                                 membersOpen = rosterOpen, memberCount = rosterHeader.count, onRefreshMembers = roster?.let { it::refresh },
                                 membersRefreshing = rosterHeader.refreshing, membersRefreshEnabled = rosterHeader.refreshEnabled,
-                                listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
+                                listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ },
+                                currentAgentId = composerTarget, onSelectAgent = { id -> features?.composer?.selectAgent(id) },
+                                onInfoOpenChange = { channelInfoOpen = it })
                             }
-                            if (features != null && !terminal && !rosterOpen) {
+                            if (features != null && !terminal && !rosterOpen && !channelInfoOpen) {
                             if (waiting != null) WaitingDock(waiting)
                             AtollComposer(features.composer, showLocalEchoes = false, editing = waitingState?.let { waiting?.editorBinding(it) },
                                 onPickChannelFiles = { pickingFile = true },
-                                onPreviewAttachment = { reference -> features.files(reference.channelId).open(reference); graph.files(true) })
+                                onPreviewAttachment = { reference -> features.files(reference.channelId).open(reference); graph.files(true) },
+                                busyAgents = remember(conversation.agents) { conversation.agents.filter { it.active }.map { it.id }.toSet() })
                             }
                             }
                             if (pickingFile && features != null) FilePicker(features.files(state.route!!.channel),

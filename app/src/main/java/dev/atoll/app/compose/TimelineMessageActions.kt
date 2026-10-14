@@ -14,6 +14,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
@@ -30,10 +34,11 @@ import dev.atoll.app.model.Turn
 import dev.atoll.app.ui.screens.MessageViewState
 import dev.atoll.app.ui.screens.MessagePart
 import dev.atoll.app.ui.screens.TurnKind
-import dev.atoll.app.ui.components.TurnStateRow
-import dev.atoll.app.ui.components.TurnFailureActions
+import dev.atoll.app.ui.components.CompactTurnRow
+import dev.atoll.app.ui.components.LocalTurnResend
+import dev.atoll.app.ui.components.TurnResend
+import dev.atoll.app.ui.theme.ChatColors
 import dev.atoll.app.ui.components.LocalMarkdownSelectionEnabled
-import dev.atoll.app.ui.theme.AtollColors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -56,6 +61,9 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
     val actions = TimelineActionPolicy.actions(envelope, turn, message.text, selfId, roster,
         writable, online, newerUnloaded, safeEditActors)
     var menu by remember(message.id) { mutableStateOf(false) }
+    // Read only when the menu opens; holding coordinates writes no state while scrolling.
+    val anchor = remember(message.id) { arrayOfNulls<androidx.compose.ui.layout.LayoutCoordinates>(1) }
+    val popoverRoom = with(LocalDensity.current) { 220.dp.toPx() }
     var selecting by remember(message.id) { mutableStateOf(false) }
     var copied by remember(message.id) { mutableStateOf("") }
     var feedback by remember(message.id) { mutableStateOf<Job?>(null) }
@@ -92,8 +100,10 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
         Box(Modifier.fillMaxWidth()) {
             if (reply != null && shift > 8f) Icon(Icons.AutoMirrored.Outlined.Reply, null,
                 Modifier.align(Alignment.CenterStart).padding(start = 12.dp).size(22.dp)
-                    .graphicsLayer { alpha = (shift / threshold).coerceIn(0f, 1f) }, tint = AtollColors.Lagoon)
+                    .graphicsLayer { alpha = (shift / threshold).coerceIn(0f, 1f) }, tint = ChatColors.Gray)
             Box(Modifier.fillMaxWidth().graphicsLayer { translationX = shift }
+                .then(if (hasMenu) Modifier.onPlaced { anchor[0] = it } else Modifier)
+                .drawWithContent { drawContent(); if (menu) drawRect(Color.Black.copy(alpha = .06f)) }
                 .then(if (reply != null) Modifier.pointerInput(reply) {
                     detectHorizontalDragGestures(
                         onDragEnd = { if (drag >= threshold) onReply(reply); drag = 0f },
@@ -105,45 +115,39 @@ fun TimelineMessageActions(message: MessageViewState, envelope: Envelope, turn: 
                 } else Modifier)
                 .then(if (hasMenu) Modifier.combinedClickable(interactionSource = remember { MutableInteractionSource() }, indication = null,
                     onClick = {}, onLongClickLabel = "消息操作", onLongClick = { menu = true }) else Modifier)) {
-                if (message.turnState?.compact == true) TurnStateRow(message, onOpenProcess ?: {}, onResend, resendEnabled)
-                else CompositionLocalProvider(LocalMarkdownSelectionEnabled provides false) { content() }
+                if (message.turnState?.compact == true) CompactTurnRow(message, onOpenProcess ?: {}, onResend, resendEnabled)
+                else CompositionLocalProvider(LocalMarkdownSelectionEnabled provides false,
+                    LocalTurnResend provides onResend?.takeIf { message.turnState?.kind == TurnKind.Failed }?.let { TurnResend(it, resendEnabled) }) { content() }
+                // Inside the message box, so the popover anchors to this message rather than the list.
+                if (menu) {
+                    fun runAction(action: () -> Unit): () -> Unit = { menu = false; action() }
+                    val items = buildList {
+                        if (copyText.isNotEmpty()) add(MessageAction("复制", Icons.Outlined.ContentCopy, onClick = runAction(::copy)))
+                        if (reply != null) add(MessageAction(if (reply.senderId.startsWith("agent:")) "追问" else "引用", Icons.AutoMirrored.Outlined.Reply,
+                            onClick = runAction { onReply(reply) }))
+                        if (canStar) add(MessageAction(if (starred) "取消星标" else "星标", if (starred) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                            onClick = runAction { onToggleStar?.invoke(envelope, message.text) }))
+                        if (copyText.isNotEmpty()) add(MessageAction("选择文本", Icons.Outlined.Notes) { menu = false; selecting = true })
+                        if (onCreateTask != null) add(MessageAction("新建任务", Icons.Outlined.AddTask, enabled = writable && online,
+                            onClick = runAction { onCreateTask(envelope, turn) }))
+                        if (canOpenProcess) add(MessageAction("查看过程", Icons.Outlined.FormatListBulleted, onClick = runAction { onOpenProcess?.invoke(processId) }))
+                        if (actions.editTargetId.isNotEmpty()) add(MessageAction("编辑", Icons.Outlined.Edit, enabled = editingTargetId.isEmpty(),
+                            onClick = runAction { onEdit(actions.editTargetId) }))
+                        if (canStop) add(MessageAction("中断", Icons.Outlined.StopCircle, enabled = stopEnabled, onClick = runAction { onStop?.invoke(actions.stopTargetId) }))
+                    }
+                    val top = anchor[0]?.takeIf { it.isAttached }?.boundsInWindow()?.top ?: 0f
+                    MessageActionPopover(items, above = top > popoverRoom, onDismiss = { menu = false })
+                }
             }
         }
-        if (message.turnState?.kind == TurnKind.Failed && message.part != MessagePart.Request && onResend != null) {
-            TurnFailureActions(message, onResend, resendEnabled, onOpenProcess)
+        val alignment = if (message.self) Arrangement.End else Arrangement.Start
+        if (editingTargetId.isNotEmpty() && envelope.id == editingTargetId) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = alignment) {
+            Text("正在输入框中编辑", fontSize = 12.sp, color = ChatColors.Gray)
         }
-        if (editingTargetId.isNotEmpty() && envelope.id == editingTargetId) {
-            Text("正在输入框中编辑", Modifier.padding(horizontal = 16.dp, vertical = 2.dp), fontSize = 12.sp, color = AtollColors.LagoonText)
-        }
-        if (starred || copied.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (starred) Text("★ 已星标", fontSize = 12.sp, color = AtollColors.Warning)
-            if (copied.isNotEmpty()) Text(copied, fontSize = 12.sp, color = AtollColors.Muted)
-        }
-    }
-    if (menu) MessageActionsSheet(onDismiss = { menu = false }) {
-        fun runAction(action: () -> Unit) { menu = false; action() }
-        if (canOpenProcess) MessageActionRow("查看过程与相关调用", Icons.Outlined.FormatListBulleted,
-            detail = (message.trail?.records.orEmpty().size + message.relatedCalls.size + message.subTasks.size)
-                .takeIf { it > 0 }?.let { "$it 条" }.orEmpty()) { runAction { onOpenProcess?.invoke(processId) } }
-        if (reply != null) MessageActionRow(if (reply.senderId.startsWith("agent:")) "追问 ${reply.senderName}" else "回复 ${reply.senderName}",
-            Icons.AutoMirrored.Outlined.Reply) { runAction { onReply(reply) } }
-        if (onCreateTask != null) MessageActionRow("从这里新建任务", Icons.Outlined.AccountTree,
-            enabled = writable && online) { runAction { onCreateTask(envelope, turn) } }
-        if (copyText.isNotEmpty()) {
-            MessageActionRow("复制正文与结构化结果", Icons.Outlined.ContentCopy) { runAction(::copy) }
-            MessageActionRow("选择文本", Icons.Outlined.Notes) { menu = false; selecting = true }
-        }
-        if (canStar) MessageActionRow(if (starred) "取消星标" else "星标", Icons.Outlined.StarBorder) {
-            runAction { onToggleStar?.invoke(envelope, message.text) }
-        }
-        if (actions.editTargetId.isNotEmpty()) MessageActionRow("编辑", Icons.Outlined.Edit,
-            enabled = editingTargetId.isEmpty()) { runAction { onEdit(actions.editTargetId) } }
-        if (canStop) {
-            HorizontalDivider(Modifier.padding(horizontal = 14.dp, vertical = 6.dp), color = AtollColors.Line)
-            MessageActionRow("停止本轮", Icons.Outlined.Stop, enabled = stopEnabled, danger = true) {
-                runAction { onStop?.invoke(actions.stopTargetId) }
-            }
+        if (starred || copied.isNotEmpty()) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp, if (message.self) Alignment.End else Alignment.Start)) {
+            if (starred) Text("★ 已星标", fontSize = 12.sp, color = ChatColors.Gray)
+            if (copied.isNotEmpty()) Text(copied, fontSize = 12.sp, color = ChatColors.Gray)
         }
     }
     if (selecting) MessageTextSelectionSheet(copyText, onDismiss = { selecting = false })

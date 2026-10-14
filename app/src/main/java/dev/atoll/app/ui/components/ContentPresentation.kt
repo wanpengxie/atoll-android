@@ -6,6 +6,17 @@ fun estimateVisualLines(source: String, columns: Int): Int = source.lines().sumO
     val units = line.fold(0) { total, char -> total + if (char.code > 0x2ff) 2 else 1 }
     ceil(units.toDouble() / columns.coerceAtLeast(1)).toInt().coerceAtLeast(1)
 }.coerceAtLeast(1)
+/** The source with every fenced block cut to [max] lines, to size a body whose code folds on its own. */
+fun capFences(source: String, max: Int): String {
+    if ("```" !in source) return source
+    val out = StringBuilder(); var inFence = false; var count = 0
+    for (line in source.lines()) {
+        if (line.trimStart().startsWith("```")) { inFence = !inFence; count = 0; out.append(line).append('\n'); continue }
+        if (inFence && ++count > max + 1) continue
+        out.append(line).append('\n')
+    }
+    return out.toString()
+}
 fun shouldFoldBody(source: String, visualLines: Int, latest: Boolean) = !latest && (visualLines > 18 || source.length > 1200)
 fun boundedToolOutput(value: String): String {
     val bytes = value.toByteArray(Charsets.UTF_8)

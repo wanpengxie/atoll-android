@@ -50,11 +50,22 @@ class ConversationPresentationTest {
     @Test fun mineIsRelationAndIncludesMemberConversationsButNotOtherHumans() {
         val replica = ChannelReplica(CHANNEL)
         replica.add(row(1, "mine", type = "human.ask"), row(2, "call", parent = "mine", sender = AGENT, audience = listOf("tool:x:1"), type = "tool.run"), response(3, "call", "completed"), row(4, "other-person", type = "human.ask", sender = "human:other:1"), row(5, "member-root", sender = AGENT, audience = listOf("agent:other:1")), response(6, "member-root", "processing"), row(7, "operation", type = "system.member.list", sender = AGENT, audience = listOf("system:channel")))
-        assertEquals(listOf("mine", "member-root"), replica.timeline(options()).items.map { it.entry.id })
+        assertEquals(listOf("mine", "member-root"), replica.timeline(options()).items.map { it.entry }.filter { it.kind != "hidden" }.map { it.id })
         val related = ConversationPresentation.conversationRelation(replica.snapshot(), SELF)
         assertTrue(related(replica.turn("call").terminal!!))
         assertFalse(related(replica.turn("other-person").request))
         assertFalse(related(replica.turn("operation").request))
+    }
+    @Test fun runsLeftOutByMineBecomeOneCountedMarkerOnlyBesideVisibleEntries() {
+        val replica = ChannelReplica(CHANNEL)
+        replica.add(row(1, "mine", type = "human.ask"), row(2, "a", type = "human.ask", sender = "human:other:1"), row(3, "b", type = "human.ask", sender = "human:other:1"),
+            row(4, "mine-2", type = "human.ask"), row(5, "c", type = "human.ask", sender = "human:other:1"))
+        assertEquals(listOf("mine", "hidden×2", "mine-2", "hidden×1"), replica.timeline(options()).items.map {
+            if (it.entry.kind == "hidden") "hidden×${it.entry.hiddenCount}" else it.entry.id })
+        assertEquals(listOf("mine", "a", "b", "mine-2", "c"), replica.timeline(options(ConversationScope.ALL)).items.map { it.entry.id })
+        val onlyOthers = ChannelReplica(CHANNEL)
+        onlyOthers.add(row(1, "a", type = "human.ask", sender = "human:other:1"))
+        assertTrue(onlyOthers.timeline(options()).items.isEmpty())
     }
     @Test fun actorFilterAppliesToWholeThreadOnlyInMine() {
         val replica = ChannelReplica(CHANNEL)

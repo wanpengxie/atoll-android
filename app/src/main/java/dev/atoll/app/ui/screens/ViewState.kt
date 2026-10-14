@@ -30,7 +30,9 @@ data class MessageViewState(val id: String, val sender: String, val text: String
     val progress: String? = null, val recipient: String? = null, val latest: Boolean = false,
     val result: dev.atoll.app.ui.components.ResultViewState? = null, val trail: ProgressTrailViewState? = null, val subTasks: List<SubTaskViewState> = emptyList(),
     val attachments: List<MessageAttachmentViewState> = emptyList(), val relatedCalls: List<RelatedCallViewState> = emptyList(),
-    val part: MessagePart = MessagePart.Single, val turnState: TurnViewState? = null)
+    val part: MessagePart = MessagePart.Single, val turnState: TurnViewState? = null, val senderId: String = "",
+    /** The envelope this request replies to; [quote] is set only when that message is not the row right above. */
+    val replyTo: String = "", val quote: String? = null, val quoteKey: String = "")
 /** Where a message sits in its turn card: a request and its answer render as one card. */
 enum class MessagePart { Single, Request, Answer }
 @Immutable
@@ -41,6 +43,8 @@ sealed interface TimelineEntry {
     data class Day(override val key: String, val text: String) : TimelineEntry
     data class Notice(override val key: String, val text: String) : TimelineEntry
     data class ChannelActivity(override val key: String, val items: List<ChannelActivityItem>) : TimelineEntry
+    /** Entries 与我相关 left out here; tapping shows 全部. */
+    data class Filtered(override val key: String, val count: Int) : TimelineEntry
 }
 @Immutable
 data class TaskViewState(val id: String, val title: String, val kind: String, val assignee: String, val state: String)

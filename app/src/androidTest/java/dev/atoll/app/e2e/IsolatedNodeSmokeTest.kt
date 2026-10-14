@@ -178,7 +178,14 @@ class IsolatedNodeSmokeTest {
             if (private) actual?.length == value.length else actual == value
         }
     }
-    private fun menu(label: String) { waitFor(hasContentDescription("频道菜单") and hasClickAction()).performClick(); click(label) }
+    /** Everything that used to sit in tabs and the ··· menu lives on 聊天信息. */
+    private fun menu(label: String) { waitFor(hasContentDescription("聊天信息", substring = true) and hasClickAction()).performClick(); click(label) }
+    private fun backToConversation() = waitFor(hasContentDescription("返回对话") and hasClickAction()).performClick()
+    /** The waiting dock is a strip; its rows live in the sheet it opens. */
+    private fun openWaiting() {
+        if (nodes(SemanticsMatcher("waiting rows") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("atoll.waiting.") == true }).isEmpty())
+            waitFor(hasContentDescription("展开等待区", substring = true) and hasClickAction()).performClick()
+    }
     private fun services(): WorkspaceServices = graph.services.value?.also { check(it.server == TEST_URL) { "Session origin is not the isolated node" } }
         ?: error("Authenticated services unavailable")
     private fun send(text: String) {
@@ -208,8 +215,8 @@ class IsolatedNodeSmokeTest {
     private fun waitingRow(text: String): SemanticsMatcher = SemanticsMatcher("waiting row") {
         it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("atoll.waiting.") == true
     } and hasAnyDescendant(hasText(text, substring = true))
-    private fun waitingAction(marker: String, action: String) = waitFor(
-        hasText(action) and hasClickAction() and isEnabled() and hasAnyAncestor(waitingRow(marker))).performClick()
+    private fun waitingAction(marker: String, action: String) { openWaiting(); waitFor(
+        hasText(action) and hasClickAction() and isEnabled() and hasAnyAncestor(waitingRow(marker))).performClick() }
     private fun answer(value: String) = waitFor(hasText(value), timeout = 180_000, unmerged = true).assertExists()
 
     private fun capture(name: String) {
@@ -296,7 +303,7 @@ class IsolatedNodeSmokeTest {
             sendRunning("Run the shell command sleep 60, then reply only ${marker}_SLOW. Do not change files.")
             send("Ignore this extra isolated test instruction; keep your current reply. ${marker}_Q2")
             send("Discard this isolated UI test request. ${marker}_Q3")
-            waitFor(waitingRow("${marker}_Q2")); waitFor(waitingRow("${marker}_Q3"))
+            openWaiting(); waitFor(waitingRow("${marker}_Q2")); waitFor(waitingRow("${marker}_Q3"))
         }
         step("waiting-cancel") {
             waitingAction("${marker}_Q3", "取消")
@@ -311,7 +318,7 @@ class IsolatedNodeSmokeTest {
             if (nodes(continueEditing).isNotEmpty()) click("继续编辑")
             waitFor(submitEditing)
             waitFor(editor).performTextReplacement("Ignore this extra isolated test instruction; keep your current reply. ${marker}_EDITED")
-            click("提交编辑"); waitFor(hasText("编辑已提交")); waitFor(waitingRow("${marker}_EDITED"))
+            click("提交编辑"); waitFor(hasText("编辑已提交")); openWaiting(); waitFor(waitingRow("${marker}_EDITED"))
         }
         step("waiting-insert") {
             waitingAction("${marker}_EDITED", "插入")
@@ -327,7 +334,7 @@ class IsolatedNodeSmokeTest {
                 fixture = repo.upload(device, "", filename, emptyList(), { ByteArrayInputStream(bytes) }, bytes.size.toLong(), "text/plain")
                 fixtureRepository = repo
             } }
-            click("文件"); waitFor(hasContentDescription("文件设备与操作"))
+            menu("文件"); waitFor(hasContentDescription("文件设备与操作"))
             // Scroll only the vertical lazy file list, not any horizontal toolbar.
             val list = hasScrollToIndexAction()
             waitFor(list)
@@ -343,7 +350,7 @@ class IsolatedNodeSmokeTest {
             click("关闭文件")
         }
         step("terminal-ls") {
-            menu("打开终端"); waitFor(hasText("已连接"))
+            menu("终端"); waitFor(hasText("已连接"))
             val s = services(); val pty = s.pty ?: error("PTY service unavailable")
             val transcript = StringBuffer()
             runBlocking { withTimeout(40_000) {
@@ -355,11 +362,11 @@ class IsolatedNodeSmokeTest {
                     File(output, "terminal-output.txt").writeText(config.redact(transcript.toString()))
                 } finally { stream.detach() }
             } }
-            menu("关闭终端")
+            backToConversation()
         }
-        step("tasks") { click("任务"); waitFor(SemanticsMatcher("work item count") { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("工作项 ") } }); click("动态") }
-        step("members") { click("成员"); waitFor(hasContentDescription("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("动态") }
-        step("channel-details") { menu("频道详情"); waitFor(hasText("危险操作")); click("关闭") }
+        step("tasks") { menu("任务"); waitFor(SemanticsMatcher("work item count") { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("工作项 ") } }); backToConversation() }
+        step("members") { menu("添加"); waitFor(hasContentDescription("刷新名册")); waitFor(hasText("test-codex", substring = true)); backToConversation() }
+        step("channel-details") { menu("频道名称"); waitFor(hasText("危险操作")); click("关闭") }
         step("create-child") {
             val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
             val qualifiedName = "$parentName.$child"
@@ -373,7 +380,7 @@ class IsolatedNodeSmokeTest {
             val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
             check(retiredId != config.channel && graph.state.value.navigation.channels.first { it.id == retiredId }.name == "$parentName.$child")
             val s = services()
-            menu("频道详情"); click("危险操作")
+            menu("频道名称"); click("危险操作")
             val field = waitFor(hasSetTextAction() and SemanticsMatcher("retire confirmation") {
                 it.config.getOrNull(SemanticsProperties.Text).orEmpty().any { text -> text.text.startsWith("输入 ") && text.text.endsWith(" 确认") }
             })

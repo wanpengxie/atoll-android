@@ -43,14 +43,13 @@ class RosterTabUiTest {
                 membersOpen = members, memberCount = count, onRefreshMembers = refresh)
         }
     }
-    @Test fun rosterIsFourthTabWithChannelHeaderRefreshAndAddEntry() {
+    @Test fun rosterOpensUnderASectionHeaderWithRefreshAndAddEntry() {
         var refreshed = 0
         var selected = ""
         var added = 0
         compose.setContent { Frame(refresh = { refreshed++ }) { RosterContent(state(), onSelect = { selected = it.id }, onAdd = { added++ }) } }
-        compose.onNodeWithText("atoll-web").assertIsDisplayed()
-        for (label in listOf("动态", "任务", "文件", "成员")) compose.onNode(hasText(label) and hasClickAction()).assertIsDisplayed()
-        compose.onNode(hasText("成员") and hasClickAction()).assertIsSelected()
+        compose.onNodeWithText("成员").assertIsDisplayed()
+        compose.onNodeWithContentDescription("返回对话").assertIsDisplayed()
         compose.onNodeWithText("Agent 与工具 · 4").assertIsDisplayed()
         compose.onNodeWithText("人 · 2").assertIsDisplayed()
         compose.onNodeWithText("你 · 我").assertIsDisplayed()
@@ -61,17 +60,18 @@ class RosterTabUiTest {
         compose.onNodeWithText("关闭").assertDoesNotExist()
         screenshot("members-tab")
     }
-    @Test fun membersCanReturnToActivityUsingTheSameTabs() {
+    @Test fun membersReturnToTheConversationAndReopenFromChatInfo() {
         var members by mutableStateOf(true)
         compose.setContent { Frame(members, onTab = { members = false }, onMenu = { if (it == ChannelMenuAction.Item.Members) members = true }) {
             if (members) RosterContent(state(), onSelect = {}, onAdd = {}) else Text("动态内容")
         } }
-        compose.onNode(hasText("动态") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("返回对话").performClick()
         compose.onNodeWithText("动态内容").assertIsDisplayed()
         compose.onNodeWithContentDescription("频道成员列表").assertDoesNotExist()
-        compose.onNode(hasText("成员") and hasClickAction()).performClick()
+        compose.onNodeWithContentDescription("聊天信息", substring = true).performClick()
+        compose.onNodeWithText("添加").performClick()
         compose.onNodeWithText("builder").assertIsDisplayed()
-        compose.onNode(hasText("成员") and hasClickAction()).assertIsSelected()
+        compose.onNodeWithText("成员").assertIsDisplayed()
     }
     @Test fun readonlyRosterPreservesMemberNavigationAndDisablesAdd() {
         var selected = ""

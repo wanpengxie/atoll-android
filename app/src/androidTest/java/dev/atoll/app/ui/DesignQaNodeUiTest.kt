@@ -68,12 +68,12 @@ class DesignQaNodeUiTest {
         compose.onNode(hasText("频道") and hasClickAction()).performClick()
         compose.runOnIdle { graph.openChannel(channel) }
         compose.waitUntil(30_000) { graph.state.value.route?.channel == channel && graph.state.value.timelineSource?.timeline?.isNotEmpty() == true }
-        compose.onNodeWithText("动态", useUnmergedTree = true).assertIsDisplayed(); screenshot("Main")
+        compose.onNodeWithContentDescription("聊天信息", substring = true).assertIsDisplayed(); screenshot("Main")
         compose.runOnIdle { graph.files(true) }
         compose.waitUntil(20_000) { compose.onAllNodesWithText("上传").fetchSemanticsNodes().isNotEmpty() }
         screenshot("Files")
         compose.runOnIdle { graph.files(false); graph.panel(WorkspacePanel.Members) }
-        compose.waitUntil(20_000) { compose.onAllNodesWithText("刷新名册").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(20_000) { compose.onAllNodesWithContentDescription("刷新名册").fetchSemanticsNodes().isNotEmpty() }
         screenshot("Members")
         compose.runOnIdle { graph.closeFocus(); graph.home() }
         compose.waitUntil(20_000) { graph.state.value.route == null && graph.state.value.globalPanel == null }

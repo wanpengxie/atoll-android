@@ -14,6 +14,8 @@ import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.theme.AtollTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,28 +37,25 @@ class CollaborationActivityUiTest {
         } }
     }
 
-    @Test fun collaborationNavigatesByPathAndSwipeAndKeepsAPendingQuestionActionable() {
+    @Test fun collaborationReadsAsAChatWithQuotesAndKeepsAPendingQuestionActionable() {
         val state = CollaborationViewState(call("root", "修顶栏和登录键盘遮挡", "我", "builder"), listOf(
             call("review", "审查键盘布局", "builder", "reviewer", "root"),
             call("test", "起草测试", "reviewer", "test-writer", "review"),
             call("question", "要覆盖横屏吗", "reviewer", "我", "review", "human.ask", MessageStatus.Processing)), "builder")
         var opened = ""
-        compose.setContent { Fixture { CollaborationContent(state, initialRequestId = "review", onOpenRequest = { opened = it }) } }
-        compose.onNodeWithContentDescription("线程路径").assertExists()
-        screenshot("collaboration-reviewer")
-        compose.onNodeWithContentDescription("进入协作 起草测试").performClick()
-        compose.onNodeWithText("test-writer").assertExists()
-        screenshot("collaboration-deep-path")
-        compose.onRoot().performTouchInput { swipeLeft() }
-        compose.onNodeWithContentDescription("进入协作 要覆盖横屏吗").performClick()
-        compose.onNodeWithText("回原位置处理").performClick()
-        compose.runOnIdle { assertEquals("question", opened) }
-        screenshot("collaboration-question")
-        compose.onNodeWithText("builder").performClick()
-        compose.onNodeWithContentDescription("进入协作 审查键盘布局").assertExists()
+        val processed = mutableListOf<String>()
+        compose.setContent { Fixture { CollaborationContent(state, onOpenRequest = { opened = it }, onProcess = { processed += it }) } }
+        // Depth-first: each callee's block, then a grey quote of who asked what.
+        compose.onNodeWithText("builder：审查键盘布局").assertExists()
+        compose.onNodeWithText("reviewer：起草测试").assertExists()
+        compose.onNodeWithText("协作 3 · 最深 2 层", substring = true).assertExists()
+        screenshot("collaboration-chat")
+        compose.onNodeWithText("已完成 · 下级 2 ›").performClick()
+        compose.onNodeWithText("待处理 · 回原位置处理 ›").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals("question", opened); assertEquals(listOf("review"), processed) }
     }
 
-    @Test fun activityGroupsExpandAndOnlyAllOffersThePersistedPreferenceControl() {
+    @Test fun activityGroupsExpandAndTheDisplayPageOwnsScopeAndActivity() {
         val group = TimelineEntry.ChannelActivity("activity-one", listOf(
             ChannelActivityItem("joined", 1, "reviewer 已加入频道", "16:02"),
             ChannelActivityItem("build", 2, "开始构建成员 release-bot（第 2 次尝试）", "16:03"),
@@ -67,18 +66,21 @@ class CollaborationActivityUiTest {
             onBack = {}, onTab = {}, onScope = { state.value = state.value.copy(mineOnly = !state.value.mineOnly) },
             onActor = {}, onText = {}, onSend = {}, onOlder = {}, composerVisible = false,
             onChannelActivity = { show -> state.value = state.value.copy(showChannelActivity = show, entries = if (show) listOf(group) else emptyList()) }) } }
-        compose.onNodeWithContentDescription("频道活动").assertIsOn()
         compose.onNodeWithContentDescription("展开 3 条频道活动").performClick()
         compose.onNodeWithText("reviewer 已加入频道 · 16:02").assertIsDisplayed()
         compose.onNodeWithText("成员 release-bot 构建失败（第 2 次尝试，已停止） · 16:05").assertIsDisplayed()
         screenshot("activity-expanded-all")
         compose.onNodeWithContentDescription("收起 3 条频道活动").performClick()
         compose.onNodeWithText("reviewer 已加入频道 · 16:02").assertDoesNotExist()
-        compose.onNodeWithContentDescription("频道活动").performClick().assertIsOff()
-        compose.onNodeWithContentDescription("展开 3 条频道活动").assertDoesNotExist()
-        screenshot("activity-disabled-all")
+        compose.onNodeWithContentDescription("聊天信息", substring = true).performClick()
+        compose.onNodeWithText("消息显示").performClick()
+        compose.onNodeWithContentDescription("频道活动").assertIsOn().performClick().assertIsOff()
+        screenshot("display-settings")
         compose.onNodeWithText("与我相关").performClick()
-        compose.onNodeWithContentDescription("频道活动").assertDoesNotExist()
+        compose.runOnIdle { assertTrue(state.value.mineOnly); assertFalse(state.value.showChannelActivity) }
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNodeWithContentDescription("展开 3 条频道活动").assertDoesNotExist()
     }
 
     private fun screenshot(name: String) {

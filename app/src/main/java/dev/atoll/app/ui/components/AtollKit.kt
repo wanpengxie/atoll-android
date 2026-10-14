@@ -34,11 +34,11 @@ import dev.atoll.app.ui.theme.AtollShapes
 /** Shape tells agents (rounded square) from people (circle); colour alone never does. */
 @Composable
 fun ActorAvatar(name: String, id: String = name, agent: Boolean, size: Dp = 32.dp, self: Boolean = false, modifier: Modifier = Modifier) {
-    val tint = if (self) AtollAvatarTints.Self else AtollAvatarTints.of(id.ifEmpty { name })
+    val tint = AtollAvatarTints.of(id.ifEmpty { name })
     val label = if (self) "我" else name.trim().removePrefix("agent:").removePrefix("human:").take(1).uppercase().ifEmpty { "?" }
-    Box(modifier.size(size).clip(if (agent) RoundedCornerShape(size * 0.28f) else CircleShape).background(tint.background),
+    Box(modifier.size(size).clip(if (agent) RoundedCornerShape(maxOf(3f, size.value / 6).dp) else CircleShape).background(tint.background),
         contentAlignment = Alignment.Center) {
-        Text(label, color = tint.content, fontSize = (size.value * 0.42f).sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+        Text(label, color = tint.content, fontSize = maxOf(10f, size.value * 0.52f).sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
     }
 }
 

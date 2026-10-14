@@ -86,6 +86,8 @@ class TimelinePresentation {
             val subset = object : TimelineSource by state { override val timeline = listOf(entry) }
             val selected = ConversationPresentation.selectTimelineItems(subset, options.copy(localEchoes = emptyList()), facts)
             val index = indexes[entry.id]
+            // An entry 与我相关 still leaves out comes back as a marker; nothing visible changed.
+            if (index == null && selected.singleOrNull()?.kind == "hidden") continue
             if (index == null && selected.isNotEmpty() || index != null && (selected.size != 1 || selected.first().id != entry.id)) return null
             (listOf(entry) + entry.thread).mapNotNull { it.turn }.forEach { changedTurns[it.requestId] = it }
             if (index == null) continue

@@ -19,7 +19,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.screens.*
-import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 import dev.atoll.app.ui.theme.AtollMono
 
 /**
@@ -39,14 +39,14 @@ fun RelatedCalls(messageId: String, calls: List<RelatedCallViewState>, onLink: (
         Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(10.dp)).clickable { expanded = !expanded }
             .semantics { stateDescription = if (expanded) "已展开" else "已折叠" }.padding(vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("${ordinary.size} 次关联调用", fontSize = 13.sp, color = AtollColors.Body)
+            Text("${ordinary.size} 次关联调用", fontSize = 13.sp, color = ChatColors.Body)
             when {
-                running > 0 -> StatusPill("$running 处理中", Tone.Running, live = true)
-                failed > 0 -> StatusPill("$failed 失败", Tone.Danger)
-                else -> Text("已完成", fontSize = 12.sp, color = AtollColors.Muted)
+                running > 0 -> Text("$running 处理中", fontSize = 12.sp, color = ChatColors.Gray)
+                failed > 0 -> Text("$failed 失败", fontSize = 12.sp, color = ChatColors.Red)
+                else -> Text("已完成", fontSize = 12.sp, color = ChatColors.Gray)
             }
             Spacer(Modifier.weight(1f))
-            Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = AtollColors.Muted)
+            Text(if (expanded) "收起" else "展开", fontSize = 12.sp, color = ChatColors.Gray)
         }
         // Closed calls do not compose or measure any result, Markdown or progress widgets.
         if (expanded) CallList(messageId, ordinary, false, onLink, onAttachment, onProcess)
@@ -56,12 +56,12 @@ fun RelatedCalls(messageId: String, calls: List<RelatedCallViewState>, onLink: (
 @Composable
 private fun CallList(messageId: String, calls: List<RelatedCallViewState>, conversation: Boolean,
     onLink: ((String) -> Unit)?, onAttachment: MessageAttachmentHandler?, onProcess: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(AtollColors.Surface)
-        .border(1.dp, AtollColors.Line, RoundedCornerShape(12.dp)).semantics {
+    Column(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp)).background(ChatColors.Block)
+        .border(1.dp, ChatColors.LineInWhite, RoundedCornerShape(12.dp)).semantics {
             contentDescription = if (conversation) "Agent 协作消息" else "关联调用"
         }) {
         calls.forEachIndexed { index, call -> key(call.id) {
-            if (index > 0) HorizontalDivider(color = AtollColors.LineSoft)
+            if (index > 0) HorizontalDivider(color = ChatColors.LineInWhite)
             Box(Modifier.fillMaxWidth().padding(start = if (call.depth > 1) 12.dp else 0.dp)) {
                 CallLeaf(messageId, call, onLink, onAttachment, onProcess)
             }
@@ -84,28 +84,28 @@ internal fun CallLeaf(messageId: String, call: RelatedCallViewState, onLink: ((S
                 Text(if (call.conversation) "${call.sender} › $recipients" else call.title, Modifier.weight(1f),
                     fontSize = if (call.conversation) 13.sp else 12.sp, fontWeight = if (call.conversation) FontWeight.SemiBold else FontWeight.Normal,
                     fontFamily = if (call.conversation) null else AtollMono,
-                    color = if (call.status == MessageStatus.Failed) AtollColors.Danger else AtollColors.Ink,
+                    color = if (call.status == MessageStatus.Failed) ChatColors.Red else ChatColors.Ink,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 CallStatus(call.status)
             }
-            if (!call.conversation) Text("${call.sender} → $recipients · ${call.time}", fontSize = 11.sp, color = AtollColors.Muted,
+            if (!call.conversation) Text("${call.sender} → $recipients · ${call.time}", fontSize = 11.sp, color = ChatColors.Gray,
                 maxLines = 1, overflow = TextOverflow.Ellipsis)
-            if (call.conversation && !expanded) Text(call.title, fontSize = 13.sp, lineHeight = 19.sp, color = AtollColors.Body,
+            if (call.conversation && !expanded) Text(call.title, fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.Body,
                 maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
         if (expanded) Column(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (call.conversation && call.request.isNotEmpty()) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(AtollColors.Ground)
+            if (call.conversation && call.request.isNotEmpty()) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(ChatColors.Ground)
                 .padding(10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(Modifier.width(2.dp).heightIn(min = 18.dp).background(AtollColors.ControlLine))
+                Box(Modifier.width(2.dp).heightIn(min = 18.dp).background(ChatColors.Line))
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("回复 ${call.sender} · ${call.time}", fontSize = 11.sp, color = AtollColors.Muted)
+                    Text("回复 ${call.sender} · ${call.time}", fontSize = 11.sp, color = ChatColors.Gray)
                     Markdown("$messageId:${call.id}:request", call.request, onLink = onLink)
                 }
             }
             if (call.text.isNotEmpty()) FoldableMarkdown("$messageId:${call.id}:response", call.text, onLink = onLink)
             call.result?.let { StructuredResult(it) }
             if (!call.conversation && call.text.isEmpty() && call.result == null && call.status != MessageStatus.Completed)
-                Text("还没有终态。", fontSize = 12.sp, color = AtollColors.Muted)
+                Text("还没有终态。", fontSize = 12.sp, color = ChatColors.Gray)
             if (call.attachments.isNotEmpty()) MessageAttachments(call.attachments, onLink, onAttachment)
             call.trail?.let { ProgressTrail(it) { onProcess(call.id) } }
             if (call.conversation && call.subTasks.isNotEmpty()) SubTaskTree(call.subTasks, onOpen = onProcess)
@@ -116,9 +116,9 @@ internal fun CallLeaf(messageId: String, call: RelatedCallViewState, onLink: ((S
 @Composable
 private fun CallStatus(status: MessageStatus) {
     when (status) {
-        MessageStatus.Processing -> PulseDot()
-        MessageStatus.Queued -> Text(status.label, fontSize = 11.sp, color = AtollColors.Warning)
-        MessageStatus.Failed -> Text(status.label, fontSize = 11.sp, color = AtollColors.Danger)
-        MessageStatus.Completed -> Text(status.label, fontSize = 11.sp, color = AtollColors.Muted)
+        MessageStatus.Processing -> ChatSpinner()
+        MessageStatus.Queued -> Text(status.label, fontSize = 11.sp, color = ChatColors.Gray)
+        MessageStatus.Failed -> Text(status.label, fontSize = 11.sp, color = ChatColors.Red)
+        MessageStatus.Completed -> Text(status.label, fontSize = 11.sp, color = ChatColors.Gray)
     }
 }

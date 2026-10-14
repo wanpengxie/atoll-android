@@ -15,7 +15,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.atoll.app.ui.screens.*
-import dev.atoll.app.ui.theme.AtollColors
+import dev.atoll.app.ui.theme.ChatColors
 import java.util.Locale
 
 internal fun attachmentName(value: MessageAttachmentViewState) = value.name.ifBlank { value.resourceId.ifBlank { "附件" } }
@@ -44,27 +44,27 @@ fun MessageAttachments(values: List<MessageAttachmentViewState>, onLink: ((Strin
         values.forEach { attachment ->
             val name = attachmentName(attachment)
             val type = attachmentType(attachment.mime)
-            Surface(shape = RoundedCornerShape(12.dp), color = AtollColors.Surface,
-                border = BorderStroke(1.dp, AtollColors.Line)) {
+            Surface(shape = RoundedCornerShape(12.dp), color = ChatColors.Block,
+                border = BorderStroke(1.dp, ChatColors.LineInWhite)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Surface(onClick = {
                         if (onAttachment != null) onAttachment(attachment, MessageAttachmentAction.Preview)
                         else onLink?.invoke(attachment.uri)
                     }, enabled = onAttachment != null || (onLink != null && attachment.uri.isNotBlank()),
-                        color = AtollColors.Surface, modifier = Modifier.weight(1f)) {
+                        color = ChatColors.Block, modifier = Modifier.weight(1f)) {
                         Row(Modifier.heightIn(min = 48.dp).padding(horizontal = 10.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Surface(Modifier.size(32.dp), shape = RoundedCornerShape(8.dp), color = AtollColors.Subtle) {
-                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Description, null, Modifier.size(17.dp), tint = AtollColors.Muted) }
+                            Surface(Modifier.size(32.dp), shape = RoundedCornerShape(8.dp), color = ChatColors.Bar) {
+                                Box(contentAlignment = Alignment.Center) { Icon(Icons.Outlined.Description, null, Modifier.size(17.dp), tint = ChatColors.Gray) }
                             }
                             Column(Modifier.weight(1f)) {
                                 Text(name, fontSize = 14.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(listOfNotNull(type, attachmentSize(attachment.size)).joinToString(" · "), fontSize = 12.sp, color = AtollColors.Muted)
+                                Text(listOfNotNull(type, attachmentSize(attachment.size)).joinToString(" · "), fontSize = 12.sp, color = ChatColors.Gray)
                             }
                         }
                     }
                     if (onAttachment != null) IconButton({ onAttachment(attachment, MessageAttachmentAction.Download) }, Modifier.size(44.dp)) {
-                        Icon(Icons.Outlined.Download, "下载 $name", Modifier.size(18.dp), tint = AtollColors.Muted)
+                        Icon(Icons.Outlined.Download, "下载 $name", Modifier.size(18.dp), tint = ChatColors.Gray)
                     }
                 }
             }

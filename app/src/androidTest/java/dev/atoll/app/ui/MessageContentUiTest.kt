@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,7 +48,7 @@ class MessageContentUiTest {
         }
     }
 
-    @Test fun bothDirectionsShowResultsTrailsSubTasksAndAttachments() {
+    @Test fun bothDirectionsShowResultsAndAttachmentsAndOthersAlsoTheirWork() {
         val self = mutableStateOf(true)
         val message = MessageViewState("message", "root", "", "12:00",
             result = ResultViewState(value = JsonPrimitive("accepted"), title = "审批回执"),
@@ -58,15 +59,15 @@ class MessageContentUiTest {
         for (direction in listOf(true, false)) {
             compose.runOnIdle { self.value = direction }
             compose.onNodeWithText("审批回执").assertIsDisplayed()
-            compose.onNodeWithText("过程 1 ›").assertIsDisplayed()
-            compose.onNodeWithText("处理完成").assertIsDisplayed()
-            compose.onNodeWithText("子 Agent 1").performClick()
-            compose.onNodeWithText("worker · 核对文件").assertIsDisplayed()
             compose.onNodeWithText("报告.pdf").assertIsDisplayed()
             compose.onNodeWithText("PDF · 2.0 KB").assertIsDisplayed()
+            if (direction) compose.onNodeWithText("核对文件").assertDoesNotExist()
+            else {
+                compose.onNodeWithText("调用了 1 个工具 ›").assertIsDisplayed()
+                compose.onNodeWithText("子任务 1/1").assertIsDisplayed()
+                compose.onNodeWithText("核对文件").assertIsDisplayed()
+            }
             screenshot(if (direction) "message-self" else "message-other")
-            // Fold previews before switching direction; closed rich details stay out of composition.
-            compose.onNodeWithText("收起").performClick()
         }
     }
 
@@ -176,42 +177,53 @@ class MessageContentUiTest {
         compose.onNodeWithText("加载更早消息").assertIsDisplayed()
     }
 
-    @Test fun allFourChannelTabsAreVisibleAndDispatchTheirDestinations() {
+    @Test fun chatInfoReplacesTheTabsAndDispatchesTheirDestinations() {
         val destinations = mutableListOf<ChannelMenuAction>()
         val tabs = mutableListOf<ChannelTab>()
         compose.setContent {
-            AtollTheme { ChannelScreen(ConversationViewState(ChannelViewState("c", "channel")), ComposerViewState(), ChannelTab.Conversation,
+            AtollTheme { ChannelScreen(ConversationViewState(ChannelViewState("c", "channel"), tasks = listOf(TaskViewState("t", "任务一", "审批", "worker", "待处理"))),
+                ComposerViewState(), ChannelTab.Conversation,
                 onBack = {}, onTab = { tabs += it }, onScope = {}, onActor = {}, onText = {}, onSend = {}, onOlder = {},
                 onMenu = { destinations += it }, composerVisible = false) }
         }
-        val labels = listOf("动态", "任务", "文件", "成员")
-        val bounds = labels.map { label ->
-            compose.onNode(hasText(label) and hasClickAction()).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        }
-        bounds.forEach { assertTrue(it.width > 0f) }
-        bounds.zipWithNext().forEach { (left, right) -> assertTrue(left.right <= right.left) }
-        compose.onNode(hasText("任务") and hasClickAction()).performClick()
-        compose.onNode(hasText("文件") and hasClickAction()).performClick()
-        compose.onNode(hasText("成员") and hasClickAction()).performClick()
+        for (label in listOf("动态", "文件", "成员")) compose.onNode(hasText(label) and hasClickAction()).assertDoesNotExist()
+        val header = compose.onNodeWithContentDescription("聊天信息，1 个待处理任务").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        assertTrue(header.height >= 44f)
+        fun open(label: String) { compose.onNodeWithContentDescription("聊天信息", substring = true).performClick(); compose.onNodeWithText(label).performClick() }
+        compose.onNodeWithContentDescription("聊天信息", substring = true).performClick()
+        compose.onNodeWithText("1 个待处理").assertIsDisplayed()
+        screenshot("chat-info")
+        compose.onNodeWithText("任务").performClick()
+        open("文件"); open("终端"); open("星标消息"); open("定时动作"); open("添加")
         compose.runOnIdle {
             assertEquals(listOf(ChannelTab.Tasks), tabs)
-            assertEquals(listOf(ChannelMenuAction.Item.OpenFiles, ChannelMenuAction.Item.Members), destinations)
+            assertEquals(listOf(ChannelMenuAction.Item.OpenFiles, ChannelMenuAction.Item.OpenTerminal, ChannelMenuAction.Item.Stars,
+                ChannelMenuAction.Item.Timers, ChannelMenuAction.Item.Members), destinations)
         }
-        screenshot("channel-tabs")
     }
 
-    @Test fun identityPendingHidesScopeActorsAndStaleFilters() {
-        val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "c0.android-test"),
-            agents = listOf(AgentViewState("worker", "worker")), actorFilters = setOf("stale"),
-            hasOlder = false, identityReady = false))
-        compose.setContent { TestChannel(state.value) }
-        compose.onNodeWithText("与我相关").assertDoesNotExist()
-        compose.onNodeWithText("worker").assertDoesNotExist()
-        compose.onNodeWithText("已失效 · stale").assertDoesNotExist()
-        compose.runOnIdle { state.value = state.value.copy(identityReady = true) }
-        compose.onNodeWithText("与我相关").assertIsDisplayed()
-        compose.onNodeWithText("worker").assertIsDisplayed()
-        compose.onNodeWithText("已失效 · stale").assertIsDisplayed()
+    @Test fun headerShowsTheCurrentAgentAndChipsSwitchOrFilter() {
+        val selected = mutableListOf<String>()
+        val filtered = mutableListOf<String>()
+        val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "atoll-web"),
+            agents = listOf(AgentViewState("agent:builder", "builder", active = true), AgentViewState("agent:reviewer", "reviewer")),
+            actorFilters = setOf("stale"), hasOlder = false))
+        compose.setContent { AtollTheme { ChannelScreen(state.value, ComposerViewState(), ChannelTab.Conversation,
+            onBack = {}, onTab = {}, onScope = {}, onActor = { filtered += it }, onText = {}, onSend = {}, onOlder = {}, composerVisible = false,
+            currentAgentId = "agent:builder", onSelectAgent = { selected += it }) } }
+        compose.onNodeWithContentDescription("atoll-web，2 个 Agent，正在和 builder 对话", substring = true).assertIsDisplayed().performClick()
+        compose.onNodeWithText("绿点 = 运行中 · 点选切换对话 · 长按只看 TA 的消息").assertIsDisplayed()
+        compose.onNodeWithText("已失效 · stale · 只看").assertIsDisplayed()
+        screenshot("agent-chips")
+        compose.onNodeWithText("reviewer").performClick()
+        compose.onNodeWithText("绿点 = 运行中 · 点选切换对话 · 长按只看 TA 的消息").assertDoesNotExist()
+        compose.onNodeWithContentDescription("atoll-web", substring = true).performClick()
+        compose.onAllNodesWithText("builder").onLast().performTouchInput { longClick() }
+        compose.runOnIdle {
+            assertEquals(listOf("agent:reviewer"), selected); assertEquals(listOf("agent:builder"), filtered)
+            state.value = state.value.copy(actorFilters = setOf("agent:builder"))
+        }
+        compose.onNodeWithText("· 只看 builder").assertIsDisplayed()
     }
 
     @Test fun processActionsAppearUnderTheHeaderAndCanBeOmitted() {
@@ -222,7 +234,7 @@ class MessageContentUiTest {
         } }
         compose.onNodeWithText("面板操作").assertIsDisplayed()
         assertTrue(compose.onNodeWithText("面板操作").fetchSemanticsNode().boundsInRoot.top >=
-            compose.onNodeWithText("请求 · 过程").fetchSemanticsNode().boundsInRoot.bottom)
+            compose.onNodeWithText("请求").fetchSemanticsNode().boundsInRoot.bottom)
         screenshot("process-actions")
         compose.runOnIdle { visible.value = false }
         compose.onNodeWithText("面板操作").assertDoesNotExist()
@@ -277,48 +289,40 @@ class MessageContentUiTest {
         compose.onNodeWithText("协作响应").assertExists()
     }
 
-    @Test fun selfContinuationReplacesHeaderAndAvatarButPreservesContentAlignment() {
-        // Own messages sit on the left like everyone else's: the "我" avatar and name, then the recipient.
+    @Test fun mineIsARightAlignedBubbleWithoutNameOrAvatar() {
         val continuation = mutableStateOf(false)
-        val result = ResultViewState(errorCode = "forbidden", detail = "连续消息结果")
-        val message = MessageViewState("continuation", "root", "", "12:01", self = true, recipient = "worker",
-            result = result, attachments = listOf(attachment))
+        val message = MessageViewState("continuation", "root", "好，reviewer 先过一遍顶栏", "12:01", self = true, recipient = "worker")
         compose.setContent { TestContent { MessageFrame(message.copy(continuation = continuation.value)) } }
-        compose.onAllNodesWithText("我").assertCountEquals(2)
-        compose.onNodeWithText("→ worker").assertIsDisplayed()
-        val before = compose.onNodeWithText("连续消息结果").fetchSemanticsNode().boundsInRoot
-        compose.runOnIdle { continuation.value = true }
         compose.onAllNodesWithText("我").assertCountEquals(0)
         compose.onNodeWithText("→ worker").assertDoesNotExist()
-        val time = compose.onNodeWithContentDescription("root，12:01").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        val after = compose.onNodeWithText("连续消息结果").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        assertEquals(before.left, after.left, 1f)
+        val root = compose.onAllNodes(isRoot()).onLast().fetchSemanticsNode().boundsInRoot
+        val before = compose.onNodeWithText("好，reviewer 先过一遍顶栏").fetchSemanticsNode().boundsInRoot
+        assertTrue(root.right - before.right < with(compose.density) { 30.dp.toPx() })
+        assertTrue(before.left > root.width / 4)
+        compose.runOnIdle { continuation.value = true }
+        val after = compose.onNodeWithText("好，reviewer 先过一遍顶栏").fetchSemanticsNode().boundsInRoot
         assertEquals(before.right, after.right, 1f)
         assertTrue(after.top < before.top)
-        assertTrue(time.right < after.left)
-        compose.onNodeWithText("报告.pdf").assertIsDisplayed()
-        screenshot("self-continuation")
+        screenshot("self-bubble")
     }
 
-    @Test fun incomingContinuationKeepsTimeInTheLeftGutterAndHidesIdentity() {
+    @Test fun incomingShowsANameLineOnlyWhenTheSpeakerChanges() {
         val continuation = mutableStateOf(false)
-        val message = MessageViewState("incoming", "worker", "", "12:02", agent = true, recipient = "root",
+        val message = MessageViewState("incoming", "worker", "", "12:02", agent = true, recipient = "root", senderId = "agent:worker",
             result = ResultViewState(errorCode = "forbidden", detail = "连续回复结果"))
         compose.setContent { TestContent { MessageFrame(message.copy(continuation = continuation.value)) } }
         compose.onNodeWithText("worker").assertIsDisplayed()
-        compose.onNodeWithText("Agent").assertIsDisplayed()
+        compose.onNodeWithText("12:02").assertIsDisplayed()
         compose.onNodeWithText("W").assertIsDisplayed()
+        compose.onNodeWithText("Agent").assertDoesNotExist()
         val before = compose.onNodeWithText("连续回复结果").fetchSemanticsNode().boundsInRoot
         compose.runOnIdle { continuation.value = true }
         compose.onNodeWithText("worker").assertDoesNotExist()
-        compose.onNodeWithText("Agent").assertDoesNotExist()
         compose.onNodeWithText("W").assertDoesNotExist()
-        val time = compose.onNodeWithContentDescription("worker，12:02").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         val after = compose.onNodeWithText("连续回复结果").assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         assertEquals(before.left, after.left, 1f)
         assertEquals(before.right, after.right, 1f)
         assertTrue(after.top < before.top)
-        assertTrue(time.right < after.left)
         screenshot("incoming-continuation")
     }
 

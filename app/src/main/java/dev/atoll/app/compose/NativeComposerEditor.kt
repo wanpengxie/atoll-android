@@ -37,7 +37,8 @@ import androidx.core.view.ContentInfoCompat
 @Composable
 internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, enabled: Boolean, maxLines: Int,
     onValue: (TextFieldValue) -> Unit, onKey: (String, Boolean, Boolean, Boolean) -> Boolean,
-    onSend: () -> Unit, onFocus: (Boolean) -> Unit, onFiles: (List<android.net.Uri>) -> Unit, onDrag: (Boolean) -> Unit) {
+    onSend: () -> Unit, onFocus: (Boolean) -> Unit, onFiles: (List<android.net.Uri>) -> Unit, onDrag: (Boolean) -> Unit,
+    hint: String = "输入消息；@ 选择成员，/ 使用命令") {
     var native by remember { mutableStateOf<NativeEditor?>(null) }
     var semanticText by remember { mutableStateOf("") }
     var semanticFocus by remember { mutableStateOf(false) }
@@ -67,8 +68,8 @@ internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, en
         contentDescription = "消息输入框"
         importantForAccessibility = android.view.View.IMPORTANT_FOR_ACCESSIBILITY_YES
         textSize = 16f
-        hint = "输入消息；@ 选择成员，/ 使用命令"
-        setHintTextColor(Color.rgb(111, 98, 82)); setTextColor(Color.rgb(46, 36, 25))
+        this.hint = hint
+        setHintTextColor(Color.rgb(0xB2, 0xB2, 0xB2)); setTextColor(Color.rgb(0x19, 0x19, 0x19))
         setBackgroundColor(Color.TRANSPARENT)
         setPadding((8 * resources.displayMetrics.density).toInt(), (10 * resources.displayMetrics.density).toInt(), (8 * resources.displayMetrics.density).toInt(), (10 * resources.displayMetrics.density).toInt())
         inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
@@ -95,6 +96,7 @@ internal fun NativeComposerEditor(command: EditorCommand, modifier: Modifier, en
         editor.valueCallback = { value -> semanticText = value.text; onValue(value) }; editor.keyCallback = onKey; editor.sendCallback = onSend
         editor.focusCallback = { value -> semanticFocus = value; onFocus(value) }; editor.filesCallback = onFiles; editor.dragCallback = onDrag
         editor.isEnabled = enabled; editor.maxLines = maxLines
+        if (editor.hint?.toString() != hint) editor.hint = hint
         if (editor.writeAuthority.accept(command)) {
             editor.suppress = true
             try {

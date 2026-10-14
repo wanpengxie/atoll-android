@@ -32,14 +32,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.screens.MessageViewState
-import dev.atoll.app.ui.theme.AtollColors
 import dev.atoll.app.ui.theme.AtollMono
+import dev.atoll.app.ui.theme.ChatColors
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import kotlinx.coroutines.*
 
 /** Host owns the channel-files picker and preview; selected resources enter addAttachments(). */
 @Composable
-fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, onPickChannelFiles: (() -> Unit)? = null, onPreviewAttachment: ((ComposerAttachment) -> Unit)? = null, showLocalEchoes: Boolean = true, editing: ComposerEditBinding? = null) {
-    if (editing != null) { EditingComposer(editing, modifier.background(AtollColors.Ground)); return }
+fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, onPickChannelFiles: (() -> Unit)? = null, onPreviewAttachment: ((ComposerAttachment) -> Unit)? = null, showLocalEchoes: Boolean = true, editing: ComposerEditBinding? = null,
+    busyAgents: Set<String> = emptySet()) {
+    if (editing != null) { EditingComposer(editing, modifier.background(ChatColors.Bar)); return }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -82,231 +86,259 @@ fun AtollComposer(viewModel: ComposerViewModel, modifier: Modifier = Modifier, o
         val next = editor.text.replaceRange(editor.selection.min, editor.selection.max, "\n")
         update(TextFieldValue(next, TextRange(editor.selection.min + 1)), external = true)
     }
-    val currentChoice = state.parameters?.current
-    val agentLabel = when {
-        state.delivery.recipients.size > 1 -> "${state.delivery.recipients.size} 个目标"
-        state.delivery.recipients.singleOrNull()?.kind == "human" -> "@${state.delivery.recipients.single().name}"
-        state.targetAgent == null -> "选择 Agent"
-        state.parameters?.switching == true -> "切换中…"
-        currentChoice != null -> "${state.targetAgent!!.name} · ${currentChoice.effortLabel.ifEmpty { currentChoice.modelLabel }}"
-        else -> state.targetAgent!!.name
+    val target = state.targetAgent
+    val placeholder = when {
+        !state.writable -> "当前频道不可写"
+        state.delivery.recipients.size > 1 -> "发给 ${state.delivery.recipients.joinToString("、") { it.name }}"
+        state.delivery.recipients.singleOrNull() != null -> "发给 ${state.delivery.recipients.single().name}"
+        else -> "发消息，@ 指定成员，/ 使用命令"
     }
-    Column(modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    var plusOpen by remember { mutableStateOf(false) }
+    Column(modifier.fillMaxWidth()) {
         // Timeline/dock own normal handoffs once mounted; rejected sends keep their recovery entry.
         ComposerLocalEchoes(if (showLocalEchoes) state.submissions else state.submissions.filter { it.state == SendState.REJECTED }, viewModel::retry, viewModel::cancel)
-        if (!state.online) NoticeBanner("离线编辑；发送会先保存到本机，连接可用后自动发送。", Tone.Waiting)
-        if (!state.writable) NoticeBanner("当前频道不可写；草稿仍保留在当前设备", Tone.Neutral)
-        if (state.error.isNotEmpty()) NoticeBanner(state.error, Tone.Danger, action = "关闭", onAction = viewModel::clearError)
-        if (count > 0) Surface(color = AtollColors.Surface, shape = RoundedCornerShape(20.dp), border = BorderStroke(1.dp, AtollColors.Line), shadowElevation = 8.dp) {
-            Column(Modifier.fillMaxWidth().heightIn(max = 280.dp).verticalScroll(rememberScrollState()).padding(6.dp)) {
-                Text(if (mention != null && mention.candidates.isNotEmpty()) "提及成员" else "命令", Modifier.padding(start = 10.dp, top = 6.dp, bottom = 4.dp),
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Muted)
-                repeat(count) { index ->
-                    val actor = mention?.candidates?.getOrNull(index)
-                    val command = commandRows.getOrNull(index)
-                    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(if (index == active % count) AtollColors.Subtle else AtollColors.Surface)
-                        .clickable { pick(index) }.heightIn(min = 48.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (actor != null) {
-                            ActorAvatar(actor.name, actor.id, agent = actor.kind != "human", size = 32.dp)
-                            Column(Modifier.weight(1f)) {
-                                Text(actor.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
-                                Text(listOf(if (actor.kind == "agent") "Agent" else actor.kind, actor.body).filter { it.isNotBlank() }.joinToString(" · "),
-                                    fontSize = 12.sp, color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        } else if (command != null) {
-                            Text("/${command.name}", Modifier.widthIn(min = 96.dp), fontSize = 14.sp, fontWeight = FontWeight.Medium, fontFamily = AtollMono)
-                            Text(command.label, Modifier.weight(1f), fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
+        if (count > 0) Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).shadow(8.dp, ChatSheetShape).clip(ChatSheetShape).background(ChatColors.Block)
+            .verticalScroll(rememberScrollState())) {
+            val candidates = mention?.candidates.orEmpty()
+            if (candidates.isNotEmpty()) {
+                MentionHeading(if (mention?.query.isNullOrEmpty()) "可以提及的成员" else "匹配 “${mention?.query}”")
+                candidates.forEachIndexed { index, actor ->
+                    ChatListRow(actor.name, Modifier.background(if (index == active % count) ChatColors.Bar else ChatColors.Block),
+                        subtitle = listOf(if (actor.kind == "agent") "Agent" else if (actor.kind == "human") "成员" else actor.kind, actor.body).filter { it.isNotBlank() }.joinToString(" · "),
+                        divider = index < candidates.lastIndex, onClick = { pick(index) },
+                        leading = { ActorAvatar(actor.name, actor.id, agent = actor.kind != "human", size = 36.dp) })
                 }
-                if (mention == null || mention.candidates.isEmpty()) Text("正文要以 / 开头时，写成 //。", Modifier.padding(start = 10.dp, top = 4.dp, bottom = 6.dp),
-                    fontSize = 12.sp, color = AtollColors.Muted)
+            } else {
+                Row(Modifier.fillMaxWidth().background(ChatColors.Bar).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (target != null) {
+                        Text("发给", fontSize = 13.sp, color = ChatColors.Gray)
+                        ActorAvatar(target.name, target.id, agent = true, size = 16.dp)
+                        Text("${target.name} 的命令", fontSize = 13.sp, color = ChatColors.Ink)
+                    } else Text("命令", fontSize = 13.sp, color = ChatColors.Gray)
+                }
+                commandRows.forEachIndexed { index, command ->
+                    val danger = command.name == "restart"
+                    ChatListRow("/${command.name}", Modifier.background(if (index == active % count) ChatColors.Bar else ChatColors.Block),
+                        subtitle = command.label, minHeight = 52.dp, divider = index < commandRows.lastIndex,
+                        titleColor = if (danger) ChatColors.Red else ChatColors.Ink, onClick = { pick(index) },
+                        trailing = when {
+                            danger -> ({ Text("需确认", fontSize = 13.sp, color = ChatColors.Gray) })
+                            command.name == "compact" && (state.parameters?.contextWindow ?: 0) > 0 -> ({ Text("上下文 ${state.parameters!!.percent}%", fontSize = 13.sp, color = ChatColors.Gray) })
+                            command.usage != "/${command.name}" -> ({ Text(command.usage.removePrefix("/${command.name}").trim(), fontSize = 13.sp, fontFamily = AtollMono, color = ChatColors.Gray) })
+                            else -> null
+                        })
+                }
+                Text("正文要以 / 开头时，写成 //。命令不能带附件，回复模式下不可用。", Modifier.fillMaxWidth().background(ChatColors.Bar)
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp), fontSize = 13.sp, lineHeight = 18.sp, color = ChatColors.Gray)
             }
         }
-        val outline = when { dragging -> AtollColors.Lagoon; focused -> AtollColors.Ink; else -> AtollColors.ControlLine }
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(if (dragging) AtollColors.LagoonSurface else AtollColors.Surface)
-            .border(if (focused || dragging) 1.5.dp else 1.dp, outline, RoundedCornerShape(22.dp))) {
-            if (dragging) Text("松开以上传到当前频道", Modifier.padding(start = 16.dp, top = 10.dp), color = AtollColors.LagoonText, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Column(Modifier.fillMaxWidth().background(ChatColors.Bar)) {
+            HorizontalDivider(color = ChatColors.Line)
+            if (!state.online) ChatNotice("离线编辑；发送会先保存到本机，连接可用后自动发送。")
+            if (state.error.isNotEmpty()) ChatNotice(state.error, danger = true, action = "关闭", onAction = viewModel::clearError)
             state.draft.reply?.let { reply ->
-                Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 4.dp, top = 8.dp).clip(RoundedCornerShape(12.dp)).background(AtollColors.Subtle)
-                    .height(IntrinsicSize.Min).padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.width(3.dp).fillMaxHeight().padding(vertical = 8.dp).background(AtollColors.Lagoon, RoundedCornerShape(2.dp)))
-                    Column(Modifier.weight(1f).padding(start = 8.dp, top = 6.dp, bottom = 6.dp)) {
-                        Text("回复 @${reply.senderName}", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text(reply.excerpt.take(120), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = AtollColors.Muted)
-                    }
-                    IconButton(onClick = { viewModel.setReply(null) }, Modifier.size(40.dp)) { Icon(Icons.Outlined.Close, "取消回复", Modifier.size(18.dp), tint = AtollColors.Muted) }
+                Row(Modifier.fillMaxWidth().padding(start = 56.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${reply.senderName}：${reply.excerpt.take(120)}", Modifier.weight(1f).clip(RoundedCornerShape(4.dp)).background(ChatColors.Quote)
+                        .padding(horizontal = 10.dp, vertical = 6.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.Gray)
+                    IconButton(onClick = { viewModel.setReply(null) }, Modifier.size(40.dp)) { Icon(Icons.Outlined.Close, "取消回复", Modifier.size(18.dp), tint = ChatColors.Gray) }
                 }
             }
             if (!resting && (state.draft.recipients.isNotEmpty() || !state.delivery.valid)) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
-                .padding(start = 12.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(state.delivery.label, fontSize = 12.sp, color = if (state.delivery.valid) AtollColors.Muted else AtollColors.Warning)
+                .padding(start = 56.dp, end = 12.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (!state.delivery.valid) Text(state.delivery.label, fontSize = 12.sp, color = ChatColors.Red)
                 state.draft.recipients.forEach { recipient ->
-                    Row(Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(50)).background(AtollColors.LagoonSurface)
+                    Row(Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(50)).background(ChatColors.Secondary)
                         .clickable { viewModel.removeMention(recipient.id) }.padding(start = 10.dp, end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text("@${recipient.name}", fontSize = 13.sp, color = AtollColors.LagoonText, fontWeight = FontWeight.Medium)
-                        Icon(Icons.Outlined.Close, "移除 ${recipient.name}", Modifier.size(14.dp), tint = AtollColors.LagoonText)
+                        Text("@${recipient.name}", fontSize = 13.sp, color = ChatColors.Ink)
+                        Icon(Icons.Outlined.Close, "移除 ${recipient.name}", Modifier.size(14.dp), tint = ChatColors.Gray)
                     }
                 }
             }
-            if (state.draft.attachments.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 12.dp, end = 12.dp, top = 8.dp),
+            if (state.draft.attachments.isNotEmpty()) Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(start = 56.dp, end = 12.dp, top = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 state.draft.attachments.forEach { attachment ->
-                    Row(Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(10.dp)).border(1.dp, AtollColors.Line, RoundedCornerShape(10.dp))
+                    Row(Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(4.dp)).background(ChatColors.Block)
                         .clickable { onPreviewAttachment?.invoke(attachment) }.padding(start = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Description, null, Modifier.size(16.dp), tint = AtollColors.Muted)
-                        Text("${attachment.name} · ${formatSize(attachment.size)}", Modifier.padding(start = 6.dp).widthIn(max = 220.dp), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Icon(Icons.Outlined.Description, null, Modifier.size(16.dp), tint = ChatColors.Gray)
+                        Text("${attachment.name} · ${formatSize(attachment.size)}", Modifier.padding(start = 6.dp).widthIn(max = 220.dp), fontSize = 13.sp, color = ChatColors.Body, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         IconButton(onClick = { viewModel.removeAttachment(attachment.resourceId) }, Modifier.size(36.dp)) {
-                            Icon(Icons.Outlined.Close, "移除附件 ${attachment.name}", Modifier.size(14.dp), tint = AtollColors.Muted)
+                            Icon(Icons.Outlined.Close, "移除附件 ${attachment.name}", Modifier.size(14.dp), tint = ChatColors.Gray)
                         }
                     }
                 }
             }
-            Box(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 4.dp)) {
-                key(viewModel) { NativeComposerEditor(state.editorCommand, Modifier.fillMaxWidth(), state.writable, if (resting) 1 else 6,
-                    onValue = { update(it) }, onFocus = { focused = it }, onSend = { if (state.canSend) viewModel.send(editor.text) },
-                    onFiles = { uris -> scope.launch { viewModel.upload(uploadFiles(context, uris)) } }, onDrag = { dragging = it },
-                    onKey = { key, shift, composing, repeated ->
-                        if (key == "Enter" && repeated) true else when (ComposerEditor.key(key, shift, composing, editor.selection.collapsed && editor.selection.start == 0, state.draft.recipients.isNotEmpty(), state.draft.reply != null, count)) {
-                            EditorAction.SEND -> { if (state.canSend) viewModel.send(editor.text); true }
-                            EditorAction.NEWLINE -> { newline(); true }
-                            EditorAction.REMOVE_MENTION -> { viewModel.removeMention(state.draft.recipients.last().id); true }
-                            EditorAction.CLEAR_REPLY -> { viewModel.setReply(null); true }
-                            EditorAction.DISMISS_MENU -> { dismissed = true; true }
-                            EditorAction.NEXT -> { active = (active + 1) % count; true }
-                            EditorAction.PREVIOUS -> { active = (active + count - 1) % count; true }
-                            EditorAction.PICK -> { pick(active % count); true }
-                            else -> false
-                        }
-                    }) }
-            }
-            Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(50)).background(AtollColors.Subtle).clickable { showSelector = true }
-                    .padding(start = 4.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    state.targetAgent?.let { ActorAvatar(it.name, it.id, agent = true, size = 26.dp) } ?: Spacer(Modifier.width(4.dp))
-                    Text(agentLabel, Modifier.widthIn(max = 160.dp), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
-                    Icon(Icons.Outlined.KeyboardArrowDown, null, Modifier.size(16.dp), tint = AtollColors.Muted)
+            Row(Modifier.fillMaxWidth().padding(start = 8.dp, end = 8.dp, top = 8.dp, bottom = 10.dp), verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.size(40.dp).clip(RoundedCornerShape(8.dp)).clickable(onClickLabel = "选择 Agent") { showSelector = true }
+                    .semantics { contentDescription = if (target != null) "发给 ${target.name}，更换" else "选择 Agent" }, contentAlignment = Alignment.Center) {
+                    if (target != null) ActorAvatar(target.name, target.id, agent = true, size = 28.dp)
+                    else Icon(Icons.Outlined.PersonAdd, null, Modifier.size(24.dp), tint = ChatColors.Gray)
                 }
-                Spacer(Modifier.weight(1f))
-                if (state.uploading) Spinner(16.dp, AtollColors.Muted, AtollColors.Line)
-                if (!resting) IconButton(onClick = ::newline, enabled = state.writable, modifier = Modifier.size(40.dp)) { Icon(Icons.Outlined.KeyboardReturn, "换行", tint = AtollColors.Muted) }
-                IconButton(onClick = { onPickChannelFiles?.invoke() }, enabled = state.online && state.writable && onPickChannelFiles != null, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Outlined.FolderOpen, "从频道文件选择", tint = AtollColors.Muted)
+                Box(Modifier.weight(1f).heightIn(min = 40.dp).clip(RoundedCornerShape(4.dp))
+                    .background(if (dragging) ChatColors.Secondary else ChatColors.Block).padding(horizontal = 4.dp)) {
+                    key(viewModel) { NativeComposerEditor(state.editorCommand, Modifier.fillMaxWidth(), state.writable, if (resting) 1 else 6,
+                        onValue = { update(it) }, onFocus = { focused = it }, onSend = { if (state.canSend) viewModel.send(editor.text) },
+                        onFiles = { uris -> scope.launch { viewModel.upload(uploadFiles(context, uris)) } }, onDrag = { dragging = it },
+                        hint = if (dragging) "松开以上传到当前频道" else placeholder,
+                        onKey = { key, shift, composing, repeated ->
+                            if (key == "Enter" && repeated) true else when (ComposerEditor.key(key, shift, composing, editor.selection.collapsed && editor.selection.start == 0, state.draft.recipients.isNotEmpty(), state.draft.reply != null, count)) {
+                                EditorAction.SEND -> { if (state.canSend) viewModel.send(editor.text); true }
+                                EditorAction.NEWLINE -> { newline(); true }
+                                EditorAction.REMOVE_MENTION -> { viewModel.removeMention(state.draft.recipients.last().id); true }
+                                EditorAction.CLEAR_REPLY -> { viewModel.setReply(null); true }
+                                EditorAction.DISMISS_MENU -> { dismissed = true; true }
+                                EditorAction.NEXT -> { active = (active + 1) % count; true }
+                                EditorAction.PREVIOUS -> { active = (active + count - 1) % count; true }
+                                EditorAction.PICK -> { pick(active % count); true }
+                                else -> false
+                            }
+                        }) }
                 }
-                IconButton(onClick = { launcher.launch(arrayOf("*/*")) }, enabled = state.online && state.writable && !state.uploading, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Outlined.AttachFile, "上传本机文件", tint = AtollColors.Muted)
-                }
-                IconButton(onClick = { viewModel.send(editor.text) }, enabled = state.canSend,
-                    modifier = Modifier.padding(start = 2.dp).size(40.dp).clip(CircleShape).background(if (state.canSend) AtollColors.Ink else AtollColors.Sunken)) {
-                    if (state.sending) Spinner(18.dp, Color.White, Color.White.copy(alpha = .3f))
-                    else Icon(Icons.Outlined.ArrowUpward, "发送", tint = if (state.canSend) Color.White else AtollColors.Faint)
+                if (state.canSend || state.sending) Box(Modifier.padding(bottom = 4.dp).height(32.dp).clip(RoundedCornerShape(4.dp))
+                    .background(ChatColors.Green).clickable(enabled = state.canSend, onClickLabel = "发送") { viewModel.send(editor.text) }
+                    .semantics { contentDescription = "发送" }.padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
+                    if (state.sending) Spinner(14.dp, Color.White, Color.White.copy(alpha = .3f)) else Text("发送", fontSize = 14.sp, color = Color.White)
+                } else Box {
+                    IconButton({ plusOpen = true }, Modifier.size(40.dp)) {
+                        if (state.uploading) ChatSpinner(18.dp)
+                        else Icon(Icons.Outlined.AddCircleOutline, "更多：附件、命令、频道文件", Modifier.size(28.dp), tint = ChatColors.Ink)
+                    }
+                    DropdownMenu(plusOpen, { plusOpen = false }, containerColor = ChatColors.Block) {
+                        DropdownMenuItem({ Text("上传本机文件", fontSize = 15.sp) }, enabled = state.online && state.writable && !state.uploading,
+                            leadingIcon = { Icon(Icons.Outlined.AttachFile, null) }, onClick = { plusOpen = false; launcher.launch(arrayOf("*/*")) })
+                        DropdownMenuItem({ Text("从频道文件选择", fontSize = 15.sp) }, enabled = state.online && state.writable && onPickChannelFiles != null,
+                            leadingIcon = { Icon(Icons.Outlined.FolderOpen, null) }, onClick = { plusOpen = false; onPickChannelFiles?.invoke() })
+                        DropdownMenuItem({ Text("命令", fontSize = 15.sp) }, enabled = state.writable,
+                            leadingIcon = { Icon(Icons.Outlined.Terminal, null) }, onClick = { plusOpen = false; update(TextFieldValue("/", TextRange(1)), external = true) })
+                        DropdownMenuItem({ Text("换行", fontSize = 15.sp) }, enabled = state.writable,
+                            leadingIcon = { Icon(Icons.Outlined.KeyboardReturn, null) }, onClick = { plusOpen = false; newline() })
+                    }
                 }
             }
         }
     }
-    if (showSelector) AgentSelector(state, viewModel, onClose = { showSelector = false })
+    if (showSelector) AgentSelector(state, viewModel, busyAgents, onClose = { showSelector = false },
+        onCompact = { update(TextFieldValue("/compact", TextRange(8)), external = true) })
 }
+
+@Composable
+private fun MentionHeading(text: String) = Text(text, Modifier.fillMaxWidth().background(ChatColors.Bar).padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 6.dp),
+    fontSize = 13.sp, lineHeight = 18.sp, color = ChatColors.Gray)
+
+/** AgentPicker board: whom the next message goes to, then that agent's model, effort and context. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AgentSelector(state: ComposerUiState, viewModel: ComposerViewModel, onClose: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = AtollColors.Surface, dragHandle = null) {
-        SheetHeader("Agent 与模型", onClose, closeLabel = "完成")
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            state.roster.filter { it.kind == "agent" }.forEach { actor ->
+private fun AgentSelector(state: ComposerUiState, viewModel: ComposerViewModel, busyAgents: Set<String>, onClose: () -> Unit, onCompact: () -> Unit) {
+    var choosing by remember { mutableStateOf("") }
+    ModalBottomSheet(onDismissRequest = onClose, containerColor = ChatColors.Bar, shape = ChatSheetShape, dragHandle = null, scrimColor = ChatColors.Scrim) {
+        ChatSheetHeader("发送给", "完成", onClose, actionIsLink = true)
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 20.dp)) {
+            val agents = state.roster.filter { it.kind == "agent" }
+            agents.forEachIndexed { index, actor ->
                 val chosen = state.targetAgent?.id == actor.id
-                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clip(RoundedCornerShape(14.dp))
-                    .border(if (chosen) 1.5.dp else 1.dp, if (chosen) AtollColors.Ink else AtollColors.Line, RoundedCornerShape(14.dp))
-                    .clickable { viewModel.selectAgent(actor.id) }.padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ActorAvatar(actor.name, actor.id, agent = true, size = 36.dp)
-                    Column(Modifier.weight(1f)) {
-                        Text(actor.name, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                        if (actor.body.isNotBlank()) Text(actor.body, fontSize = 12.sp, color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (chosen) Icon(Icons.Outlined.Check, "已选择", tint = AtollColors.Ink)
-                }
+                val busy = actor.id in busyAgents
+                ChatListRow(actor.name, minHeight = 64.dp, divider = index < agents.lastIndex, onClick = { viewModel.selectAgent(actor.id) },
+                    leading = { ActorAvatar(actor.name, actor.id, agent = true, size = 40.dp) },
+                    subtitleContent = {
+                        if (busy) ChatSpinner()
+                        Text(if (busy) "运行中 · 新消息会排队" else "空闲 · 立即处理", fontSize = 13.sp, color = ChatColors.Gray)
+                    },
+                    trailing = if (chosen) ({ Icon(Icons.Outlined.Check, "已选择", Modifier.size(20.dp), tint = ChatColors.Green) }) else null)
             }
             state.targetAgent?.let { actor ->
-                HorizontalDivider(Modifier.padding(vertical = 6.dp), color = AtollColors.Line)
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("${actor.name} 的参数", Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Muted)
-                    TextButton(onClick = { viewModel.refreshParameters(actor.id) }, enabled = state.online) { Text("刷新", color = AtollColors.Lagoon) }
-                }
                 val parameters = state.parameters
-                if (parameters?.loading == true) LinearProgressIndicator(Modifier.fillMaxWidth(), color = AtollColors.Lagoon, trackColor = AtollColors.Sunken)
-                if (parameters?.error?.isNotEmpty() == true) NoticeBanner(parameters.error, Tone.Danger)
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("${actor.name} 的参数", Modifier.weight(1f), fontSize = 13.sp, color = ChatColors.Gray)
+                    if (parameters?.loading == true) ChatSpinner()
+                    Text("刷新", Modifier.heightIn(min = 40.dp).clickable(enabled = state.online) { viewModel.refreshParameters(actor.id) }.padding(horizontal = 12.dp).wrapContentHeight(),
+                        fontSize = 13.sp, color = if (state.online) ChatColors.Link else ChatColors.Hint)
+                }
+                if (parameters?.error?.isNotEmpty() == true) ChatNotice(parameters.error, danger = true)
+                val editable = state.online && parameters?.switching != true
                 val models = parameters?.choices?.distinctBy { it.model }.orEmpty()
                 if (models.isNotEmpty()) {
-                    Text("模型", fontSize = 14.sp)
-                    ChipRow {
-                        models.forEach { choice ->
-                            TextChip(choice.modelLabel, selected = parameters?.current?.model == choice.model,
-                                onClick = if (state.online && parameters?.switching != true) ({ viewModel.selectModel(choice) }) else null)
-                        }
-                    }
+                    ChatListRow("模型", minHeight = 52.dp, onClick = { choosing = if (choosing == "model") "" else "model" }, trailing = {
+                        Text(parameters?.current?.modelLabel.orEmpty(), Modifier.widthIn(max = 180.dp), fontSize = 14.sp, color = ChatColors.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        ChatChevron()
+                    })
+                    if (choosing == "model") models.forEach { choice -> ChoiceRow(choice.modelLabel, parameters?.current?.model == choice.model, editable) { viewModel.selectModel(choice); choosing = "" } }
                 }
-                val efforts = parameters?.choices?.filter { it.model == parameters.current?.model }.orEmpty()
+                val efforts = parameters?.choices?.filter { it.model == parameters.current?.model && it.effort.isNotEmpty() }.orEmpty()
                 if (efforts.isNotEmpty()) {
-                    Text("推理强度", fontSize = 14.sp)
-                    ChipRow {
-                        efforts.forEach { choice ->
-                            TextChip(choice.effortLabel.ifEmpty { "默认" }, selected = parameters?.current?.effort == choice.effort,
-                                onClick = if (state.online && parameters?.switching != true) ({ viewModel.selectModel(choice) }) else null)
+                    ChatListRow("推理强度", minHeight = 52.dp, onClick = { choosing = if (choosing == "effort") "" else "effort" }, trailing = {
+                        Text(parameters?.current?.effortLabel.orEmpty().ifEmpty { "默认" }, fontSize = 14.sp, color = ChatColors.Gray)
+                        ChatChevron()
+                    })
+                    if (choosing == "effort") efforts.forEach { choice -> ChoiceRow(choice.effortLabel.ifEmpty { "默认" }, parameters?.current?.effort == choice.effort, editable) { viewModel.selectModel(choice); choosing = "" } }
+                }
+                if (parameters != null && parameters.contextWindow > 0) ChatListRow("上下文", minHeight = 64.dp,
+                    subtitle = "已使用 ${parameters.percent}%" + if (parameters.percent >= 75) "，接近上限" else "", trailing = {
+                        Text("${compactTokens(parameters.contextTokens)} / ${compactTokens(parameters.contextWindow)}", fontSize = 13.sp, color = ChatColors.Gray)
+                        Box(Modifier.size(width = 72.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(ChatColors.Line)) {
+                            Box(Modifier.fillMaxHeight().fillMaxWidth(parameters.percent / 100f).background(ChatColors.Gray))
                         }
-                    }
-                }
-                if (parameters != null && parameters.contextWindow > 0) Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AtollColors.Ground).padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row { Text("上下文", Modifier.weight(1f), fontSize = 13.sp); Text("${parameters.contextTokens} / ${parameters.contextWindow}", fontSize = 13.sp, fontFamily = AtollMono, color = AtollColors.Muted) }
-                    LinearProgressIndicator(progress = { parameters.percent / 100f }, modifier = Modifier.fillMaxWidth(),
-                        color = if (parameters.percent >= 75) AtollColors.Warning else AtollColors.Lagoon, trackColor = AtollColors.Sunken)
-                    Text("上下文 ${parameters.contextTokens} / ${parameters.contextWindow} · 已使用 ${parameters.percent}%", fontSize = 12.sp, color = AtollColors.Muted)
-                }
+                    })
+                ChatListRow("/compact 压缩上下文", minHeight = 52.dp, divider = false, onClick = { onCompact(); onClose() }, trailing = { ChatChevron() })
                 parameters?.client?.let { client ->
                     val version = client.text("current").ifEmpty { client.text("version") }
                     val status = when (client.text("update_status")) { "available" -> "可升级${client.text("latest").takeIf { it.isNotEmpty() }?.let { "至 $it" }.orEmpty()}"; "current" -> "已是最新"; else -> "升级状态未知" }
-                    if (version.isNotEmpty() || client.text("update_status").isNotEmpty()) Text("客户端 ${version.ifEmpty { "版本未知" }} · $status", fontSize = 12.sp, color = AtollColors.Muted)
+                    if (version.isNotEmpty() || client.text("update_status").isNotEmpty()) Text("客户端 ${version.ifEmpty { "版本未知" }} · $status",
+                        Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp), fontSize = 13.sp, color = ChatColors.Gray)
                 }
+                Text("参数会随下一条消息一起发送，并记住为本频道里 ${actor.name} 的默认值。", Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
+                    fontSize = 13.sp, lineHeight = 19.sp, color = ChatColors.Gray)
             }
         }
     }
 }
+
+@Composable
+private fun ChoiceRow(label: String, chosen: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    ChatListRow(label, Modifier.padding(start = 16.dp), minHeight = 48.dp, onClick = if (enabled) onClick else null,
+        trailing = if (chosen) ({ Icon(Icons.Outlined.Check, "已选择", Modifier.size(18.dp), tint = ChatColors.Green) }) else null)
+}
+
+private fun compactTokens(value: Long): String = if (value >= 1000) "${value / 1000}k" else value.toString()
 @Composable
 fun ComposerLocalEchoes(rows: List<LocalSubmission>, onRetry: (String) -> Unit, onCancel: (String) -> Unit) {
     rows.takeLast(4).forEach { row ->
-        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AtollColors.Surface).border(1.dp, AtollColors.Line, RoundedCornerShape(14.dp))
-            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 4.dp)) {
-            Text(row.text.ifEmpty { row.frame.text("msg_type") }.take(160), fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.fillMaxWidth().background(ChatColors.Ground).padding(start = 52.dp, end = 12.dp, top = 6.dp), horizontalAlignment = Alignment.End) {
+            Text(row.text.ifEmpty { row.frame.text("msg_type") }.take(160), Modifier.clip(RoundedCornerShape(12.dp, 4.dp, 12.dp, 12.dp))
+                .background(ChatColors.Mine).padding(horizontal = 14.dp, vertical = 10.dp), fontSize = 16.sp, lineHeight = 25.sp,
+                color = ChatColors.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
             SubmissionRow(row, onRetry, onCancel)
         }
     }
 }
 
-/** Put below a local timeline bubble. The durable journal owns retry/cancellation. */
+/** ChatStates ⑪: put below a local timeline bubble. The durable journal owns retry/cancellation. */
 @Composable
 fun TimelineSubmissionStatus(row: LocalSubmission, onRetry: (String) -> Unit, onCancel: (String) -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(start = 50.dp, end = 6.dp)) { SubmissionRow(row, onRetry, onCancel) }
+    Column(Modifier.fillMaxWidth().padding(start = 40.dp), horizontalAlignment = Alignment.End) { SubmissionRow(row, onRetry, onCancel) }
 }
 
 @Composable
 private fun SubmissionRow(row: LocalSubmission, onRetry: (String) -> Unit, onCancel: (String) -> Unit) {
-    val tone = when {
-        row.cancelRequested -> Tone.Neutral
-        row.state == SendState.REJECTED -> Tone.Danger
-        row.state in setOf(SendState.UNCERTAIN, SendState.DELAYED) -> Tone.Waiting
-        else -> Tone.Neutral
-    }
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        StatusPill(submissionLabel(row), tone, Modifier.weight(1f, fill = false), live = row.state == SendState.TRANSMITTING)
-        Spacer(Modifier.weight(1f))
+    val failed = row.state == SendState.REJECTED && !row.cancelRequested
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        when {
+            failed -> Box(Modifier.size(18.dp).clip(CircleShape).background(ChatColors.Red), contentAlignment = Alignment.Center) {
+                Text("!", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            }
+            row.state == SendState.TRANSMITTING || row.state == SendState.QUEUED -> ChatSpinner()
+            else -> Unit
+        }
+        Text(submissionLabel(row), Modifier.weight(1f, fill = false), fontSize = 12.sp, color = if (failed) ChatColors.Red else ChatColors.Gray,
+            maxLines = 2, overflow = TextOverflow.Ellipsis)
         if (row.state in setOf(SendState.REJECTED, SendState.UNCERTAIN) && !row.cancelRequested)
-            TextButton({ onRetry(row.messageId) }, Modifier.heightIn(min = 44.dp)) { Text("使用原编号重试", fontSize = 13.sp, color = AtollColors.Lagoon) }
-        TextButton({ onCancel(row.messageId) }, Modifier.heightIn(min = 44.dp)) { Text("取消", fontSize = 13.sp, color = AtollColors.Muted) }
+            Text("使用原编号重试", Modifier.heightIn(min = 44.dp).clickable { onRetry(row.messageId) }.padding(horizontal = 4.dp).wrapContentHeight(),
+                fontSize = 12.sp, color = ChatColors.Link)
+        Text("取消", Modifier.heightIn(min = 44.dp).clickable { onCancel(row.messageId) }.padding(horizontal = 4.dp).wrapContentHeight(),
+            fontSize = 12.sp, color = ChatColors.Gray)
     }
-    if (row.error.isNotEmpty()) Text(row.error, fontSize = 12.sp, color = AtollColors.DangerText)
+    if (row.error.isNotEmpty()) Text(row.error, fontSize = 12.sp, color = ChatColors.Red)
 }
 
 fun submissionLabel(row: LocalSubmission): String = if (row.cancelRequested) "取消待确认" else when (row.state) {

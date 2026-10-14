@@ -137,54 +137,6 @@ fun TasksScreen(viewModel: TasksViewModel,modifier: Modifier=Modifier,onSource: 
     }
 }
 
-/** Can also be mounted directly under a human.approve/human.ask timeline turn. */
-@Composable
-fun ApprovalCard(item: TaskFact,names: Map<String,String> = emptyMap(),busy: Boolean=false,error: String="",onResolve: (action: String,text: String,note: String)->Unit) {
-    var answer by remember(item.key) { mutableStateOf("") };var note by remember(item.key) { mutableStateOf("") }
-    val ask=(item.turn?.request?.type ?: item.diagnostic.text("requestType"))=="human.ask"
-    var receipt by remember(item.turn) { mutableStateOf<ApprovalReceipt?>(null) }
-    LaunchedEffect(item.turn) {
-        receipt = withContext(Dispatchers.Default) { approvalReceipt(item.turn) }
-    }
-    val open=item.actionableBySelf && item.state=="waiting"
-    Column(Modifier.fillMaxWidth().padding(start=18.dp,top=4.dp,bottom=8.dp).clip(AtollShapes.Card).background(AtollColors.Surface)
-        .border(if (open) 1.5.dp else 1.dp,if (open) AtollColors.WarningLine else AtollColors.Line,AtollShapes.Card)) {
-        Row(Modifier.fillMaxWidth().background(if (open) AtollColors.WarningSurface else AtollColors.Raised).padding(horizontal=14.dp,vertical=10.dp),
-            verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-            Icon(Icons.Outlined.VerifiedUser,null,Modifier.size(16.dp),tint=AtollColors.Warning)
-            Text("${names[item.requesterActorId] ?: item.requesterActorId} ${if (ask) "向你提问" else "请你审批"}",Modifier.weight(1f),fontSize=13.sp,
-                fontWeight=FontWeight.SemiBold,color=AtollColors.WarningInk,maxLines=1,overflow=TextOverflow.Ellipsis)
-            Text(taskStates[item.state] ?: item.state,fontSize=12.sp,color=AtollColors.Warning)
-        }
-        Column(Modifier.padding(14.dp),verticalArrangement=Arrangement.spacedBy(8.dp)) {
-            Text(item.title,style=MaterialTheme.typography.titleMedium)
-            item.turn?.request?.body?.text("text")?.takeIf { it.isNotEmpty() && it!=item.title }?.let { Text(it,fontSize=15.sp,lineHeight=22.sp) }
-            item.description.takeIf(String::isNotEmpty)?.let { Text(it,fontSize=15.sp,lineHeight=22.sp,color=AtollColors.Body) }
-            if (item.diagnostic.text("impact").isNotEmpty()) Text("影响：${item.diagnostic.text("impact")}",fontSize=14.sp,color=AtollColors.Body)
-            if (item.dueAt.isNotEmpty()) Text("到期：${taskDate(item.dueAt)}",fontSize=12.sp,color=AtollColors.Muted)
-            if (open) {
-                if (ask) OutlinedTextField(answer,{ answer=it },label={ Text("回答") },modifier=Modifier.fillMaxWidth(),enabled=!busy,minLines=2,shape=MaterialTheme.shapes.medium)
-                else OutlinedTextField(note,{ note=it },label={ Text("备注（可选）") },modifier=Modifier.fillMaxWidth(),enabled=!busy,shape=MaterialTheme.shapes.medium)
-                Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                    if (!ask && TaskAction.REJECT in item.actions) AtollButton("拒绝",{ onResolve(TaskAction.REJECT,"",note) },Modifier.weight(1f),kind=ButtonKind.Secondary,enabled=!busy)
-                    if (TaskAction.APPROVE in item.actions) AtollButton(if (busy) "正在提交…" else if (ask) "提交回答" else "批准",{ onResolve(TaskAction.APPROVE,answer,note) },Modifier.weight(1f),enabled=!busy)
-                }
-            }
-            receipt?.let { response ->
-                HorizontalDivider(color=AtollColors.LineSoft)
-                Text("已回执",fontSize=13.sp,fontWeight=FontWeight.SemiBold)
-                if (response.unavailable) Text("终态详情不可用，请刷新或重新进入频道。",fontSize=13.sp,color=AtollColors.Muted)
-                else {
-                    Text("处理者：${names[response.resolverId] ?: response.resolverId}" + response.decision.takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty(),fontSize=13.sp,color=AtollColors.Muted)
-                    if (response.text.isNotEmpty()) Markdown("approval:${item.key}:response",response.text)
-                    response.result?.let { StructuredResult(it) }
-                }
-            }
-            if (error.isNotEmpty()) Text(error,fontSize=13.sp,color=AtollColors.DangerText)
-        }
-    }
-}
-
 @Composable
 fun TaskDetail(item: TaskFact,viewModel: TasksViewModel,modifier: Modifier=Modifier,onClose: ()->Unit,onSource: (JsonObject)->Unit={},onTurn: (String)->Unit={}) {
     val state by viewModel.state.collectAsState()

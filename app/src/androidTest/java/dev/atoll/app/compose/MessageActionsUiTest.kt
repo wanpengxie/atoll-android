@@ -86,13 +86,12 @@ class MessageActionsUiTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText(body).fetchSemanticsNodes().isNotEmpty() }
         compose.onAllNodesWithText(body, useUnmergedTree = true).onLast().performTouchInput { longClick() }
         awaitMenu()
-        compose.onNodeWithText("6 条").assertIsDisplayed()
-        compose.onNodeWithText("追问 reviewer").assertIsDisplayed()
-        compose.onNodeWithText("查看过程与相关调用").assertHeightIsAtLeast(52.dp)
+        compose.onNodeWithText("追问").assertIsDisplayed()
+        compose.onNodeWithText("查看过程").assertHeightIsAtLeast(52.dp)
         screenshot("message-actions")
-        compose.onNodeWithText("查看过程与相关调用").performClick()
+        compose.onNodeWithText("查看过程").performClick()
         compose.runOnIdle { assertEquals("request", opened) }
-        for (label in listOf("过程", "协作", "子任务", "调用", "账本")) compose.onNodeWithText(label).assertIsDisplayed()
+        for (label in listOf("过程", "协作", "子任务", "调用", "账本")) compose.onAllNodesWithText(label, substring = true).onFirst().assertIsDisplayed()
         screenshot("message-process")
     }
     @Test fun ownRunningRequestKeepsEditAndStopAndBlocksConcurrentControls() {
@@ -110,11 +109,11 @@ class MessageActionsUiTest {
         compose.onNodeWithText("编辑").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(listOf("edit:request"), events) }
         open("request")
-        compose.onNodeWithText("停止本轮").assertIsEnabled().performClick()
+        compose.onNodeWithText("中断").assertIsEnabled().performClick()
         compose.runOnIdle { assertEquals(listOf("edit:request", "stop:request"), events); editing.value = "other"; busy.value = setOf("agent:reviewer") }
         open("request")
         compose.onNodeWithText("编辑").assertIsNotEnabled()
-        compose.onNodeWithText("停止本轮").assertIsNotEnabled()
+        compose.onNodeWithText("中断").assertIsNotEnabled()
         screenshot("message-own-disabled")
     }
     @Test fun readonlySheetAllowsProcessCopyAndStarButNoWriteActions() {
@@ -127,12 +126,12 @@ class MessageActionsUiTest {
                 onToggleStar = { _, _ -> stars++ }, onOpenProcess = {}) { MessageFrame(message) }
         } }
         open("answer")
-        compose.onNodeWithText("从这里新建任务").assertIsNotEnabled()
+        compose.onNodeWithText("新建任务").assertIsNotEnabled()
         compose.onNodeWithText("编辑").assertDoesNotExist()
-        compose.onNodeWithText("停止本轮").assertDoesNotExist()
-        compose.onNodeWithText("追问 reviewer").assertDoesNotExist()
-        compose.onNodeWithText("查看过程与相关调用").assertIsEnabled()
-        compose.onNodeWithText("复制正文与结构化结果").assertIsEnabled()
+        compose.onNodeWithText("中断").assertDoesNotExist()
+        compose.onNodeWithText("追问").assertDoesNotExist()
+        compose.onNodeWithText("查看过程").assertIsEnabled()
+        compose.onNodeWithText("复制").assertIsEnabled()
         compose.onNodeWithText("星标").performClick()
         compose.runOnIdle { assertEquals(0, tasks); assertEquals(1, stars) }
     }
@@ -150,7 +149,7 @@ class MessageActionsUiTest {
         compose.onNodeWithText(messageCopyText(message)).assertIsDisplayed()
         compose.onNodeWithText(messageCopyText(message)).performTouchInput { longClick() }
         screenshot("message-selection")
-        compose.onNodeWithContentDescription("关闭").performClick()
+        compose.onNodeWithText("关闭").performClick()
         compose.onNodeWithTag("atoll.message.selection").assertDoesNotExist()
     }
     @Test fun markdownOutsideTimelineRemainsSelectable() {

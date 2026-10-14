@@ -29,11 +29,17 @@ class MemberNavigationNodeUiTest {
         compose.waitUntil(40_000) { graph.services.value?.server == server && graph.state.value.identityConfirmed }
         compose.runOnIdle { graph.openChannel(channel) }
         compose.waitUntil(40_000) { graph.state.value.route?.channel == channel }
-        waitNode(hasText("成员") and hasClickAction()).performClick()
+        waitNode(hasContentDescription("聊天信息", substring = true) and hasClickAction()).performClick()
+        waitNode(hasText("添加") and hasClickAction()).performClick()
         waitNode(hasContentDescription("频道成员列表"))
         fun verifyMembers() {
-            waitNode(hasContentDescription("频道成员列表"))
-            compose.onNode(hasText("成员") and hasClickAction()).assertIsSelected()
+            try { waitNode(hasContentDescription("频道成员列表")) } catch (failure: Throwable) {
+                val bitmap = InstrumentationRegistry.getInstrumentation().uiAutomation.takeScreenshot()
+                java.io.File(args.getString("additionalTestOutputDir") ?: "/sdcard/Android/media/dev.atoll.app/additional_test_output", "member-navigation")
+                    .also { it.mkdirs() }.resolve("failure.png").outputStream().use { bitmap?.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                throw AssertionError("members list missing; route=${graph.state.value.route}", failure)
+            }
+            compose.onNode(hasContentDescription("返回对话")).assertExists()
             val focus = RouteFocus.parse(graph.state.value.route?.focus, graph.state.value.route?.tab.orEmpty())
             check(focus?.kind == FocusKind.Panel && focus.key == WorkspacePanel.Members.key)
         }

@@ -53,7 +53,7 @@ class TurnStatesUiTest {
                 onReply={},onEdit={},onOpenProcess={opened += it}) { Text("expanded process should remain hidden") }
         } }
         compose.onNodeWithText("expanded process should remain hidden").assertDoesNotExist()
-        compose.onNodeWithText("查看 ›").performClick()
+        compose.onNodeWithText("已合并到上一条一起处理 ›").performClick()
         compose.runOnIdle { assertEquals(listOf("destination"),opened) }
         screenshot("merged")
     }
@@ -72,12 +72,14 @@ class TurnStatesUiTest {
             }
         } }
         screenshot("failed-lost-ready")
+        compose.onNodeWithText("失败：接收方已不可用（接收方进程已结束）").assertIsDisplayed()
+        compose.onNodeWithText("没有收到结果 · Agent 已重启").assertIsDisplayed()
+        compose.onNodeWithText("重试").performClick()
         compose.onNodeWithText("重新发送").performClick()
-        compose.onNodeWithText("重发").performClick()
-        compose.onAllNodesWithText("查看过程", substring = true).assertCountEquals(1)
+        compose.onAllNodesWithText("过程 ›").assertCountEquals(1)
         compose.runOnIdle { assertEquals(2,sent); enabled.value=false }
+        compose.onNodeWithText("重试").assertIsNotEnabled()
         compose.onNodeWithText("重新发送").assertIsNotEnabled()
-        compose.onNodeWithText("重发").assertIsNotEnabled()
         screenshot("failed-lost")
     }
     @Test fun acceptedEditsHaveAHeaderTagRatherThanAnEditorSessionLabel() {

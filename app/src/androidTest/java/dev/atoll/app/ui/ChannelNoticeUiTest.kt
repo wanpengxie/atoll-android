@@ -37,7 +37,7 @@ class ChannelNoticeUiTest {
         compose.onNodeWithText(notice).assertIsDisplayed()
         screenshot("history-window")
         assertTrue(compose.onNodeWithText(notice).fetchSemanticsNode().boundsInRoot.top >=
-            compose.onNodeWithText("与我相关").fetchSemanticsNode().boundsInRoot.bottom)
+            compose.onNodeWithContentDescription("返回频道列表").fetchSemanticsNode().boundsInRoot.bottom)
         compose.onNodeWithText("回到最新").performClick()
         compose.runOnIdle { assertEquals(1, jumps) }
         compose.onNodeWithText(notice).assertDoesNotExist()
@@ -59,14 +59,15 @@ class ChannelNoticeUiTest {
         val notice = "连接中断。你仍可浏览已缓存的记录，消息会先存在本机。"
         compose.onNodeWithText(notice).assertDoesNotExist()
         compose.onNodeWithText("连接中").assertIsDisplayed()
-        for ((connection, caption) in listOf(ConnectionPhase.RECONNECTING to "重连中", ConnectionPhase.CLOSED to "已断开")) {
+        for (connection in listOf(ConnectionPhase.RECONNECTING, ConnectionPhase.CLOSED)) {
             compose.runOnIdle { phase.value = connection }
-            compose.onNodeWithText(caption).assertIsDisplayed()
+            if (connection == ConnectionPhase.RECONNECTING) compose.onNodeWithText("连接中").assertIsDisplayed()
+            else compose.onNodeWithText("连接中").assertDoesNotExist()
             compose.onNodeWithText(notice).assertIsDisplayed()
             compose.onNodeWithText("缓存中的记录").assertIsDisplayed()
             val bounds = compose.onNodeWithText(notice).fetchSemanticsNode().boundsInRoot
-            assertTrue(bounds.top >= compose.onNodeWithText(caption).fetchSemanticsNode().boundsInRoot.bottom)
-            assertTrue(bounds.bottom <= compose.onNodeWithText("动态").fetchSemanticsNode().boundsInRoot.top)
+            assertTrue(bounds.top >= compose.onNodeWithContentDescription("返回频道列表").fetchSemanticsNode().boundsInRoot.bottom)
+            assertTrue(bounds.bottom <= compose.onNodeWithText("缓存中的记录").fetchSemanticsNode().boundsInRoot.top)
             compose.onNodeWithText("立即重试").assertIsEnabled().performClick()
             if (connection == ConnectionPhase.RECONNECTING) screenshot("reconnect-banner")
         }
@@ -75,7 +76,7 @@ class ChannelNoticeUiTest {
         compose.onNodeWithText("连接中").assertIsDisplayed()
         compose.runOnIdle { phase.value = ConnectionPhase.OPEN }
         compose.onNodeWithText(notice).assertDoesNotExist()
-        compose.onNodeWithText("已连接").assertIsDisplayed()
+        compose.onNodeWithText("连接中").assertDoesNotExist()
         compose.onNodeWithText("缓存中的记录").assertIsDisplayed()
     }
 

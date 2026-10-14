@@ -226,7 +226,7 @@ def main(argv=None):
     parser.add_argument('--owner', default='sol-2')
     parser.add_argument('--serial', default='emulator-5554')
     parser.add_argument('--build-type', choices=['debug', 'benchmark'], default='debug')
-    parser.add_argument('--class', dest='test_class', help='Run a UI test class through the same lease; skip the 17-step smoke summary check')
+    parser.add_argument('--class', dest='test_class', help='Run UI test classes (comma-separated) through the same lease; skip the 17-step smoke summary check')
     parser.add_argument('--queue-timeout', type=int, default=900)
     parser.add_argument('--output', type=Path, default=Path.home() / 'atoll-build/e2e-artifacts/instrumented')
     parser.add_argument('--dry-run', action='store_true')
@@ -235,8 +235,9 @@ def main(argv=None):
     validate_url(args.url)
     if args.serial != 'emulator-5554':
         raise Failure('only emulator-5554 is allowed')
-    if args.test_class is not None and not re.fullmatch(r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+', args.test_class, re.ASCII):
-        raise Failure('--class must be a fully qualified test class name')
+    name = r'[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+'
+    if args.test_class is not None and not re.fullmatch(name + r'(?:,' + name + r')*', args.test_class, re.ASCII):
+        raise Failure('--class must be fully qualified test class names, separated by commas')
     if args.release_lock:
         release_emulator(args.owner)
         return 0

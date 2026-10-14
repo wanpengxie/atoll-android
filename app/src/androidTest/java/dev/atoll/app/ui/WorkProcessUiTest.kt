@@ -9,6 +9,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.*
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -37,7 +38,7 @@ class WorkProcessUiTest {
         requestSeq = 42, terminalId = "terminal:opaque", request = MessageViewState("request:opaque", "root", "实现原生 Android 客户端", "12:00"),
         agent = AgentViewState("agent:claude", "claude"), relatedCalls = listOf(call(1)), subTasks = listOf(task(1)))
 
-    @Test fun chipsExpandIndependentlyWithThreePlainPreviewsAndCollapseWithoutRichComposition() {
+    @Test fun blockShowsCollaborationCardSubTasksAndOneStatusLineWithoutRichDetails() {
         val opened = mutableListOf<String>()
         val message = MessageViewState("answer", "claude", "完成摘要", "12:02", agent = true, status = MessageStatus.Completed,
             trail = ProgressTrailViewState("实现", records, false), relatedCalls = (1..4).map { call(it, true) } + (5..8).map { call(it) },
@@ -45,25 +46,22 @@ class WorkProcessUiTest {
         compose.setContent { AtollTheme { Surface { Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState())) {
             MessageFrame(message, onRelatedCall = { opened += it }, onMore = { opened += "root" })
         } } } }
-        compose.onNodeWithText("协作 4").assertIsNotSelected()
-        compose.onNodeWithText("回复摘要 1", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("协作 4").performClick().assertIsSelected()
-        compose.onNodeWithText("子 Agent 4").performClick().assertIsSelected()
-        compose.onNodeWithText("调用 4").performClick().assertIsSelected()
-        compose.onNodeWithText("回复摘要 1", substring = true).assertExists()
-        compose.onNodeWithText("回复摘要 4", substring = true).assertDoesNotExist()
+        // ⑥ collaboration: a 聊天记录 card with the last two lines.
+        compose.onNodeWithText("claude 与 sol-1 的协作").assertExists()
+        compose.onNodeWithText("claude：回复摘要 4").assertExists()
+        compose.onNodeWithText("claude：回复摘要 1").assertDoesNotExist()
+        // ⑦ sub-tasks inside the block; ✓ is grey, not a coloured pill.
+        compose.onNodeWithText("子任务 4/4").assertExists()
+        // One status line: 2 process records + 4 ordinary calls.
+        compose.onNodeWithText("调用了 6 个工具 ›").assertHeightIsAtLeast(44.dp)
         compose.onNodeWithText("隐藏结果 1").assertDoesNotExist()
         compose.onNodeWithText("隐藏任务详情 1").assertDoesNotExist()
         compose.onNodeWithText("隐藏过程详情").assertDoesNotExist()
-        screenshot("turn-expanded")
-        compose.onNodeWithText("任务 1").performScrollTo().performClick()
-        compose.runOnIdle { assertEquals(listOf("call:1"), opened) }
-        compose.onNodeWithText("收起").performScrollTo().performClick()
-        compose.onNodeWithText("最近两步").assertDoesNotExist()
-        compose.onNodeWithText("回复摘要 1", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("过程 2 ›").performClick()
-        compose.runOnIdle { assertEquals(listOf("call:1", "root"), opened) }
-        screenshot("turn-collapsed")
+        screenshot("turn-block")
+        compose.onNodeWithText("核对文件 1").performScrollTo().performClick()
+        compose.onNodeWithText("协作记录 · 4 条 ›").performScrollTo().performClick()
+        compose.onNodeWithText("调用了 6 个工具 ›").performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf("task-request:1", "root", "root"), opened) }
     }
 
     @Test fun sheetComposesOnlySelectedTabAndRecordDetailsAndKeepsLedgerIdentity() {
@@ -80,11 +78,11 @@ class WorkProcessUiTest {
         compose.onNodeWithText("协作内容槽").assertIsDisplayed()
         compose.onNodeWithText("工具输出").assertDoesNotExist()
         screenshot("process-collaboration")
-        compose.onNodeWithText("子任务").performClick()
+        compose.onNodeWithText("子任务 1").performClick()
         compose.onNodeWithText("核对文件 1").assertIsDisplayed()
         compose.onNodeWithText("隐藏任务详情 1").assertDoesNotExist()
         screenshot("process-tasks")
-        compose.onNodeWithText("调用").performClick()
+        compose.onNodeWithText("调用 1").performClick()
         compose.onNodeWithContentDescription("展开 关联调用 任务 1").performClick()
         compose.onNodeWithText("结构化结果").performClick()
         compose.onNodeWithText("隐藏结果 1", substring = true).assertExists()

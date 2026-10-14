@@ -78,13 +78,24 @@ object ConversationPresentation {
                 }
             } else if (options.scope == ConversationScope.MINE && envelope.type.startsWith("ui.")) return@mapNotNull null
             val scoped = if (options.scope == ConversationScope.MINE && entry.thread.isNotEmpty()) entry.copy(thread = frozen(entry.thread.filter { !it.turn!!.request.type.startsWith("ui.") && !ConversationVisibility.isControlOnlyTurn(it.turn) })) else entry
-            if (related != null && !matchesConversation(scoped, related)) return@mapNotNull null
+            if (related != null && !matchesConversation(scoped, related))
+                return@mapNotNull TimelineEntry("hidden", entry.seq, lastSeq = maxOf(entry.seq, entry.lastSeq), hiddenCount = 1)
             if (options.scope == ConversationScope.MINE && options.actorFilter.isNotEmpty() && !scoped.envelopes().any { it.senderId in options.actorFilter || it.audience.any(options.actorFilter::contains) }) return@mapNotNull null
             scoped
         }
+        // ChatStates ③: a run of entries left out by 与我相关 becomes one “N 条与你无关的消息” line.
+        val marked = ArrayList<TimelineEntry>(filtered.size)
+        for (entry in filtered) {
+            val last = marked.lastOrNull()
+            if (entry.kind == "hidden" && last?.kind == "hidden")
+                marked[marked.lastIndex] = last.copy(lastSeq = maxOf(last.lastSeq, entry.lastSeq), hiddenCount = last.hiddenCount + entry.hiddenCount)
+            else marked += entry
+        }
+        // With nothing related at all, the empty state explains the scope instead.
+        if (marked.all { it.kind == "hidden" }) marked.clear()
         val transientTail = mutableMapOf<String, TimelineEntry>()
-        for (entry in filtered) if (isTransient(entry)) transientTail["${entry.envelope?.senderId}:${entry.envelope?.type}"] = entry
-        val selected = filtered.filter { !isTransient(it) || transientTail["${it.envelope?.senderId}:${it.envelope?.type}"] === it }
+        for (entry in marked) if (isTransient(entry)) transientTail["${entry.envelope?.senderId}:${entry.envelope?.type}"] = entry
+        val selected = marked.filter { !isTransient(it) || transientTail["${it.envelope?.senderId}:${it.envelope?.type}"] === it }
         val items = attachSubTasks(selected, state, facts?.taskSteps).toMutableList()
         if (options.showNarration && state.narration.isNotEmpty()) {
             val first = state.narration.first().seq
@@ -168,7 +179,7 @@ object ConversationPresentation {
         val bounds = bounds(entry)
         val text = envelope?.body?.text("text")?.ifEmpty { envelope.body.text("body") }.orEmpty()
         val layout = when {
-            entry.kind == "narration" || entry.envelope?.let(ConversationVisibility::weakNoticeEvent) == true -> "compact"
+            entry.kind == "narration" || entry.kind == "hidden" || entry.envelope?.let(ConversationVisibility::weakNoticeEvent) == true -> "compact"
             envelope != null && (ConversationVisibility.attachments(envelope.body).isNotEmpty() || "```" in text || text.length > 1200) -> "rich"
             entry.turn != null -> if (entry.turn.terminal == null && !options.newerUnloaded) "reserved" else "normal"
             text.length < 120 -> "compact"
@@ -177,13 +188,13 @@ object ConversationPresentation {
         return PresentationItem(entry.id, entry, bounds.first, bounds.second,
             entry.turn?.request?.audience?.firstOrNull() ?: entry.turn?.terminal?.senderId ?: envelope?.senderId.orEmpty(),
             timestamp, day, if (timestamp > 0 && nextTimestamp > 0 && day != dayOf(nextTimestamp, options.zoneId)) nextTimestamp else 0,
-            continuation, layout, options.newerUnloaded || entry.turn?.terminal != null || entry.kind == "narration" || entry.turn == null && envelope?.body?.flag("transient") != true,
+            continuation, layout, options.newerUnloaded || entry.turn?.terminal != null || entry.kind == "narration" || entry.kind == "hidden" || entry.turn == null && envelope?.body?.flag("transient") != true,
             "${bounds.second}:${entry.copy(subTasks = emptyList()).hashCode()}${entry.subTaskRevision.takeIf { it.isNotEmpty() }?.let { ":$it" }.orEmpty()}")
     }
     private fun dayOf(timestamp: Long, zone: ZoneId) = if (timestamp <= 0) "" else Instant.ofEpochMilli(timestamp).atZone(zone).toLocalDate().toString()
     private fun conversational(entry: TimelineEntry) = entry.kind == "standalone" && entry.envelope?.let { !ConversationVisibility.weakNoticeEvent(it) } == true || entry.kind == "turn" && entry.turn?.request?.type !in setOf("human.ask", "human.approve")
     private fun bounds(entry: TimelineEntry): Pair<Long, Long> {
-        if (entry.kind == "narration") return entry.seq to maxOf(entry.seq, entry.lastSeq)
+        if (entry.kind == "narration" || entry.kind == "hidden") return entry.seq to maxOf(entry.seq, entry.lastSeq)
         if (entry.turn == null) return entry.seq to entry.seq
         val seqs = (listOf(entry) + entry.thread).flatMap { node -> listOf(node.seq, node.turn?.requestSeq ?: 0, node.turn?.lastSeq ?: 0, node.turn?.terminalSeq ?: 0) + node.turn?.provisional.orEmpty().map { it.seq } }.filter { it > 0 }
         return (seqs.minOrNull() ?: entry.seq) to (seqs.maxOrNull() ?: entry.seq)
