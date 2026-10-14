@@ -21,7 +21,8 @@ enum class SubTaskPhase(val label: String) { Running("进行中"), Completed("�
 @Immutable data class SubTaskViewState(val id: String, val title: String, val owner: String, val kind: SubTaskKind,
     val phase: SubTaskPhase, val startedAtMillis: Long, val requestId: String? = null, val latest: String = "",
     val request: String = "", val result: String = "", val messages: List<String> = emptyList(), val children: List<SubTaskViewState> = emptyList())
-@Immutable data class StarredMessageViewState(val id: String, val sender: String, val time: String, val text: String)
+@Immutable data class StarredMessageViewState(val id: String, val sender: String, val time: String, val text: String,
+    val senderId: String = sender, val agent: Boolean = true, val resultFields: Int? = null, val self: Boolean = false)
 fun runningFor(startedAt: Long, now: Long): String {
     val minutes = ((now - startedAt).coerceAtLeast(0) / 60000)
     return when { minutes < 1 -> "刚开始"; minutes < 60 -> "已运行 $minutes 分钟"; else -> "已运行 ${minutes / 60} 小时 ${minutes % 60} 分钟" }

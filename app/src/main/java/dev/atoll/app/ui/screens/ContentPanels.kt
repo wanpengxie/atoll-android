@@ -11,10 +11,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -69,24 +74,38 @@ fun RunningDrawer(tasks: List<SubTaskViewState>, onJump: (String) -> Boolean, on
 }
 @Composable
 fun StarredDrawer(stars: List<StarredMessageViewState>, onJump: (String) -> Boolean, onRemove: (String) -> Unit, onClose: () -> Unit) {
+    ContentPanel("星标", onClose) { StarredMessagesContent(stars, onJump, onRemove, onClose) }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun StarredMessagesContent(stars: List<StarredMessageViewState>, onJump: (String) -> Boolean, onRemove: (String) -> Unit,
+    onClose: () -> Unit, modifier: Modifier = Modifier) {
     var missing by remember { mutableStateOf<String?>(null) }
-    ContentPanel("星标", onClose) {
-        LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             if (stars.isEmpty()) item { PanelEmpty("还没有星标消息", "长按一条消息选择“星标”，它会出现在这里，点一下就能回到那条消息。") }
-            items(stars, key = { it.id }) { star -> Row(Modifier.fillMaxWidth().clip(AtollShapes.Card).background(AtollColors.Surface).border(1.dp, AtollColors.Line, AtollShapes.Card)) {
-                Column(Modifier.weight(1f).clickable { if (onJump(star.id)) { missing = null; onClose() } else missing = star.id }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            items(stars, key = { it.id }) { star ->
+                Column(Modifier.fillMaxWidth().clip(AtollShapes.Card).background(AtollColors.Surface).border(1.dp, AtollColors.Line, AtollShapes.Card)
+                    .combinedClickable(onClick = { if (onJump(star.id)) { missing = null; onClose() } else missing = star.id },
+                        onLongClickLabel = "取消星标", onLongClick = { onRemove(star.id) }).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        ActorAvatar(star.sender, star.sender, agent = true, size = 22.dp)
-                        Text(star.sender, Modifier.weight(1f), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                        Text(star.time, fontSize = 12.sp, color = AtollColors.Muted)
+                        ActorAvatar(star.sender, star.senderId, agent = star.agent, self = star.self, size = 24.dp)
+                        Text(buildAnnotatedString {
+                            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(star.sender) }
+                            withStyle(SpanStyle(color = AtollColors.Muted)) { append(" · "); append(star.time) }
+                        }, Modifier.weight(1f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Icon(Icons.Filled.Star, "已星标", Modifier.size(16.dp), tint = AtollColors.Star)
                     }
                     Text(star.text.ifEmpty { "（无文字内容）" }, fontSize = 15.sp, lineHeight = 22.sp, maxLines = 4, overflow = TextOverflow.Ellipsis)
+                    star.resultFields?.let { count -> Text("结构化结果 · $count 个字段",
+                        Modifier.clip(RoundedCornerShape(6.dp)).background(AtollColors.Subtle).padding(horizontal = 8.dp, vertical = 2.dp),
+                        fontSize = 12.sp, color = AtollColors.Muted) }
                     if (missing == star.id) Text("这条消息还没加载到页面上，往上翻到它附近后再点。", color = AtollColors.Warning, fontSize = 13.sp)
                 }
-                IconButton({ onRemove(star.id) }, Modifier.size(44.dp)) { Text("×", fontSize = 18.sp, color = AtollColors.Muted) }
-            } }
+            }
+            if (stars.isNotEmpty()) item { Text("点按跳到原消息；长按取消星标", Modifier.fillMaxWidth().padding(top = 6.dp),
+                fontSize = 12.sp, color = AtollColors.Muted, textAlign = TextAlign.Center) }
         }
-    }
 }
 @Composable private fun PanelEmpty(title: String, description: String) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 40.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
