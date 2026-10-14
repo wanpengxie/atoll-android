@@ -55,9 +55,11 @@ def wait_emulator_network(environment, lock):
     # Check warm runs too: the host's successful curl does not test guest routing.
     validate_url(URL)
     target = urllib.parse.urlsplit(URL)
-    deadline = time.monotonic() + 120
+    started = time.monotonic()
+    deadline = started + 120
     attempts = 0
-    while time.monotonic() < deadline:
+    healed = False
+    while (remaining := deadline - time.monotonic()) > 0:
         lock.check_owner()
         if environment.get('ANDROID_SERIAL') != 'emulator-5554':
             raise Failure('ANDROID_SERIAL must explicitly select emulator-5554')
@@ -65,14 +67,30 @@ def wait_emulator_network(environment, lock):
         try:
             probe = subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'toybox', 'nc', '-z', '-w', '3',
                                     target.hostname, str(target.port)], env=environment,
-                                   capture_output=True, text=True, timeout=8)
+                                   capture_output=True, text=True, timeout=min(8, remaining))
             if probe.returncode == 0:
                 lock.event('emulator-network-ready', server=URL, attempts=attempts)
                 return
             lock.event('emulator-network-wait', server=URL, attempt=attempts, exit_code=probe.returncode)
         except subprocess.TimeoutExpired:
             lock.event('emulator-network-wait', server=URL, attempt=attempts, exit_code=124)
-        time.sleep(2)
+        now = time.monotonic()
+        if now >= deadline:
+            break
+        # Reserve both adb timeouts and the 3s gap inside the original deadline.
+        if not healed and now - started >= 20 and deadline - now >= 19:
+            healed = True
+            lock.check_owner()
+            lock.event('emulator-network-heal', serial='emulator-5554', method='wifi-toggle')
+            try:
+                subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'svc', 'wifi', 'disable'],
+                               env=environment, capture_output=True, text=True, check=True, timeout=8)
+                time.sleep(3)
+            finally:
+                lock.check_owner()
+                subprocess.run(['adb', '-s', 'emulator-5554', 'shell', 'svc', 'wifi', 'enable'],
+                               env=environment, capture_output=True, text=True, check=True, timeout=8)
+        time.sleep(min(2, max(0, deadline - time.monotonic())))
     raise Failure('environment problem: emulator-5554 could not reach the test node at ' + URL +
                   ' within 120s; no Gradle test was started')
 

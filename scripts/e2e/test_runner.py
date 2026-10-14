@@ -331,6 +331,77 @@ class RunnerTest(unittest.TestCase):
             instrumented.wait_emulator_network({'ANDROID_SERIAL': 'e5ca3495'}, unittest.mock.Mock())
         adb.assert_not_called()
 
+    def test_short_network_failure_does_not_toggle_wifi(self):
+        clock = [0.0]
+        lock = unittest.mock.Mock()
+        def sleep(seconds): clock[0] += seconds
+        def probe(command, **kwargs): return unittest.mock.Mock(returncode=0 if clock[0] >= 18 else 1)
+        with patch('instrumented.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('instrumented.time.sleep', side_effect=sleep), \
+             patch('instrumented.subprocess.run', side_effect=probe) as adb:
+            instrumented.wait_emulator_network({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+        self.assertEqual(18, clock[0])
+        self.assertTrue(all('nc' in call.args[0] for call in adb.call_args_list))
+        self.assertFalse(any(call.args[0] == 'emulator-network-heal' for call in lock.event.call_args_list))
+
+    def test_wifi_heal_runs_once_under_lease_without_resetting_total_deadline(self):
+        clock = [0.0]
+        commands = []
+        sleeps = []
+        lock = unittest.mock.Mock()
+        environment = {'ANDROID_SERIAL': 'emulator-5554'}
+        def sleep(seconds): sleeps.append(seconds); clock[0] += seconds
+        def execute(command, **kwargs):
+            self.assertEqual(environment, kwargs['env'])
+            self.assertEqual(['adb', '-s', 'emulator-5554'], command[:3])
+            self.assertEqual(len(commands) + 1, lock.check_owner.call_count)
+            commands.append((clock[0], command))
+            return unittest.mock.Mock(returncode=1 if 'nc' in command else 0)
+        with patch('instrumented.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('instrumented.time.sleep', side_effect=sleep), \
+             patch('instrumented.subprocess.run', side_effect=execute), \
+             self.assertRaisesRegex(Failure, 'environment problem.*120s'):
+            instrumented.wait_emulator_network(environment, lock)
+        toggles = [(instant, command[-1]) for instant, command in commands if 'wifi' in command]
+        self.assertEqual([(20, 'disable'), (23, 'enable')], toggles)
+        self.assertEqual(1, sleeps.count(3))
+        self.assertEqual(120, clock[0])
+        self.assertEqual(1, sum(call.args[0] == 'emulator-network-heal' for call in lock.event.call_args_list))
+        lock.event.assert_any_call('emulator-network-heal', serial='emulator-5554', method='wifi-toggle')
+        self.assertFalse(any(call.args[0] == 'emulator-network-ready' for call in lock.event.call_args_list))
+
+    def test_network_recovered_by_wifi_heal_proceeds_to_ready(self):
+        clock = [0.0]
+        enabled = [False]
+        lock = unittest.mock.Mock()
+        def sleep(seconds): clock[0] += seconds
+        def execute(command, **kwargs):
+            if command[-1] == 'enable': enabled[0] = True
+            return unittest.mock.Mock(returncode=0 if 'wifi' in command or enabled[0] else 1)
+        with patch('instrumented.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('instrumented.time.sleep', side_effect=sleep), \
+             patch('instrumented.subprocess.run', side_effect=execute):
+            instrumented.wait_emulator_network({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+        self.assertEqual(25, clock[0])
+        lock.event.assert_any_call('emulator-network-ready', server=URL, attempts=12)
+
+    def test_late_probe_leaves_no_budget_for_wifi_toggle(self):
+        clock = [0.0]
+        lock = unittest.mock.Mock()
+        def sleep(seconds): clock[0] += seconds
+        def execute(command, **kwargs):
+            clock[0] = 115 if clock[0] == 0 else 120
+            return unittest.mock.Mock(returncode=1)
+        with patch('instrumented.time.monotonic', side_effect=lambda: clock[0]), \
+             patch('instrumented.time.sleep', side_effect=sleep), \
+             patch('instrumented.subprocess.run', side_effect=execute) as adb, \
+             self.assertRaisesRegex(Failure, 'environment problem.*120s'):
+            instrumented.wait_emulator_network({'ANDROID_SERIAL': 'emulator-5554'}, lock)
+        self.assertEqual(120, clock[0])
+        self.assertTrue(all('nc' in call.args[0] for call in adb.call_args_list))
+        self.assertEqual(3, adb.call_args.kwargs['timeout'])
+        self.assertFalse(any(call.args[0] == 'emulator-network-heal' for call in lock.event.call_args_list))
+
     def test_isolated_password_helper_remains_outside_the_ui_runner(self):
         spec = importlib.util.spec_from_file_location('test_password', Path(__file__).parent.parent / 'test-node-password.py')
         helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
