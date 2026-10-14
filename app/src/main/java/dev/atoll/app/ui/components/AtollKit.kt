@@ -94,7 +94,7 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
     Row(modifier.clip(AtollShapes.Pill).background(AtollColors.Sunken).padding(3.dp)) {
         options.forEachIndexed { index, label ->
             val active = index == selected
-            Box((if (fill) Modifier.weight(1f) else Modifier).heightIn(min = 30.dp).clip(AtollShapes.Pill)
+            Box((if (fill) Modifier.weight(1f) else Modifier).heightIn(min = 28.dp).clip(AtollShapes.Pill)
                 .background(if (active) AtollColors.Surface else Color.Transparent)
                 .semantics { this.selected = active }
                 .clickable(role = Role.Tab) { onSelect(index) }.padding(horizontal = 12.dp),
@@ -109,13 +109,13 @@ fun SegmentedControl(options: List<String>, selected: Int, onSelect: (Int) -> Un
 /** Actor filter chip with its avatar; the dot shows a running turn. */
 @Composable
 fun ActorChip(name: String, id: String, selected: Boolean, running: Boolean = false, onClick: () -> Unit) {
-    Row(Modifier.heightIn(min = 34.dp).clip(AtollShapes.Pill)
+    Row(Modifier.heightIn(min = 32.dp).clip(AtollShapes.Pill)
         .background(if (selected) AtollColors.LagoonSurface else AtollColors.Surface)
         .border(BorderStroke(1.dp, if (selected) AtollColors.Lagoon.copy(alpha = .45f) else AtollColors.ControlLine), AtollShapes.Pill)
         .semantics { this.selected = selected }
         .clickable(onClick = onClick).padding(start = 4.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        ActorAvatar(name, id, agent = true, size = 24.dp)
+        ActorAvatar(name, id, agent = true, size = 22.dp)
         Text(name, fontSize = 13.sp, fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
             color = if (selected) AtollColors.LagoonText else AtollColors.Body, maxLines = 1)
         if (running) PulseDot()

@@ -236,7 +236,7 @@ private fun FilterBar(state: ConversationViewState, onScope: () -> Unit, onActor
         }
         return
     }
-    ChipRow(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 12.dp, vertical = 8.dp)) {
+    ChipRow(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 12.dp, vertical = 6.dp)) {
         SegmentedControl(listOf("与我相关", "全部"), if (state.mineOnly) 0 else 1, { index -> if ((index == 0) != state.mineOnly) onScope() })
         if (state.mineOnly && (state.agents.isNotEmpty() || state.actorFilters.isNotEmpty())) Box(Modifier.size(1.dp, 20.dp).background(AtollColors.ControlLine))
         if (state.mineOnly) state.agents.forEach { agent ->

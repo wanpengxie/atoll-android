@@ -1,6 +1,9 @@
 package dev.atoll.app.ui.screens
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,8 +27,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.atoll.app.ui.components.AtollButton
-import dev.atoll.app.ui.components.SegmentedControl
+import dev.atoll.app.ui.components.Spinner
 import dev.atoll.app.ui.theme.AtollColors
 import dev.atoll.app.ui.theme.AtollMono
 
@@ -41,26 +43,47 @@ fun LoginScreen(state: LoginViewState, onSubmit: (LoginViewState) -> Unit) {
     val register = mode == AuthMode.Register
     val error = state.error?.takeIf { mode == state.mode && server == state.server && account == state.account }
     val ready = !state.busy && server.isNotBlank() && account.isNotBlank() && password.isNotEmpty()
-    Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding().imePadding().verticalScroll(rememberScrollState())
-        .padding(horizontal = 24.dp, vertical = 32.dp).widthIn(max = 480.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        AtollMark(Modifier.padding(top = 24.dp))
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(if (register) "创建账号" else "登录 Atoll", fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold)
-            Text(if (register) "注册后由空间管理员准入，才能加入频道。" else "连接你的节点，和 Agent 一起工作。", fontSize = 15.sp, color = AtollColors.Muted)
+    Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding().imePadding()) {
+        Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
+            .padding(start = 24.dp, end = 24.dp, top = if (register) 8.dp else 72.dp, bottom = 24.dp)) {
+            if (register) TextButton({ if (!state.busy) mode = AuthMode.Login }, Modifier.heightIn(min = 44.dp)) {
+                Text("‹ 返回登录", color = AtollColors.Ink)
+            } else {
+                AtollMark()
+                Spacer(Modifier.height(18.dp))
+            }
+            Column(Modifier.padding(top = if (register) 16.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (register) "创建账号" else "登录 Atoll", fontSize = 30.sp, lineHeight = 36.sp, fontWeight = FontWeight.Bold)
+                Text(if (register) "注册后由空间管理员准入，才能加入频道。" else "连接你的节点，和 Agent 一起工作。",
+                    fontSize = 15.sp, lineHeight = 22.sp, color = AtollColors.Muted)
+            }
+            Spacer(Modifier.height(36.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                LoginField("服务器地址", server, { server = it }, !state.busy, KeyboardType.Uri, mono = true)
+                LoginField(if (register) "邮箱" else "账号", account, { account = it }, !state.busy, if (register) KeyboardType.Email else KeyboardType.Text)
+                if (register) LoginField("显示名（可选）", displayName, { displayName = it }, !state.busy, KeyboardType.Text)
+                LoginField("密码", password, { password = it }, !state.busy, KeyboardType.Password, error = error,
+                    transformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailing = { IconButton({ reveal = !reveal }, Modifier.size(44.dp)) {
+                        Icon(if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                            if (reveal) "隐藏密码" else "显示密码", Modifier.size(20.dp), tint = AtollColors.Muted)
+                    } })
+                Button({ onSubmit(LoginViewState(server, account, password, mode = mode, displayName = displayName)) },
+                    Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 54.dp), enabled = ready,
+                    shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = AtollColors.Ink,
+                        disabledContainerColor = AtollColors.Sunken, disabledContentColor = AtollColors.Faint)) {
+                    if (state.busy) { Spinner(14.dp, AtollColors.Faint, AtollColors.Line); Spacer(Modifier.width(8.dp)) }
+                    Text(if (state.busy) "请稍候…" else if (register) "创建账号" else "进入 Atoll", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                }
+            }
         }
-        SegmentedControl(listOf("登录", "注册"), if (register) 1 else 0, { if (!state.busy) mode = if (it == 1) AuthMode.Register else AuthMode.Login },
-            Modifier.fillMaxWidth().padding(top = 8.dp), fill = true)
-        LoginField("服务器地址", server, { server = it }, !state.busy, KeyboardType.Uri, mono = true)
-        LoginField(if (register) "邮箱" else "账号", account, { account = it }, !state.busy, if (register) KeyboardType.Email else KeyboardType.Text)
-        if (register) LoginField("显示名（可选）", displayName, { displayName = it }, !state.busy, KeyboardType.Text)
-        LoginField("密码", password, { password = it }, !state.busy, KeyboardType.Password, error = error,
-            transformation = if (reveal) VisualTransformation.None else PasswordVisualTransformation(),
-            trailing = { IconButton({ reveal = !reveal }) {
-                Icon(if (reveal) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (reveal) "隐藏密码" else "显示密码", tint = AtollColors.Muted)
-            } })
-        AtollButton(if (state.busy) "请稍候…" else if (register) "创建账号" else "进入 Atoll",
-            { onSubmit(LoginViewState(server, account, password, mode = mode, displayName = displayName)) },
-            Modifier.fillMaxWidth().padding(top = 8.dp), enabled = ready, busy = state.busy, height = 54.dp)
+        Row(Modifier.fillMaxWidth().padding(bottom = 12.dp), horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically) {
+            Text(if (register) "已有账号？" else "还没有账号？", fontSize = 15.sp, color = AtollColors.Muted)
+            TextButton({ if (!state.busy) mode = if (register) AuthMode.Login else AuthMode.Register }, enabled = !state.busy) {
+                Text(if (register) "登录" else "注册", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Lagoon)
+            }
+        }
     }
 }
 
@@ -69,13 +92,18 @@ private fun LoginField(label: String, value: String, onChange: (String) -> Unit,
     mono: Boolean = false, error: String? = null, transformation: VisualTransformation = VisualTransformation.None,
     trailing: (@Composable () -> Unit)? = null) {
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(value, onChange, Modifier.fillMaxWidth(), label = { Text(label) }, singleLine = true, enabled = enabled,
-            isError = error != null, visualTransformation = transformation, trailingIcon = trailing,
-            textStyle = LocalTextStyle.current.copy(fontSize = 16.sp, fontFamily = if (mono) AtollMono else LocalTextStyle.current.fontFamily),
-            keyboardOptions = KeyboardOptions(keyboardType = keyboard), shape = MaterialTheme.shapes.medium,
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = AtollColors.Lagoon, focusedLabelColor = AtollColors.LagoonText,
-                unfocusedBorderColor = AtollColors.ControlLine, unfocusedContainerColor = AtollColors.Surface, focusedContainerColor = AtollColors.Surface,
-                disabledContainerColor = AtollColors.Subtle, cursorColor = AtollColors.Lagoon))
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Body)
+        BasicTextField(value, onChange, Modifier.fillMaxWidth().height(52.dp).semantics { contentDescription = label },
+            singleLine = true, enabled = enabled, visualTransformation = transformation,
+            textStyle = LocalTextStyle.current.copy(fontSize = if (mono) 15.sp else 16.sp, color = AtollColors.Ink,
+                fontFamily = if (mono) AtollMono else LocalTextStyle.current.fontFamily),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboard),
+            decorationBox = { inner -> Row(Modifier.fillMaxSize().background(AtollColors.Surface, RoundedCornerShape(14.dp))
+                .border(if (error != null) 1.5.dp else 1.dp, if (error != null) AtollColors.Danger else AtollColors.ControlLine, RoundedCornerShape(14.dp))
+                .padding(start = 16.dp, end = if (trailing == null) 16.dp else 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { inner() }
+                trailing?.invoke()
+            } })
         if (error != null) Text(error, fontSize = 13.sp, color = AtollColors.DangerText)
     }
 }
@@ -85,7 +113,7 @@ private fun LoginField(label: String, value: String, onChange: (String) -> Unit,
 private fun AtollMark(modifier: Modifier = Modifier) {
     Canvas(modifier.size(48.dp).semantics { contentDescription = "Atoll" }) {
         val ring = size.minDimension * 0.125f
-        drawCircle(AtollColors.Ink, radius = size.minDimension / 2 - ring / 2 - 2f, center = Offset(size.width / 2, size.height / 2), style = Stroke(ring))
-        drawCircle(AtollColors.Lagoon, radius = size.minDimension * 0.15f, center = Offset(size.width / 2, size.height / 2))
+        drawCircle(AtollColors.Ink, radius = size.minDimension * (17f / 48f), center = Offset(size.width / 2, size.height / 2), style = Stroke(ring))
+        drawCircle(AtollColors.Lagoon, radius = size.minDimension * (7f / 48f), center = Offset(size.width / 2, size.height / 2))
     }
 }

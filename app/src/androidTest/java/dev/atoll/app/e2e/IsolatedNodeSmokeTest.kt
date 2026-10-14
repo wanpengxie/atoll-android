@@ -246,7 +246,7 @@ class IsolatedNodeSmokeTest {
     @Before fun loginAndClearOldFixtures() {
         step("login") {
             waitFor(hasText("进入 Atoll"))
-            replace("服务器地址", config.url); replace("账号", "root"); replace("密码", config.password, private = true)
+            replace("服务器地址", config.url, selector = hasContentDescription("服务器地址")); replace("账号", "root", selector = hasContentDescription("账号")); replace("密码", config.password, private = true, selector = hasContentDescription("密码"))
             // The login screen now owns local fields and only publishes them at submit.
             // Read the rendered server field at that boundary; password semantics are masked.
             val serverField = waitFor(hasSetTextAction() and hasText("服务器地址"))
