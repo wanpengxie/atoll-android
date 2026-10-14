@@ -178,6 +178,16 @@ class RosterViewModel(val channelId: String, private val wire: WireClient, priva
         val body = JsonObject(memberPayload(actor) + ("values" to MemberConfig.patchAtPath(key, JsonPrimitive(value))))
         write(actor, "system.member.config.set", body) { reply -> mutable.value = mutable.value.copy(notice = "已填 $key（配置第 ${reply.number("revision")} 版）；成员会重建，构建结果点「刷新」查看。"); readNow() }
     }
+    /** Web governance.restartActor: system recipient, {member: actorId}. UI confirms first. */
+    fun restartSelected() = enqueue {
+        val actor = mutable.value.selected ?: return@enqueue
+        if (!mutable.value.canWrite || !mutable.value.editableMember) return@enqueue
+        write(actor, "system.member.restart", memberPayload(actor)) {
+            mutable.value = mutable.value.copy(notice = "重启请求已完成；正在刷新成员状态。")
+            refreshNow()
+            readNow()
+        }
+    }
     fun invoke(word: String, arguments: String) = enqueue {
         val actor = mutable.value.selected ?: return@enqueue
         if (!mutable.value.canWrite || mutable.value.capabilities.none { it.type == word }) return@enqueue

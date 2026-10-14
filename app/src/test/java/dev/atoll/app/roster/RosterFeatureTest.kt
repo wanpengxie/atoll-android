@@ -36,11 +36,13 @@ private class FakePort : RosterPort {
     var observation = MemberConfig.parse("""{"items":[{"declared":{"id":"agent:a","kind":"agent","name":"A","body":"class agent"}},{"declared":{"id":"agent:b","kind":"agent","name":"B"}}],"complete":true}""")
     var observationGate: CompletableDeferred<JsonObject>? = null
     val calls = mutableListOf<Pair<String, JsonObject>>()
+    val targets = mutableListOf<String>()
     var actorGate: CompletableDeferred<JsonObject>? = null
     var info = MemberConfig.parse("""{"class":"agent","body":{"class":"agent"},"params":{"keep":"已隐藏","x":1},"requires":["agent.ask"],"own_config":{"values":{"agent":"codex","keep":"已隐藏"},"desired_host":"mini"},"effective":{"api_key":"${'$'}required:key"},"sources":{"api_key":"actor"},"missing":[{"key":"service.api_key","hint":"测试值"}]}""")
     override suspend fun roster(): JsonObject { reads++; return observationGate?.await() ?: observation }
     override suspend fun actor(target: String, word: String, payload: JsonObject): JsonObject {
         calls += word to payload
+        targets += target
         actorGate?.let { return it.await() }
         return when (word) {
             "system.member.get" -> info
@@ -56,6 +58,22 @@ private class FakePort : RosterPort {
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class RosterFeatureTest {
+    @Test fun restartUsesTheWebSystemMemberContractAndRespectsAccess() = runTest {
+        val wire = FakeWire(); val port = FakePort()
+        val vm = RosterViewModel("c", wire, port, "human:self", StandardTestDispatcher(testScheduler))
+        try {
+            runCurrent(); vm.select("agent:a"); vm.updateAccess(true, "human:self"); runCurrent()
+            vm.restartSelected(); runCurrent()
+            val index = port.calls.indexOfFirst { it.first == "system.member.restart" }
+            assertTrue(index >= 0)
+            assertEquals("system", port.targets[index])
+            assertEquals(MemberConfig.parse("{\"member\":\"agent:a\"}"), port.calls[index].second)
+            assertTrue(vm.state.value.notice.contains("重启请求已完成"))
+            assertTrue(port.reads >= 2)
+            vm.updateAccess(false, "human:self"); runCurrent(); vm.restartSelected(); runCurrent()
+            assertEquals(1, port.calls.count { it.first == "system.member.restart" })
+        } finally { vm.close() }
+    }
     @Test fun productionPortReadsOnlyNamesAndEveryWriteGoesThroughFakeWireAndLedgerTerminal() = runBlocking<Unit> {
         MockWebServer().use { server ->
             server.start()
