@@ -246,7 +246,7 @@ class IsolatedNodeSmokeTest {
     @Before fun loginAndClearOldFixtures() {
         step("login") {
             waitFor(hasText("进入 Atoll"))
-            replace("服务器地址", config.url); replace("账号", "root"); replace("密码", config.password, private = true)
+            replace("服务器地址", config.url, selector = hasContentDescription("服务器地址")); replace("账号", "root", selector = hasContentDescription("账号")); replace("密码", config.password, private = true, selector = hasContentDescription("密码"))
             // The login screen now owns local fields and only publishes them at submit.
             // Read the rendered server field at that boundary; password semantics are masked.
             val serverField = waitFor(hasSetTextAction() and hasText("服务器地址"))
@@ -357,7 +357,7 @@ class IsolatedNodeSmokeTest {
             menu("关闭终端")
         }
         step("tasks") { click("任务"); waitFor(SemanticsMatcher("work item count") { node -> node.config.getOrNull(SemanticsProperties.Text).orEmpty().any { it.text.startsWith("工作项 ") } }); click("动态") }
-        step("members") { click("成员"); waitFor(hasText("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("关闭") }
+        step("members") { click("成员"); waitFor(hasContentDescription("刷新名册")); waitFor(hasText("test-codex", substring = true)); click("动态") }
         step("channel-details") { menu("频道详情"); waitFor(hasText("危险操作")); click("关闭") }
         step("create-child") {
             val parentName = graph.state.value.navigation.channels.first { it.id == config.channel }.name

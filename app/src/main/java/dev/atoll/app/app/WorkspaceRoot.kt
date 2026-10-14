@@ -63,6 +63,8 @@ import dev.atoll.app.waiting.WaitingUiState
 import dev.atoll.app.tasks.TasksViewModel
 import dev.atoll.app.tasks.TasksState
 import dev.atoll.app.tasks.TaskCommandState
+import dev.atoll.app.roster.RosterChannelPanel
+import dev.atoll.app.roster.RosterHeaderState
 import dev.atoll.app.roster.RosterViewModel
 import androidx.compose.foundation.gestures.scrollBy
 
@@ -101,6 +103,10 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val emptyRoster = remember { MutableStateFlow<RosterViewModel?>(null) }
     val rosterOwner by (features?.roster ?: emptyRoster).collectAsStateWithLifecycle()
     val roster = rosterOwner?.takeIf { it.channelId == state.route?.channel }
+    val rosterHeader by remember(roster) {
+        roster?.state?.map { RosterHeaderState(it.rows.size, it.online && !it.busy, it.busy) }?.distinctUntilChanged()
+            ?: MutableStateFlow(RosterHeaderState())
+    }.collectAsStateWithLifecycle(initialValue = RosterHeaderState())
     var spaceOpen by remember(services?.wire, services?.boot) { mutableStateOf(false) }
     var createChannelOpen by remember(state.route?.channel, services?.wire, services?.boot) { mutableStateOf(false) }
     val routeFocus = RouteFocus.parse(state.route?.focus, state.route?.tab.orEmpty())
@@ -290,6 +296,9 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                             val terminal = state.route?.tab == "terminal"
                             val content: (@Composable () -> Unit)? = when {
+                                rosterOpen && roster != null && features != null -> ({ RosterChannelPanel(roster, features.governance, onSelect = { actor ->
+                                    graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, actor.id))
+                                }) })
                                 state.route?.tab == "tasks" && tasks != null -> ({ NativeTasksScreen(tasks, onSource = { taskSourceLink(it)?.let(graph::route) },
                                     onTurn = { graph.route(taskSourceLink(buildJsonObject { put("channelId", state.route!!.channel); put("requestId", it) })!!) }) })
                                 terminal && files != null && features != null && services?.pty != null -> ({ key(files) {
@@ -328,16 +337,16 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             Box(Modifier.weight(1f)) {
                             ChannelScreen(conversation, ComposerViewState(""),
                                 if (state.route?.tab == "tasks") ChannelTab.Tasks else ChannelTab.Conversation,
-                                onBack = graph::home, onTab = graph::tab, onScope = graph::scopeToggle, onActor = graph::filter, onChannelActivity = graph::channelActivity,
+                                onBack = graph::home, onTab = { if (rosterOpen) graph.closeFocus(); graph.tab(it) }, onScope = graph::scopeToggle, onActor = graph::filter, onChannelActivity = graph::channelActivity,
                                 onText = {}, onSend = {}, composerVisible = false,
                                 onMenu = { action -> when (action) {
-                                    Item.OpenFiles -> graph.files(true)
-                                    Item.Resources -> graph.resources()
+                                    Item.OpenFiles -> { if (rosterOpen) graph.closeFocus(); graph.files(true) }
+                                    Item.Resources -> { if (rosterOpen) graph.closeFocus(); graph.resources() }
                                     Item.CloseFiles -> graph.files(false)
                                     Item.Recent -> graph.panel(WorkspacePanel.Recent)
                                     Item.Stars -> graph.panel(WorkspacePanel.Stars)
                                     Item.Timers, Item.Schedule -> graph.panel(WorkspacePanel.Timers)
-                                    Item.OpenTerminal -> graph.terminal(true)
+                                    Item.OpenTerminal -> { if (rosterOpen) graph.closeFocus(); graph.terminal(true) }
                                     Item.CloseTerminal -> graph.terminal(false)
                                     Item.ExportPerformance -> graph.export(true)
                                     is ChannelMenuAction.Process -> {
@@ -393,9 +402,11 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                                 },
                                 newerUnloaded = state.newerUnloaded,
                                 connectionPhase = state.navigation.connection, onReconnect = graph::reconnect,
+                                membersOpen = rosterOpen, memberCount = rosterHeader.count, onRefreshMembers = roster?.let { it::refresh },
+                                membersRefreshing = rosterHeader.refreshing, membersRefreshEnabled = rosterHeader.refreshEnabled,
                                 listState = listState, onJumpToBottom = { graph.jumpToBottom(); following = true; jump++ })
                             }
-                            if (features != null && !terminal) {
+                            if (features != null && !terminal && !rosterOpen) {
                             if (waiting != null) WaitingDock(waiting)
                             AtollComposer(features.composer, showLocalEchoes = false, editing = waitingState?.let { waiting?.editorBinding(it) },
                                 onPickChannelFiles = { pickingFile = true },
@@ -446,12 +457,6 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             }
                         }, onEnterChannel = graph::openChannel, onClose = graph::closeFocus,
                             onCreateChannel = { createChannelOpen = true; state.route?.channel?.let(graph::openChannel) })
-                    }
-                }
-                if (rosterOpen && !actorOpen && roster != null) Dialog(onDismissRequest = graph::closeFocus,
-                    properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-                    Surface(Modifier.fillMaxSize()) {
-                        RosterPanel(roster, Modifier.safeDrawingPadding(), onClose = graph::closeFocus, onSelect = { actor -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Participant, actor.id)) })
                     }
                 }
                 if (routeFocus?.kind == FocusKind.Turn) key(routeFocus.key) {
