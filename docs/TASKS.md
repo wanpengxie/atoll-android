@@ -235,8 +235,10 @@ must not change shape unless an item needs it; ask first.
     activity cards (Activity); #9 reconnect banner (Connection).
   - #11 inner layouts (NewChannel, MemberConfig, Starred, Upgrade): first
     worker to finish.
-- Gate per item: JVM tests, the matching UI test via `--class`, and the
-  17-step suite; attach a screenshot next to the artboard.
+- Gate per item: JVM tests and the matching UI test via `--class`, with a
+  screenshot next to the artboard. The 17-step suite runs once per merged
+  batch on `redesign` (lead triggers it), not per item: one emulator is the
+  bottleneck.
 
 ## Status (lead keeps this current)
 
