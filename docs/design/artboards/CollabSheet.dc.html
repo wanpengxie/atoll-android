@@ -12,68 +12,56 @@
 <style>
 body{margin:0}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
-@keyframes atollPulse{0%{box-shadow:0 0 0 0 rgba(29,95,209,.45)}70%{box-shadow:0 0 0 6px rgba(29,95,209,0)}100%{box-shadow:0 0 0 0 rgba(29,95,209,0)}}
+a{color:inherit;text-decoration:none}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #5E6064; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
-  <a href="TurnExpanded.dc.html" aria-label="关闭" style="position: absolute; left: 0; right: 0; top: 0; height: 60px"></a>
-
-  <section role="dialog" aria-label="协作详情" style="position: absolute; left: 0; right: 0; top: 52px; bottom: 0; display: flex; flex-direction: column; background: #F6F6F2; border-radius: 24px 24px 0 0">
-    <div style="flex: none; display: flex; justify-content: center; padding: 8px 0 4px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #D4D4CD"></span></div>
-    <header style="flex: none; display: flex; align-items: center; gap: 10px; padding: 2px 8px 8px 20px">
-      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-        <h1 style="margin: 0; font-size: 17px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">修顶栏截断和登录页键盘遮挡</h1>
-        <span style="font-size: 12px; color: #5C6169">builder 的回合 · 协作 4 · 最深 3 层</span>
-      </span>
-      <a href="TurnExpanded.dc.html" aria-label="关闭" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
-    </header>
-
-    <div role="tablist" style="flex: none; display: flex; gap: 18px; padding: 0 20px; border-bottom: 1px solid #E5E5E0; height: 40px; overflow: hidden">
-      <a href="Process.dc.html" role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">过程 9</a>
-      <span role="tab" aria-selected="true" style="display: flex; align-items: center; font-size: 14px; font-weight: 600; border-bottom: 2px solid #15171A; margin-bottom: -1px">协作 4</span>
-      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">子任务 2</span>
-      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">调用 3</span>
-      <span role="tab" aria-selected="false" style="display: flex; align-items: center; font-size: 14px; color: #5C6169">账本</span>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #EDEDED; color: #191919; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <header style="height: 48px; flex: none; display: flex; align-items: center; padding: 0 4px; background: #EDEDED; border-bottom: 1px solid #DCDCDC">
+    <a href="Main.dc.html" aria-label="返回" style="width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <h1 style="flex: 1; min-width: 0; margin: 0; text-align: center; font-size: 17px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">builder 与 reviewer 的协作</h1>
+    <a href="Process.dc.html" aria-label="查看本轮过程" style="width: 44px; height: 44px; flex: none; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="19" cy="12" r="1.7"></circle></svg>
+    </a>
+  </header>
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 16px; padding: 12px 12px 16px">
+    <div style="align-self: center; max-width: 300px; text-align: center; font-size: 12px; line-height: 17px; color: #888888">修顶栏截断和登录页键盘遮挡 · builder 的回合<br>协作 4 · 最深 3 层 · <a href="Process.dc.html">查看过程 ›</a></div>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #5477AD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="font-weight: 600; color: #191919">builder</span><span>10:43</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">@reviewer 帮我看一下 LoginScreen 的 diff，重点是键盘弹出时的布局。</p>
+        <span style="display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: #F7F7F7; font-family: 'Geist Mono', ui-monospace, monospace; font-size: 13px; line-height: 19px; color: #333333"><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">ui/screens/LoginScreen.kt</span><span style="color: #888888">+18 −9</span></span>
+      </div>
+    </section>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #6E8243; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span><span style="font-weight: 600; color: #191919">reviewer</span><span>10:44</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">没问题。布局改法可以，建议给键盘场景补一个 UI 测试，我已经让 test-writer 起草，并问了用户要不要覆盖横屏。</p>
+        <a href="Process.dc.html" style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: #888888">✓ 已完成 · 过程 4 · 调用 1 ›</a>
+      </div>
+    </section>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #96628C; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span><span style="font-weight: 600; color: #191919">test-writer</span><span>10:45</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">已起草 2 个用例：键盘弹出不遮挡登录按钮、表单随键盘滚动。正在请 tester 在 360dp 模拟器上跑。</p>
+        <a href="Process.dc.html" style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: #888888"><span style="width: 10px; height: 10px; flex: none; border-radius: 5px; border: 1.5px solid #DCDCDC; border-top-color: #888888; box-sizing: border-box; animation: atollSpin 1.4s linear infinite"></span>处理中 00:41 · 下级 1 ›</a>
+      </div>
+      <a href="Process.dc.html" style="max-width: 100%; box-sizing: border-box; padding: 6px 10px; border-radius: 4px; background: #E2E2E2; font-size: 13px; line-height: 19px; color: #888888; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">reviewer：起草键盘遮挡的 UI 测试，覆盖 360dp 宽度</a>
+    </section>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #44835F; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span><span style="font-weight: 600; color: #191919">tester</span><span>10:46</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">模拟器已启动，第 1/2 项通过，第 2 项在跑。</p>
+      </div>
+      <a href="Process.dc.html" style="max-width: 100%; box-sizing: border-box; padding: 6px 10px; border-radius: 4px; background: #E2E2E2; font-size: 13px; line-height: 19px; color: #888888; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">test-writer：在 360dp 模拟器上跑 LoginScreenUiTest</a>
+    </section>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-left: 40px">
+      <div style="display: flex; align-items: center; gap: 8px"><div style="padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: #95EC69; font-size: 16px; line-height: 25px; color: #333333;">先不用，竖屏先覆盖</div></div>
+      <a href="HumanAsk.dc.html" style="max-width: 100%; box-sizing: border-box; padding: 6px 10px; border-radius: 4px; background: #E2E2E2; font-size: 13px; line-height: 19px; color: #888888; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden">reviewer：要不要覆盖横屏？</a>
     </div>
-
-    <nav aria-label="线程路径" style="flex: none; display: flex; align-items: center; gap: 4px; padding: 10px 16px; overflow: hidden; font-size: 13px; white-space: nowrap">
-      <button style="height: 30px; padding: 0 8px; border-radius: 8px; color: #5C6169">builder</button>
-      <span aria-hidden="true" style="color: #8B9097">›</span>
-      <span aria-current="true" style="height: 30px; padding: 0 10px; border-radius: 8px; background: #15171A; color: #FFFFFF; font-weight: 500; display: flex; align-items: center">reviewer</span>
-    </nav>
-
-    <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 0 12px">
-      <article style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
-        <span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #5C6169"><b style="color: #15171A; font-weight: 600">builder → reviewer</b> · 10:43<span style="flex: 1"></span>✓ 已完成</span>
-        <div style="display: flex; gap: 8px; padding: 8px 10px; border-radius: 10px; background: #F6F6F2; font-size: 13px; line-height: 19px; color: #3B3F46"><span style="width: 2px; flex: none; background: #D4D4CD; border-radius: 1px"></span>帮我看一下 LoginScreen 的 diff，重点是键盘弹出时的布局。</div>
-        <p style="margin: 0; font-size: 15px; line-height: 23px">没问题。建议给键盘场景补一个 UI 测试，我已经让 test-writer 起草，并问了用户要不要覆盖横屏。</p>
-        <span style="display: flex; gap: 6px; font-size: 12px"><span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; display: flex; align-items: center">过程 4</span><span style="height: 26px; padding: 0 9px; border-radius: 13px; border: 1px solid #E0E0DA; display: flex; align-items: center">调用 1</span></span>
-      </article>
-
-      <h2 style="margin: 4px 4px 0; font-size: 13px; font-weight: 600; color: #5C6169">reviewer 发起的 · 2</h2>
-      <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
-        <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 10px 8px 14px; border-bottom: 1px solid #EFEFEA">
-          <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #E7E3F8; color: #3F3591; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>
-          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 14px; font-weight: 600">reviewer › test-writer</span>
-            <span style="font-size: 13px; color: #5C6169; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">起草键盘遮挡的 UI 测试</span>
-          </span>
-          <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #1D4FB0"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>00:41</span>
-          <span style="height: 22px; padding: 0 7px; border-radius: 11px; background: #EBEBE5; font-size: 11px; display: flex; align-items: center">下级 1</span>
-        </li>
-        <li style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 8px 10px 8px 14px">
-          <span style="width: 28px; height: 28px; flex: none; border-radius: 14px; background: #15171A; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">我</span>
-          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
-            <span style="font-size: 14px; font-weight: 600">reviewer › 我 · 提问</span>
-            <span style="font-size: 13px; color: #5C6169; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">要不要覆盖横屏？ ↳ 先不用</span>
-          </span>
-          <span style="font-size: 12px; color: #5C6169">已回答</span>
-        </li>
-      </ul>
-      <p style="margin: 0 4px; font-size: 12px; line-height: 18px; color: #5C6169">点一行进入下一层，路径在上方，左滑或点路径返回。时间线里最多只缩进一级。</p>
-    </main>
-  </section>
+  </main>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>

@@ -5,89 +5,93 @@
 <title>等待区</title>
 
 </head>
-<body style="margin:0;background:#E9E9E4;display:flex;justify-content:center;padding:24px 0">
+<body style="margin:0;background:#D8D8D8;display:flex;justify-content:center;padding:24px 0">
 <div class="dc-root">
 
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
 <style>
 body{margin:0}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-textarea{font:inherit;color:inherit}
-a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
-@keyframes atollPulse{0%{box-shadow:0 0 0 0 rgba(29,95,209,.45)}70%{box-shadow:0 0 0 6px rgba(29,95,209,0)}100%{box-shadow:0 0 0 0 rgba(29,95,209,0)}}
+a{color:inherit;text-decoration:none}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
 </style>
 
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #5E6064; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
-  <a href="Main.html" aria-label="收起等待区" style="position: absolute; left: 0; right: 0; top: 0; height: 200px"></a>
-
-  <section role="dialog" aria-label="等待区" style="position: absolute; left: 0; right: 0; bottom: 0; top: 190px; display: flex; flex-direction: column; background: #F6F6F2; border-radius: 24px 24px 0 0">
-    <div style="flex: none; display: flex; justify-content: center; padding: 8px 0 4px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #D4D4CD"></span></div>
-    <header style="flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 8px 6px 20px">
-      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
-        <h1 style="margin: 0; font-size: 18px; font-weight: 600">等待区 · 3 条</h1>
-        <span style="font-size: 13px; color: #5C6169">目标 Agent 忙碌时，消息在这里排队</span>
-      </span>
-      <a href="Main.html" style="height: 44px; padding: 0 12px; display: flex; align-items: center; font-size: 15px; color: #5C6169">收起</a>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #EDEDED; color: #191919; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <header style="position: relative; z-index: 2; height: 48px; flex: none; display: flex; align-items: center; padding: 0 4px; background: #EDEDED; border-bottom: 1px solid #DCDCDC">
+    <a href="Channels.html" aria-label="返回频道列表" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    </a>
+    <a href="Filters.html" aria-label="atoll-web，6 个 Agent，正在和 builder 对话，展开 Agent 成员" aria-expanded="false" style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap">
+      <span style="font-size: 17px; font-weight: 500; overflow: hidden; text-overflow: ellipsis">atoll-web</span><span style="font-size: 17px; color: #888888">·</span><span style="width: 6px; height: 6px; margin-left: 2px; flex: none; border-radius: 3px; background: #07C160"></span><span style="font-size: 17px; color: #888888">builder</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+    </a>
+    <a href="ChannelDetails.html" aria-label="聊天信息，3 个待处理任务" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="19" cy="12" r="1.7"></circle></svg>
+      <span style="position: absolute; top: 11px; right: 10px; width: 7px; height: 7px; border-radius: 4px; background: #FA5151"></span>
+    </a>
+  </header>
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 16px; padding: 8px 12px 14px">
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #5477AD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="font-weight: 600; color: #191919">builder</span><span>10:42</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">两处都改好了，正在跑 UI 测试…</p>
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: #888888"><span style="width: 10px; height: 10px; flex: none; border-radius: 5px; border: 1.5px solid #DCDCDC; border-top-color: #888888; box-sizing: border-box; animation: atollSpin 1.4s linear infinite"></span>处理中 02:14 · 跑 UI 测试 ›</span>
+      </div>
+    </section>
+  </main>
+  <a href="Waiting.html" aria-label="3 条等待消息，展开等待区" style="flex: none; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; background: #F7F7F7; border-top: 1px solid #DCDCDC; font-size: 13px; color: #888888">
+    <span aria-hidden="true" style="width: 16px; height: 16px; flex: none; border-radius: 3px; background: #5477AD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: #191919">3 条等待</span> · builder 本轮结束后依次发出</span>›
+  </a>
+  <div style="flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 8px 10px; background: #F7F7F7; border-top: 1px solid #DCDCDC">
+    <a href="AgentPicker.html" aria-label="发给 builder，更换" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center"><span aria-hidden="true" style="width: 28px; height: 28px; flex: none; border-radius: 4px; background: #5477AD; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span></a>
+    <div role="textbox" aria-label="发送消息" style="flex: 1; height: 40px; box-sizing: border-box; padding: 8px 12px; border-radius: 4px; background: #FFFFFF; font-size: 16px; line-height: 24px; color: #B2B2B2">发给 builder</div>
+    <button aria-label="更多：附件、命令、频道文件" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"></circle><path d="M12 7.5v9M7.5 12h9"></path></svg>
+    </button>
+  </div>
+  <a href="Main.html" aria-label="收起等待区" style="position: absolute; inset: 0; background: rgba(0,0,0,.5)"></a>
+  <section role="dialog" aria-label="等待区" style="position: absolute; left: 0; right: 0; bottom: 0; top: 176px; display: flex; flex-direction: column; background: #F7F7F7; border-radius: 12px 12px 0 0">
+    <div style="flex: none; display: flex; justify-content: center; padding: 8px 0 2px"><span style="width: 36px; height: 4px; border-radius: 2px; background: #DCDCDC"></span></div>
+    <header style="flex: none; display: flex; align-items: center; padding: 4px 8px 8px 16px">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 17px; font-weight: 500">等待区 · 3 条</span><span style="font-size: 13px; color: #888888">Agent 忙时，你的消息在这里排队</span></span>
+      <a href="Main.html" style="height: 44px; padding: 0 10px; display: flex; align-items: center; font-size: 15px; color: #888888">收起</a>
     </header>
-
-    <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 8px 12px 16px">
-
-      <section style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
-        <header style="display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; border-bottom: 1px solid #E5E5E0">
-          <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #4F46E5; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
-          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
-            <span style="font-size: 14px; font-weight: 600">builder · 2 条</span>
-            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #1D4FB0"><span style="width: 6px; height: 6px; border-radius: 3px; background: #1D5FD1; animation: atollPulse 1.6s infinite"></span>本轮结束后依次发出</span>
-          </span>
-          <button style="height: 36px; padding: 0 10px; border-radius: 10px; font-size: 13px; font-weight: 500">全部插入</button>
-          <button aria-label="更多：取消 builder 全部" style="width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #5C6169"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.6"></circle><circle cx="12" cy="12" r="1.6"></circle><circle cx="19" cy="12" r="1.6"></circle></svg></button>
+    <div style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 0 12px 16px">
+      <section style="background: #FFFFFF; border-radius: 12px; overflow: hidden">
+        <header style="display: flex; align-items: center; gap: 10px; padding: 12px 16px">
+          <span aria-hidden="true" style="width: 32px; height: 32px; flex: none; border-radius: 5px; background: #5477AD; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">builder · 2 条</span><span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #888888"><span style="width: 10px; height: 10px; flex: none; border-radius: 5px; border: 1.5px solid #DCDCDC; border-top-color: #888888; box-sizing: border-box; animation: atollSpin 1.4s linear infinite"></span>本轮结束后依次发出</span></span>
+          <a href="#" style="font-size: 14px; color: #576B95">全部插入</a>
         </header>
-        <div style="display: flex; gap: 10px; padding: 12px">
-          <span style="width: 20px; height: 20px; flex: none; border-radius: 10px; background: #EBEBE5; font-size: 11px; font-weight: 600; color: #5C6169; display: flex; align-items: center; justify-content: center">1</span>
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
-            <p style="margin: 0; font-size: 15px; line-height: 22px"><span style="color: #0F766E; font-weight: 500">@reviewer</span> 等 builder 改完帮我看一下 diff</p>
-            <div style="display: flex; gap: 6px">
-              <button style="height: 34px; padding: 0 12px; border-radius: 10px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 500">插入本轮</button>
-              <button style="height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">编辑</button>
-              <button style="height: 34px; padding: 0 10px; border-radius: 10px; font-size: 13px; color: #B42318">取消</button>
-            </div>
+        <div style="display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid #F0F0F0">
+          <span style="width: 18px; flex: none; font-size: 13px; line-height: 23px; color: #888888; text-align: right">1</span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 16px; line-height: 23px; color: #333333">顺便更新 changelog，写进 1.4</span><span style="font-size: 12px; color: #888888">附件 1 · 替换上一条</span>
+            <span style="display: flex; gap: 20px; font-size: 14px"><a href="#" style="color: #576B95">插入</a><a href="#" style="color: #333333">编辑</a><a href="#" style="color: #FA5151">取消</a></span>
           </div>
         </div>
-        <div style="display: flex; gap: 10px; padding: 12px; border-top: 1px solid #E5E5E0; background: #FBFBF8">
-          <span style="width: 20px; height: 20px; flex: none; border-radius: 10px; background: #EBEBE5; font-size: 11px; font-weight: 600; color: #5C6169; display: flex; align-items: center; justify-content: center">2</span>
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
-            <label style="display: flex; flex-direction: column; gap: 4px">
-              <span style="font-size: 12px; font-weight: 600; color: #0F5F59">编辑中 · 发送前会再次确认</span>
-              <textarea rows="2" style="resize: none; padding: 10px 12px; border-radius: 12px; border: 1.5px solid #0F766E; background: #FFFFFF; font-size: 15px; line-height: 22px; outline: 0">测试通过后把 APK 上传到频道文件的 release 目录</textarea>
-            </label>
-            <div style="display: flex; gap: 6px">
-              <button style="height: 34px; padding: 0 12px; border-radius: 10px; background: #0F766E; color: #FFFFFF; font-size: 13px; font-weight: 500">确认编辑</button>
-              <button style="height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">放弃修改</button>
-            </div>
+        <div style="display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid #F0F0F0">
+          <span style="width: 18px; flex: none; font-size: 13px; line-height: 23px; color: #888888; text-align: right">2</span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 16px; line-height: 23px; color: #333333">然后把 release 说明发到频道</span><span style="font-size: 12px; color: #888888">正在输入框中编辑</span>
+            <span style="display: flex; gap: 20px; font-size: 14px"><a href="#" style="color: #576B95">插入</a><a href="#" style="color: #333333">编辑</a><a href="#" style="color: #FA5151">取消</a></span>
           </div>
         </div>
       </section>
-
-      <section style="border-radius: 16px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
-        <header style="display: flex; align-items: center; gap: 10px; padding: 10px 8px 10px 12px; border-bottom: 1px solid #E5E5E0">
-          <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #E2F1EE; color: #0F5F59; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
-          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
-            <span style="font-size: 14px; font-weight: 600">planner · 1 条</span>
-            <span style="display: flex; align-items: center; gap: 5px; font-size: 12px; color: #8A4B00"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"></rect><rect x="14" y="5" width="4" height="14" rx="1"></rect></svg>已暂停 · 恢复后发出</span>
-          </span>
-          <button style="height: 36px; padding: 0 10px; border-radius: 10px; font-size: 13px; font-weight: 500">恢复</button>
+      <section style="background: #FFFFFF; border-radius: 12px; overflow: hidden">
+        <header style="display: flex; align-items: center; gap: 10px; padding: 12px 16px">
+          <span aria-hidden="true" style="width: 32px; height: 32px; flex: none; border-radius: 5px; background: #44835F; color: #FFFFFF; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span>
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 16px; font-weight: 600">tester · 1 条</span><span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #888888">已暂停 · 恢复后发出</span></span>
+          <a href="#" style="font-size: 14px; color: #576B95">全部插入</a>
         </header>
-        <div style="display: flex; gap: 10px; padding: 12px">
-          <span style="width: 20px; height: 20px; flex: none; border-radius: 10px; background: #EBEBE5; font-size: 11px; font-weight: 600; color: #5C6169; display: flex; align-items: center; justify-content: center">1</span>
-          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px">
-            <p style="margin: 0; font-size: 15px; line-height: 22px">把终端深色主题加入 1.4 发布清单</p>
-            <div style="display: flex; gap: 6px">
-              <button style="height: 34px; padding: 0 12px; border-radius: 10px; border: 1px solid #D4D4CD; font-size: 13px">编辑</button>
-              <button style="height: 34px; padding: 0 10px; border-radius: 10px; font-size: 13px; color: #B42318">取消</button>
-            </div>
+        <div style="display: flex; gap: 12px; padding: 12px 16px; border-top: 1px solid #F0F0F0">
+          <span style="width: 18px; flex: none; font-size: 13px; line-height: 23px; color: #888888; text-align: right">1</span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px">
+            <span style="font-size: 16px; line-height: 23px; color: #333333">全量回归跑一遍</span>
+            <span style="display: flex; gap: 20px; font-size: 14px"><a href="#" style="color: #576B95">插入</a><a href="#" style="color: #333333">编辑</a><a href="#" style="color: #FA5151">取消</a></span>
           </div>
         </div>
       </section>
+      <a href="#" style="align-self: center; padding: 8px 12px; font-size: 14px; color: #FA5151">全部取消</a>
     </div>
   </section>
 </div>

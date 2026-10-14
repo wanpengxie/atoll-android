@@ -18,17 +18,28 @@ whenever the artboards change.
 
 ## Where to start
 
+**The conversation was redesigned again (v2, WeChat palette and layout).
+Build it from `CHAT_V2.md`; visual rules are in `STYLE.md`.** Where an older
+board or the sections below disagree with `CHAT_V2.md`, `CHAT_V2.md` wins.
+
 | Board | What it defines |
 |---|---|
-| `ConversationModel.dc.html` | Inventory of every timeline row type and how it should render; filter rules; three disclosure levels |
-| `Navigation.dc.html` | Information architecture and the old → new interaction table |
-| `Foundations.dc.html` | Colours, type scale, radii, spacing, avatar rule |
-| `Components.dc.html` | Component kit |
-| `Main.dc.html` | Conversation page with turn cards |
-| `TurnStates.dc.html` | Every turn card state |
-| `TurnExpanded.dc.html`, `CollabSheet.dc.html`, `Filters.dc.html` | Work strip expanded, deep collaboration thread, scope / history window |
+| `Main.dc.html` | Conversation page (v2) |
+| `ChatStates.dc.html` | Every complex timeline case on one long board, numbered ①–⑫ |
+| `Filters.dc.html` | Agent chips opened from the header title |
+| `ChannelDetails.dc.html` | ··· page: tasks, files, terminal, scope / 频道活动 / history, settings |
+| `Waiting.dc.html` | Waiting dock expanded |
+| `AvatarColors.dc.html` | Fixed avatar colour algorithm |
+| `ConversationModel.dc.html` | Inventory of every timeline row type and the filter rules (data model still valid; its visuals are superseded) |
+| `Navigation.dc.html`, `Foundations.dc.html`, `Components.dc.html` | Old palette; still valid for screens outside the conversation |
 
-All other boards are one screen each (titles in `canvas.json`).
+All other boards are one screen each (titles in `canvas.json`). Boards
+redrawn in v2: Main, ChatStates, Filters, ChannelDetails, Waiting,
+MessageActions, Mention, Commands, AgentPicker, HumanAsk, Process,
+CollabSheet, AvatarColors. The rest still show the previous palette.
+
+`tools/kit.py` holds the shared markup the v2 boards are generated from, and
+`tools/previews.py` regenerates `preview/` (`python3 tools/previews.py`).
 
 ## Code mapping
 
@@ -43,9 +54,9 @@ All other boards are one screen each (titles in `canvas.json`).
 | Composer, agent sheet | `compose/ComposerUi.kt` |
 | 我 page | `app/WorkspaceSettings.kt` |
 
-## Not yet implemented in code
+## Not yet implemented in code (pre-v2 list)
 
-These are designed but the code still has the previous behaviour:
+For the conversation, `CHAT_V2.md` supersedes items 1–6 and 10 below. The rest still apply:
 
 1. Work strip count chips (过程 / 协作 / 子 Agent / 调用) expanding in place (`TurnExpanded`).
 2. Process panel tabs 过程 · 协作 · 子任务 · 调用 · 账本 (`Process`).

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>头像配色</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Geist+Mono:wght@400;500&amp;family=Noto+Sans+SC:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
+a{color:inherit;text-decoration:none}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
+</style>
+</helmet>
+<div style="width: 860px; height: 760px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #EDEDED; color: #191919; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <div style="padding: 32px 36px; display: flex; flex-direction: column; gap: 22px">
+    <span style="font-size: 22px; font-weight: 600">头像配色：名字 → 固定颜色</span>
+    <span style="font-size: 15px; line-height: 23px; color: #333333">同一个 actor id 在任何设备、任何页面都是同一个颜色，不用注册表、不存储。Agent 圆角方形，人圆形，首字母白色。自己的消息不显示头像（绿气泡）。</span>
+    <div style="display: flex; flex-wrap: wrap; gap: 14px"><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #5477AD"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">0 #5477AD</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #3F8C80"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">1 #3F8C80</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #6E8243"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">2 #6E8243</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #A87548"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">3 #A87548</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #B0605F"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">4 #B0605F</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #7F64A8"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">5 #7F64A8</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #44835F"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">6 #44835F</span></div><div style="display: flex; flex-direction: column; gap: 4px; align-items: center"><span style="width: 36px; height: 36px; border-radius: 6px; background: #96628C"></span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">7 #96628C</span></div></div>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px; padding: 18px; background: #FFFFFF; border-radius: 12px"><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #5477AD; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="font-size: 12px; color: #191919">builder</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#0</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #6E8243; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span><span style="font-size: 12px; color: #191919">reviewer</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#2</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #44835F; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">T</span><span style="font-size: 12px; color: #191919">tester</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#6</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #A87548; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span><span style="font-size: 12px; color: #191919">planner</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#3</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #3F8C80; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">D</span><span style="font-size: 12px; color: #191919">deployer</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#1</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 7px; background: #B0605F; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">D</span><span style="font-size: 12px; color: #191919">designer</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#4</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 22px; background: #96628C; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">A</span><span style="font-size: 12px; color: #191919">alice</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#7</span></div><div style="display: flex; flex-direction: column; align-items: center; gap: 6px; width: 72px"><span aria-hidden="true" style="width: 44px; height: 44px; flex: none; border-radius: 22px; background: #3F8C80; color: #FFFFFF; font-size: 22px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span><span style="font-size: 12px; color: #191919">ppxia</span><span style="font-size: 11px; color: #888888; font-family: 'Geist Mono', monospace">#1</span></div></div>
+    <pre style="margin: 0; padding: 16px; border-radius: 12px; background: #FFFFFF; font-family: 'Geist Mono', monospace; font-size: 13px; line-height: 20px; color: #333333">fun avatarColor(actorId: String): Color {
+    var h = 0x811c9dc5.toInt()            // FNV-1a 32-bit
+    for (b in actorId.encodeToByteArray()) {
+        h = h xor (b.toInt() and 0xff)
+        h *= 0x01000193
+    }
+    return AvatarPalette[Integer.remainderUnsigned(h, AvatarPalette.size)]
+}</pre>
+    <span style="font-size: 13px; line-height: 20px; color: #888888">输入用稳定的 actor id（没有 id 时用显示名）；UTF-8 字节；结果按无符号取模 8。8 个颜色都是中等明度、低饱和，白字可读，彼此在灰底上可区分。</span>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":860,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

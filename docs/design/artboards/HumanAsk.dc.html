@@ -12,76 +12,40 @@
 <style>
 body{margin:0}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-input,textarea{font:inherit;color:inherit}
-a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+a{color:inherit;text-decoration:none}
+@keyframes atollSpin{to{transform:rotate(360deg)}}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
-
-  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: #FFFFFF; border-bottom: 1px solid #E5E5E0">
-    <a href="Activity.dc.html" aria-label="返回" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #EDEDED; color: #191919; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <header style="height: 48px; flex: none; display: flex; align-items: center; padding: 0 4px; background: #EDEDED; border-bottom: 1px solid #DCDCDC">
+    <a href="Main.dc.html" aria-label="返回频道" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
     </a>
-    <span style="flex: 1; font-size: 17px; font-weight: 600"><span style="color: #8B9097; font-weight: 500">#</span> atoll-web</span>
+    <h1 style="margin: 0; flex: 1; min-width: 0; text-align: center; font-size: 17px; font-weight: 500; white-space: nowrap">atoll-web<span style="color: #888888; font-weight: 400"> · 待你处理</span></h1>
+    <a href="Activity.dc.html" aria-label="活动收件箱" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v5H4z"></path><path d="M4 13h5l1 2h4l1-2h5"></path></svg>
+    </a>
   </header>
-
-  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 14px 12px">
-
-    <article aria-label="审批请求" style="border-radius: 18px; background: #FFFFFF; border: 1.5px solid #E7C98F; overflow: hidden">
-      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: #FBF1DF">
-        <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #4F46E5; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
-        <span style="flex: 1; font-size: 14px"><b style="font-weight: 600">builder</b> 请你审批</span>
-        <span style="font-size: 12px; color: #6B4A12">剩 14 分钟</span>
-      </div>
-      <div style="padding: 14px; display: flex; flex-direction: column; gap: 12px">
-        <h2 style="margin: 0; font-size: 17px; line-height: 24px; font-weight: 600">允许推送修复到 <code style="font-family: 'Geist Mono', monospace; font-size: 15px; font-weight: 500">release/1.4</code></h2>
-        <div style="display: grid; grid-template-columns: 64px minmax(0, 1fr); row-gap: 6px; font-size: 13px; line-height: 19px">
-          <span style="color: #5C6169">改动</span><span>2 个文件 · +18 −9</span>
-          <span style="color: #5C6169">测试</span><span>UI 测试 42 项通过</span>
-          <span style="color: #5C6169">影响</span><span>触发发布流水线</span>
-        </div>
-        <label style="display: flex; flex-direction: column; gap: 6px">
-          <span style="font-size: 13px; color: #5C6169">备注（可选）</span>
-          <input placeholder="说明你的决定" style="height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid #D4D4CD; background: #FFFFFF; font-size: 15px; outline: 0">
-        </label>
-        <div style="display: flex; gap: 8px">
-          <button style="flex: 1; height: 46px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 15px; font-weight: 500">拒绝</button>
-          <button style="flex: 1; height: 46px; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 15px; font-weight: 600">批准</button>
-        </div>
-      </div>
+  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 10px 12px">
+    <article aria-label="审批请求" style="border-radius: 12px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px 0"><span aria-hidden="true" style="width: 24px; height: 24px; flex: none; border-radius: 4px; background: #5477AD; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="flex: 1; min-width: 0; font-size: 15px; color: #333333"><span style="font-weight: 600; color: #191919">builder</span> 请你审批</span><span style="font-size: 13px; color: #888888">剩 14 分钟</span></div>
+      <h2 style="margin: 0; padding: 0 16px; font-size: 17px; line-height: 24px; font-weight: 500; color: #191919">允许推送修复到 <code style="font-family: 'Geist Mono', ui-monospace, monospace; font-size: 15px">release/1.4</code></h2>
+      <div style="margin: 0 16px; display: grid; grid-template-columns: 44px minmax(0, 1fr); row-gap: 4px; font-size: 14px; line-height: 20px"><span style="color: #888888">改动</span><span style="color: #333333">2 个文件 · +18 −9</span><span style="color: #888888">测试</span><span style="color: #333333">UI 测试 42 项通过</span><span style="color: #888888">影响</span><span style="color: #333333">触发发布流水线</span></div>
+      <label style="margin: 0 16px; min-height: 40px; display: flex; align-items: center; padding-left: 12px; border-radius: 8px; background: #F7F7F7"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">备注（可选）</span><span role="textbox" style="flex: 1; min-width: 0; font-size: 16px; line-height: 22px; padding: 9px 12px 9px 0"><span style="color: #B2B2B2">备注（可选），说明你的决定</span></span></label>
+      <div style="display: flex; gap: 8px; padding: 0 16px"><button style="flex: 1; height: 44px; border-radius: 8px; background: #F2F2F2; color: #191919; font-size: 16px; font-weight: 500">拒绝</button><button style="flex: 1; height: 44px; border-radius: 8px; background: #07C160; color: #FFFFFF; font-size: 16px; font-weight: 500">批准</button></div>
     </article>
-
-    <article aria-label="提问" style="border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; padding: 14px; display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; align-items: center; gap: 10px">
-        <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #E2F1EE; color: #0F5F59; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
-        <span style="flex: 1; font-size: 14px"><b style="font-weight: 600">planner</b> 向你提问</span>
-      </div>
-      <p style="margin: 0; font-size: 15px; line-height: 22px">1.4 版本是否包含终端深色主题？</p>
-      <div style="display: flex; gap: 6px; flex-wrap: wrap">
-        <button style="height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid #D4D4CD; font-size: 13px">包含</button>
-        <button style="height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid #D4D4CD; font-size: 13px">不包含，放到 1.5</button>
-      </div>
-      <label style="display: flex; align-items: flex-end; gap: 8px; padding: 6px 6px 6px 14px; border-radius: 22px; border: 1.5px solid #0F766E">
-        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">回答 planner</span>
-        <textarea rows="1" style="flex: 1; resize: none; border: 0; outline: 0; background: transparent; font-size: 15px; line-height: 22px; padding: 7px 0">包含，但默认仍是浅色</textarea>
-        <button aria-label="提交回答" style="width: 36px; height: 36px; flex: none; border-radius: 18px; background: #15171A; color: #FFFFFF; display: flex; align-items: center; justify-content: center"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
-      </label>
+    <article aria-label="提问" style="border-radius: 12px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px 0"><span aria-hidden="true" style="width: 24px; height: 24px; flex: none; border-radius: 4px; background: #A87548; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span><span style="flex: 1; min-width: 0; font-size: 15px; color: #333333"><span style="font-weight: 600; color: #191919">planner</span> 向你提问</span></div>
+      <p style="margin: 0; padding: 0 16px; font-size: 16px; line-height: 25px; color: #333333">1.4 版本是否包含终端深色主题？</p>
+      <div role="radiogroup" aria-label="选项" style="margin-left: 16px; border-top: 1px solid #E5E5E5; border-bottom: 1px solid #E5E5E5"><button role="radio" aria-checked="true" style="width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding-right: 16px; text-align: left; font-size: 16px; color: #191919"><span style="flex: 1">包含</span><svg role="img" aria-label="已选" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#576B95" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex: none"><path d="M5 12.5l4.5 4.5L19 7"></path></svg></button><button role="radio" aria-checked="false" style="width: 100%; min-height: 48px; display: flex; align-items: center; gap: 12px; padding-right: 16px; border-top: 1px solid #E5E5E5; text-align: left; font-size: 16px; color: #191919"><span style="flex: 1">不包含，放到 1.5</span></button></div>
+      <label style="margin: 0 16px; min-height: 40px; display: flex; align-items: center; padding-left: 12px; border-radius: 8px; background: #F7F7F7"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">回答 planner</span><span role="textbox" style="flex: 1; min-width: 0; font-size: 16px; line-height: 22px; padding: 9px 12px 9px 0"><span style="color: #333333">包含，但默认仍是浅色</span></span><button style="height: 40px; padding: 0 4px 0 12px; font-size: 16px; font-weight: 500; color: #576B95">提交</button></label>
     </article>
-
-    <article aria-label="表单" style="border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; padding: 14px; display: flex; flex-direction: column; gap: 10px">
-      <div style="display: flex; align-items: center; gap: 10px">
-        <span style="width: 28px; height: 28px; flex: none; border-radius: 8px; background: #4F46E5; color: #FFFFFF; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span>
-        <span style="flex: 1; font-size: 14px"><b style="font-weight: 600">builder</b> 请你填写 · 部署参数</span>
-      </div>
-      <label style="display: flex; flex-direction: column; gap: 6px">
-        <span style="font-size: 13px; color: #5C6169">环境 <span style="color: #B42318">*</span></span>
-        <span style="height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid #D4D4CD; display: flex; align-items: center; justify-content: space-between; font-size: 15px">staging<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5C6169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></span>
-      </label>
-      <label style="display: flex; flex-direction: column; gap: 6px">
-        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #5C6169">签名密钥<span style="padding: 1px 6px; border-radius: 5px; background: #EBEBE5; font-size: 11px">密钥 · 回复中只留掩码</span></span>
-        <input type="password" value="●●●●●●●●" style="height: 44px; padding: 0 12px; border-radius: 12px; border: 1px solid #D4D4CD; font-size: 15px; outline: 0">
-      </label>
-      <button style="height: 46px; border-radius: 12px; background: #15171A; color: #FFFFFF; font-size: 15px; font-weight: 600">提交</button>
+    <article aria-label="表单" style="border-radius: 12px; background: #FFFFFF; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding-bottom: 14px">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px 0"><span aria-hidden="true" style="width: 24px; height: 24px; flex: none; border-radius: 4px; background: #5477AD; color: #FFFFFF; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="flex: 1; min-width: 0; font-size: 15px; color: #333333"><span style="font-weight: 600; color: #191919">builder</span> 请你填写 · 部署参数</span></div>
+      <div style="display: flex; flex-direction: column; margin-top: -2px">      <a href="#" style="display: flex; align-items: center; padding-left: 16px; min-height: 56px; background: #FFFFFF; text-align: left; width: 100%; box-sizing: border-box"><span style="flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; padding-right: 16px; "><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px"><span style="font-size: 16px; line-height: 22px; color: #191919">环境</span><span style="font-size: 13px; line-height: 18px; color: #888888; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">必填</span></span><span style="flex: none; display: flex; align-items: center; gap: 6px; font-size: 16px; color: #888888">staging<span aria-hidden="true" style="font-size: 18px; line-height: 1; color: #B2B2B2">›</span></span></span></a>
+      <div style="display: flex; align-items: center; padding-left: 16px; min-height: 56px; background: #FFFFFF; text-align: left; width: 100%; box-sizing: border-box"><span style="flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: 12px; padding-right: 16px; border-top: 1px solid #E5E5E5; "><span style="flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px"><span style="font-size: 16px; line-height: 22px; color: #191919">签名密钥</span><span style="font-size: 13px; line-height: 18px; color: #888888; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">密钥 · 回复中只留掩码</span></span><span style="flex: none; display: flex; align-items: center; gap: 6px; font-size: 16px; color: #888888"><span style="letter-spacing: 1px">●●●●●●●●</span></span></span></div>
+</div>
+      <button style="margin: 0 16px; height: 44px; border-radius: 8px; background: #F2F2F2; color: #191919; font-size: 16px; font-weight: 500">提交</button>
     </article>
   </main>
 </div>

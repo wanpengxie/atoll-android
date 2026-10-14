@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>范围 · 筛选 · 历史窗口</title>
+<title>Agent 成员组</title>
 <script src="./support.js"></script>
 </head>
 <body>
@@ -12,76 +12,75 @@
 <style>
 body{margin:0}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-a{color:#0F766E;text-decoration:none}a:hover{color:#0B5F58}
+a{color:inherit;text-decoration:none}
 @keyframes atollSpin{to{transform:rotate(360deg)}}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; display: flex; flex-direction: column; overflow: hidden; background: #F6F6F2; color: #15171A; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
-
-  <header style="height: 56px; flex: none; display: flex; align-items: center; gap: 2px; padding: 0 4px; background: #FFFFFF">
-    <a href="Main.dc.html" aria-label="返回" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #15171A">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+<div style="width: 390px; height: 844px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; position: relative; background: #EDEDED; color: #191919; font-family: 'Geist', 'Noto Sans SC', system-ui, sans-serif">
+  <header style="position: relative; z-index: 2; height: 48px; flex: none; display: flex; align-items: center; padding: 0 4px; background: #EDEDED; border-bottom: 1px solid #DCDCDC">
+    <a href="Channels.dc.html" aria-label="返回频道列表" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
     </a>
-    <span style="flex: 1; font-size: 17px; font-weight: 600"><span style="color: #8B9097; font-weight: 500">#</span> atoll-web</span>
+    <a href="Main.dc.html" aria-label="atoll-web，6 个 Agent，正在和 builder 对话，收起 Agent 成员" aria-expanded="true" style="flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap">
+      <span style="font-size: 17px; font-weight: 500; overflow: hidden; text-overflow: ellipsis">atoll-web</span><span style="font-size: 17px; color: #888888">·</span><span style="width: 6px; height: 6px; margin-left: 2px; flex: none; border-radius: 3px; background: #07C160"></span><span style="font-size: 17px; color: #888888">builder</span><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#888888" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6"></path></svg>
+    </a>
+    <a href="ChannelDetails.dc.html" aria-label="聊天信息，3 个待处理任务" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.7"></circle><circle cx="12" cy="12" r="1.7"></circle><circle cx="19" cy="12" r="1.7"></circle></svg>
+      <span style="position: absolute; top: 11px; right: 10px; width: 7px; height: 7px; border-radius: 4px; background: #FA5151"></span>
+    </a>
   </header>
-  <nav aria-label="频道视图" style="height: 44px; flex: none; display: flex; align-items: stretch; gap: 22px; padding: 0 16px; background: #FFFFFF; border-bottom: 1px solid #E5E5E0">
-    <span style="display: flex; align-items: center; font-size: 15px; font-weight: 600; border-bottom: 2px solid #15171A; margin-bottom: -1px">动态</span>
-    <a href="Tasks.dc.html" style="display: flex; align-items: center; font-size: 15px; color: #5C6169">任务</a>
-    <a href="Files.dc.html" style="display: flex; align-items: center; font-size: 15px; color: #5C6169">文件</a>
-    <a href="Members.dc.html" style="display: flex; align-items: center; font-size: 15px; color: #5C6169">成员</a>
-  </nav>
-
-  <div style="height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 12px">
-    <div role="group" aria-label="范围" style="display: flex; padding: 3px; border-radius: 17px; background: #EBEBE5">
-      <a href="Main.dc.html" aria-pressed="false" style="height: 28px; padding: 0 11px; border-radius: 14px; font-size: 13px; color: #5C6169; display: flex; align-items: center">与我相关</a>
-      <button aria-pressed="true" style="height: 28px; padding: 0 11px; border-radius: 14px; background: #FFFFFF; font-size: 13px; font-weight: 600; box-shadow: 0 1px 2px rgba(21,23,26,.08)">全部</button>
-    </div>
-    <span style="flex: 1"></span>
-    <label style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #3B3F46">频道活动
-      <span role="switch" aria-checked="true" style="width: 40px; height: 24px; border-radius: 12px; background: #0F766E; position: relative"><span style="position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; border-radius: 9px; background: #FFFFFF"></span></span>
-    </label>
-  </div>
-
-  <div role="status" style="flex: none; margin: 0 12px 8px; display: flex; align-items: center; gap: 10px; padding: 9px 8px 9px 12px; border-radius: 12px; background: #E9F0FC; color: #1D3F80; font-size: 13px; line-height: 18px">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5V12l3 2"></path></svg>
-    <span style="flex: 1">正在看较早的记录。这里不显示运行和等待状态。</span>
-    <a href="Main.dc.html" style="height: 32px; padding: 0 8px; display: flex; align-items: center; font-weight: 600; color: #1D4FB0">回到最新</a>
-  </div>
-
-  <main style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px; padding: 0 10px">
-    <div style="position: sticky; top: 0; align-self: center; height: 26px; padding: 0 12px; border-radius: 13px; background: #FFFFFF; border: 1px solid #E5E5E0; font-size: 12px; font-weight: 500; display: flex; align-items: center">10月12日 周日</div>
-
-    <div style="display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 14px; background: #EFEFEA; font-size: 13px; line-height: 20px; color: #3B3F46">
-      <span style="display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #5C6169">频道活动 · 3 条<span style="font-weight: 400">收起</span></span>
-      <span>reviewer 已加入频道 · 16:02</span>
-      <span>开始构建成员 release-bot（第 2 次尝试）· 16:03</span>
-      <span style="color: #9F1F14">成员 release-bot 构建失败（第 2 次尝试，已停止）· 16:05</span>
-    </div>
-
-    <article style="border-radius: 18px; background: #FFFFFF; border: 1px solid #E5E5E0; overflow: hidden">
-      <div style="padding: 10px 14px; display: flex; align-items: center; gap: 8px; font-size: 13px; border-bottom: 1px solid #EFEFEA">
-        <span style="width: 22px; height: 22px; border-radius: 6px; background: #E2F1EE; color: #0F5F59; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span>
-        <b style="font-weight: 600">planner → reviewer</b><span style="flex: 1"></span><span style="color: #5C6169">16:10</span>
+  <main aria-hidden="true" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 16px; padding: 8px 12px 14px">
+    <div style="align-self: center; max-width: 300px; text-align: center; font-size: 12px; line-height: 17px; color: #888888">今天 10:20</div>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #A87548; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">P</span><span style="font-weight: 600; color: #191919">planner</span><span>10:20</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">1.4 的发布清单整理好了，三项窄屏问题合并成“修复窄屏顶栏”。</p>
       </div>
-      <p style="margin: 0; padding: 10px 14px 4px; font-size: 15px; line-height: 22px">发布清单里这三项能不能合并成一条？</p>
-      <p style="margin: 0; padding: 4px 14px 12px; font-size: 15px; line-height: 22px; color: #3B3F46"><b style="font-weight: 600; color: #15171A">reviewer：</b>可以，合并后写成“修复窄屏顶栏”。</p>
-    </article>
-
-    <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px dashed #D4D4CD; font-size: 12px; color: #5C6169">
-      <span style="height: 20px; padding: 0 6px; border-radius: 5px; background: #EBEBE5; display: flex; align-items: center; color: #3B3F46">系统操作</span>
-      <span style="flex: 1; font-family: 'Geist Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">builder → system · system.member.list</span>完成
+    </section>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-left: 40px">
+      <div style="display: flex; align-items: center; gap: 8px"><div style="padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: #95EC69; font-size: 16px; line-height: 25px; color: #333333;">好，reviewer 先过一遍顶栏</div></div>
+      
     </div>
-    <div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; border: 1px dashed #D4D4CD; font-size: 12px; color: #5C6169">
-      <span style="height: 20px; padding: 0 6px; border-radius: 5px; background: #EBEBE5; display: flex; align-items: center; color: #3B3F46">表单</span>
-      <span style="flex: 1; font-family: 'Geist Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">builder → [成员名] · ui.form</span>已提交
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #6E8243; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">R</span><span style="font-weight: 600; color: #191919">reviewer</span><span>10:31</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">审查完成，有 1 处需要处理：顶栏在 360dp 宽度下频道名被截断，建议把标题区改成可伸缩布局。</p>
+      </div>
+    </section>
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px; padding-left: 40px">
+      <div style="display: flex; align-items: center; gap: 8px"><div style="padding: 10px 14px; border-radius: 12px 4px 12px 12px; background: #95EC69; font-size: 16px; line-height: 25px; color: #333333;">@builder 按这个修，顺带把登录页键盘遮挡也处理掉，改完跑一遍 UI 测试</div></div>
+      
     </div>
-
-    <p style="margin: 0 4px; font-size: 12px; line-height: 18px; color: #5C6169">“全部”额外显示：与你无关的成员对话、系统操作、界面请求（ui.*）。这些在“与我相关”里隐藏。Agent 筛选片只在“与我相关”中出现。</p>
+    <section style="display: flex; flex-direction: column; gap: 6px; align-items: flex-start">
+      <span style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #888888"><span aria-hidden="true" style="width: 20px; height: 20px; flex: none; border-radius: 3px; background: #5477AD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="font-weight: 600; color: #191919">builder</span><span>10:42</span></span>
+      <div style="padding: 10px 14px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; display: flex; flex-direction: column; gap: 8px; max-width: 100%">
+        <p style="margin: 0; font-size: 16px; line-height: 25px; color: #333333">两处都改好了：标题区用可伸缩布局；登录表单改成顶部对齐、随键盘滚动。正在跑 UI 测试…</p>
+        <a href="Process.dc.html" style="display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 18px; color: #888888"><span style="width: 10px; height: 10px; flex: none; border-radius: 5px; border: 1.5px solid #DCDCDC; border-top-color: #888888; box-sizing: border-box; animation: atollSpin 1.4s linear infinite"></span>处理中 02:14 · 跑 UI 测试 ›</a>
+      </div>
+    </section>
+    <section style="align-self: flex-start; width: 248px; border-radius: 4px 12px 12px 12px; background: #FFFFFF; overflow: hidden">
+      <div style="padding: 10px 14px; display: flex; flex-direction: column; gap: 4px">
+        <span style="display: flex; align-items: center; gap: 6px; font-size: 13px; color: #888888"><span style="width: 6px; height: 6px; border-radius: 3px; background: #FA5151"></span><span style="font-weight: 600; color: #191919">请你审批</span>· 剩 14 分钟</span>
+        <span style="font-size: 16px; line-height: 25px; color: #333333">测试通过后推送到 release/1.4</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #EDEDED"><a href="HumanAsk.dc.html" style="height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; color: #333333; border-right: 1px solid #EDEDED">拒绝</a><a href="HumanAsk.dc.html" style="height: 44px; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 500; color: #576B95; ">批准</a></div>
+    </section>
   </main>
-
-  <a href="Main.dc.html" style="position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); height: 40px; display: flex; align-items: center; gap: 6px; padding: 0 16px; border-radius: 20px; background: #15171A; color: #FFFFFF; font-size: 13px; font-weight: 600; box-shadow: 0 6px 18px rgba(21,23,26,.25); white-space: nowrap">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12l7 7 7-7"></path></svg>回到最新 · 12 条新动态
+  <a href="Waiting.dc.html" aria-label="2 条等待消息，展开等待区" style="flex: none; height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 12px 0 14px; background: #F7F7F7; border-top: 1px solid #DCDCDC; font-size: 13px; color: #888888">
+    <span aria-hidden="true" style="width: 16px; height: 16px; flex: none; border-radius: 3px; background: #5477AD; color: #FFFFFF; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span><span style="flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="color: #191919">2 条等待</span> · builder 本轮结束后依次发出</span>›
   </a>
+  <div style="flex: none; display: flex; align-items: center; gap: 6px; padding: 8px 8px 10px; background: #F7F7F7; border-top: 1px solid #DCDCDC">
+    <a href="AgentPicker.dc.html" aria-label="发给 builder，更换" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center"><span aria-hidden="true" style="width: 28px; height: 28px; flex: none; border-radius: 4px; background: #5477AD; color: #FFFFFF; font-size: 14px; font-weight: 600; display: flex; align-items: center; justify-content: center">B</span></a>
+    <div role="textbox" aria-label="发送消息" style="flex: 1; height: 40px; box-sizing: border-box; padding: 8px 12px; border-radius: 4px; background: #FFFFFF; font-size: 16px; line-height: 24px; color: #B2B2B2">发给 builder</div>
+    <button aria-label="更多：附件、命令、频道文件" style="width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"></circle><path d="M12 7.5v9M7.5 12h9"></path></svg>
+    </button>
+  </div>
+  <a href="Main.dc.html" aria-label="收起" style="position: absolute; left: 0; right: 0; top: 48px; bottom: 0; background: rgba(0,0,0,.5)"></a>
+  <section aria-label="Agent 成员" style="position: absolute; left: 0; right: 0; top: 48px; background: #FFFFFF; border-radius: 0 0 12px 12px; overflow: hidden; padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 12px">
+    <div role="radiogroup" aria-label="选择对话的 Agent" style="display: flex; flex-wrap: wrap; gap: 8px"><a href="Main.dc.html" role="radio" aria-checked="true" aria-label="和 builder 对话，运行中，当前" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #FFFFFF; box-shadow: inset 0 0 0 1px #191919; color: #191919; font-weight: 600"><span style="width: 6px; height: 6px; flex: none; border-radius: 3px; background: #07C160"></span>builder</a><a href="Main.dc.html" role="radio" aria-checked="false" aria-label="和 reviewer 对话" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #F2F2F2; color: #333333">reviewer</a><a href="Main.dc.html" role="radio" aria-checked="false" aria-label="和 tester 对话，运行中" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #F2F2F2; color: #333333"><span style="width: 6px; height: 6px; flex: none; border-radius: 3px; background: #07C160"></span>tester</a><a href="Main.dc.html" role="radio" aria-checked="false" aria-label="和 planner 对话" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #F2F2F2; color: #333333">planner</a><a href="Main.dc.html" role="radio" aria-checked="false" aria-label="和 deployer 对话" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #F2F2F2; color: #333333">deployer</a><a href="Main.dc.html" role="radio" aria-checked="false" aria-label="和 test-writer 对话" style="height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 12px; border-radius: 16px; font-size: 14px; background: #F2F2F2; color: #333333">test-writer</a><a href="Members.dc.html" aria-label="添加 Agent" style="height: 32px; display: inline-flex; align-items: center; padding: 0 12px; border-radius: 16px; box-shadow: inset 0 0 0 1px #DCDCDC; font-size: 14px; color: #888888">+ 添加</a></div>
+    <span style="font-size: 13px; color: #888888">绿点 = 运行中 · 点选切换对话 · 长按只看 TA 的消息</span>
+  </section>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>

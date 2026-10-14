@@ -1,91 +1,410 @@
 {
-  "v": 3,
-  "createdOnFiles": {"v": 1, "at": "2026-10-13T19:05:00Z"},
-  "title": "Atoll Android Redesign",
-  "launch": {"view": "canvas"},
-  "pages": [],
-  "boards": {
-    "Main.dc.html": {"x": 470, "y": 0, "w": 390, "h": 844, "title": "频道 · 动态", "radius": 28, "is_interactive": true},
-    "Channels.dc.html": {"x": 0, "y": 0, "w": 390, "h": 844, "title": "频道列表（首页）", "radius": 28, "is_interactive": true},
-    "Process.dc.html": {"x": 940, "y": 0, "w": 390, "h": 844, "title": "回合过程（底部面板）", "radius": 28, "is_interactive": true},
-    "Tasks.dc.html": {"x": 1410, "y": 0, "w": 390, "h": 844, "title": "频道 · 任务", "radius": 28, "is_interactive": true},
-    "Activity.dc.html": {"x": 1880, "y": 0, "w": 390, "h": 844, "title": "活动收件箱", "radius": 28, "is_interactive": true},
-    "Mention.dc.html": {"x": 0, "y": 1224, "w": 390, "h": 844, "title": "输入 · @ 成员", "radius": 28, "is_interactive": true},
-    "Commands.dc.html": {"x": 470, "y": 1224, "w": 390, "h": 844, "title": "输入 · / 命令", "radius": 28, "is_interactive": true},
-    "AgentPicker.dc.html": {"x": 940, "y": 1224, "w": 390, "h": 844, "title": "选择 Agent 与参数", "radius": 28, "is_interactive": true},
-    "Waiting.dc.html": {"x": 1410, "y": 1224, "w": 390, "h": 844, "title": "等待区（展开）", "radius": 28, "is_interactive": true},
-    "MessageActions.dc.html": {"x": 1880, "y": 1224, "w": 390, "h": 844, "title": "长按消息", "radius": 28, "is_interactive": true},
-    "HumanAsk.dc.html": {"x": 2350, "y": 1224, "w": 390, "h": 844, "title": "审批 · 提问 · 表单", "radius": 28, "is_interactive": true},
-    "Files.dc.html": {"x": 0, "y": 2448, "w": 390, "h": 844, "title": "文件", "radius": 28, "is_interactive": true},
-    "FilePreview.dc.html": {"x": 470, "y": 2448, "w": 390, "h": 844, "title": "文件预览", "radius": 28, "is_interactive": true},
-    "Terminal.dc.html": {"x": 940, "y": 2448, "w": 390, "h": 844, "title": "终端", "radius": 28, "is_interactive": true},
-    "Members.dc.html": {"x": 1410, "y": 2448, "w": 390, "h": 844, "title": "成员", "radius": 28, "is_interactive": true},
-    "MemberConfig.dc.html": {"x": 1880, "y": 2448, "w": 390, "h": 844, "title": "成员配置", "radius": 28, "is_interactive": true},
-    "ChannelDetails.dc.html": {"x": 0, "y": 3672, "w": 390, "h": 844, "title": "频道详情", "radius": 28, "is_interactive": true},
-    "NewChannel.dc.html": {"x": 470, "y": 3672, "w": 390, "h": 844, "title": "新建频道", "radius": 28, "is_interactive": true},
-    "Schedule.dc.html": {"x": 940, "y": 3672, "w": 390, "h": 844, "title": "新建任务 · 定时动作", "radius": 28, "is_interactive": true},
-    "Starred.dc.html": {"x": 1410, "y": 3672, "w": 390, "h": 844, "title": "星标与最近阅读", "radius": 28, "is_interactive": true},
-    "SpaceAdmin.dc.html": {"x": 1880, "y": 3672, "w": 390, "h": 844, "title": "空间管理", "radius": 28, "is_interactive": true},
-    "Settings.dc.html": {"x": 2350, "y": 3672, "w": 390, "h": 844, "title": "我 · 设置", "radius": 28, "is_interactive": true},
-    "Login.dc.html": {"x": 0, "y": 4896, "w": 390, "h": 844, "title": "登录", "radius": 28, "is_interactive": true},
-    "Register.dc.html": {"x": 470, "y": 4896, "w": 390, "h": 844, "title": "注册", "radius": 28, "is_interactive": true},
-    "Connection.dc.html": {"x": 940, "y": 4896, "w": 390, "h": 844, "title": "连接状态", "radius": 28, "is_interactive": true},
-    "Empty.dc.html": {"x": 1410, "y": 4896, "w": 390, "h": 844, "title": "空状态与加载", "radius": 28, "is_interactive": true},
-    "Upgrade.dc.html": {"x": 1880, "y": 4896, "w": 390, "h": 844, "title": "节点升级", "radius": 28, "is_interactive": true},
-    "Navigation.dc.html": {"x": 0, "y": 6120, "w": 1800, "h": 1120, "title": "信息架构与交互流"},
-    "Foundations.dc.html": {"x": 1880, "y": 6120, "w": 1800, "h": 1120, "title": "设计基础"},
-    "Components.dc.html": {"x": 3760, "y": 6120, "w": 1800, "h": 1400, "title": "组件库"},
-    "ConversationModel.dc.html": {"x": 0, "y": -2340, "w": 1800, "h": 1500, "title": "对话模型盘点"},
-    "TurnStates.dc.html": {"x": 1880, "y": -2340, "w": 390, "h": 1700, "title": "回合卡 · 全部状态", "radius": 28},
-    "TurnExpanded.dc.html": {"x": 2350, "y": -2340, "w": 390, "h": 844, "title": "回合卡 · 工作条展开", "radius": 28, "is_interactive": true},
-    "CollabSheet.dc.html": {"x": 2820, "y": -2340, "w": 390, "h": 844, "title": "协作详情（深层线程）", "radius": 28, "is_interactive": true},
-    "Filters.dc.html": {"x": 3290, "y": -2340, "w": 390, "h": 844, "title": "范围 · 筛选 · 历史窗口", "radius": 28, "is_interactive": true}
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-13T19:05:00Z"
+ },
+ "title": "Atoll Android Redesign",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "频道 · 动态",
+   "radius": 28,
+   "is_interactive": true
   },
-  "order": [
-    "Main.dc.html",
-    "Channels.dc.html",
-    "Process.dc.html",
-    "Tasks.dc.html",
-    "Activity.dc.html",
-    "Mention.dc.html",
-    "Commands.dc.html",
-    "AgentPicker.dc.html",
-    "Waiting.dc.html",
-    "MessageActions.dc.html",
-    "HumanAsk.dc.html",
-    "Files.dc.html",
-    "FilePreview.dc.html",
-    "Terminal.dc.html",
-    "Members.dc.html",
-    "MemberConfig.dc.html",
-    "ChannelDetails.dc.html",
-    "NewChannel.dc.html",
-    "Schedule.dc.html",
-    "Starred.dc.html",
-    "SpaceAdmin.dc.html",
-    "Settings.dc.html",
-    "Login.dc.html",
-    "Register.dc.html",
-    "Connection.dc.html",
-    "Empty.dc.html",
-    "Upgrade.dc.html",
-    "Navigation.dc.html",
-    "Foundations.dc.html",
-    "Components.dc.html",
-    "ConversationModel.dc.html",
-    "TurnStates.dc.html",
-    "TurnExpanded.dc.html",
-    "CollabSheet.dc.html",
-    "Filters.dc.html"
-  ],
-  "notes": {
-    "row0": {"x": 0, "y": -2600, "text": "对话页深入：消息模型盘点、回合卡、筛选", "kind": "title1", "maxW": 3680},
-    "row1": {"x": 0, "y": -260, "text": "核心流程：频道 → 动态 → 过程 → 任务 → 活动", "kind": "title1", "maxW": 2270},
-    "row2": {"x": 0, "y": 964, "text": "对话交互：输入、Agent、等待区、消息操作、审批", "kind": "title1", "maxW": 2740},
-    "row3": {"x": 0, "y": 2188, "text": "工作区工具：文件、终端、成员", "kind": "title1", "maxW": 2270},
-    "row4": {"x": 0, "y": 3412, "text": "频道与空间管理", "kind": "title1", "maxW": 2740},
-    "row5": {"x": 0, "y": 4636, "text": "入口与系统状态", "kind": "title1", "maxW": 2270},
-    "row6": {"x": 0, "y": 5860, "text": "系统：信息架构、设计基础、组件库", "kind": "title1", "maxW": 5560}
+  "Channels.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "频道列表（首页）",
+   "radius": 28,
+   "is_interactive": true
   },
-  "designSystems": []
+  "Process.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "回合过程（底部面板）",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Tasks.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "频道 · 任务",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Activity.dc.html": {
+   "x": 1880,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "活动收件箱",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Mention.dc.html": {
+   "x": 0,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "输入 · @ 成员",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Commands.dc.html": {
+   "x": 470,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "输入 · / 命令",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "AgentPicker.dc.html": {
+   "x": 940,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "选择 Agent 与参数",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Waiting.dc.html": {
+   "x": 1410,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "等待区（展开）",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "MessageActions.dc.html": {
+   "x": 1880,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "长按消息",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "HumanAsk.dc.html": {
+   "x": 2350,
+   "y": 1224,
+   "w": 390,
+   "h": 844,
+   "title": "审批 · 提问 · 表单",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Files.dc.html": {
+   "x": 0,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "文件",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "FilePreview.dc.html": {
+   "x": 470,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "文件预览",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Terminal.dc.html": {
+   "x": 940,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "终端",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Members.dc.html": {
+   "x": 1410,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "成员",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "MemberConfig.dc.html": {
+   "x": 1880,
+   "y": 2448,
+   "w": 390,
+   "h": 844,
+   "title": "成员配置",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "ChannelDetails.dc.html": {
+   "x": 0,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "频道详情",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "NewChannel.dc.html": {
+   "x": 470,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "新建频道",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Schedule.dc.html": {
+   "x": 940,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "新建任务 · 定时动作",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Starred.dc.html": {
+   "x": 1410,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "星标与最近阅读",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "SpaceAdmin.dc.html": {
+   "x": 1880,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "空间管理",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Settings.dc.html": {
+   "x": 2350,
+   "y": 3672,
+   "w": 390,
+   "h": 844,
+   "title": "我 · 设置",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Login.dc.html": {
+   "x": 0,
+   "y": 4896,
+   "w": 390,
+   "h": 844,
+   "title": "登录",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Register.dc.html": {
+   "x": 470,
+   "y": 4896,
+   "w": 390,
+   "h": 844,
+   "title": "注册",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Connection.dc.html": {
+   "x": 940,
+   "y": 4896,
+   "w": 390,
+   "h": 844,
+   "title": "连接状态",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Empty.dc.html": {
+   "x": 1410,
+   "y": 4896,
+   "w": 390,
+   "h": 844,
+   "title": "空状态与加载",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Upgrade.dc.html": {
+   "x": 1880,
+   "y": 4896,
+   "w": 390,
+   "h": 844,
+   "title": "节点升级",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Navigation.dc.html": {
+   "x": 0,
+   "y": 6120,
+   "w": 1800,
+   "h": 1120,
+   "title": "信息架构与交互流"
+  },
+  "Foundations.dc.html": {
+   "x": 1880,
+   "y": 6120,
+   "w": 1800,
+   "h": 1120,
+   "title": "设计基础"
+  },
+  "Components.dc.html": {
+   "x": 3760,
+   "y": 6120,
+   "w": 1800,
+   "h": 1400,
+   "title": "组件库"
+  },
+  "ConversationModel.dc.html": {
+   "x": 0,
+   "y": -2340,
+   "w": 1800,
+   "h": 1500,
+   "title": "对话模型盘点"
+  },
+  "CollabSheet.dc.html": {
+   "x": 3290,
+   "y": -2340,
+   "w": 390,
+   "h": 844,
+   "title": "协作详情（深层线程）",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "Filters.dc.html": {
+   "x": 3760,
+   "y": -2340,
+   "w": 390,
+   "h": 844,
+   "title": "Agent 成员组（点顶栏头像）",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "ChatStates.dc.html": {
+   "x": 1880,
+   "y": -2340,
+   "w": 390,
+   "h": 3100,
+   "title": "对话 · 复杂情况全集",
+   "radius": 28,
+   "is_interactive": true
+  },
+  "AvatarColors.dc.html": {
+   "x": 2350,
+   "y": -2340,
+   "w": 860,
+   "h": 760,
+   "title": "头像配色（固定算法）",
+   "radius": 20,
+   "is_interactive": true
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Channels.dc.html",
+  "Process.dc.html",
+  "Tasks.dc.html",
+  "Activity.dc.html",
+  "Mention.dc.html",
+  "Commands.dc.html",
+  "AgentPicker.dc.html",
+  "Waiting.dc.html",
+  "MessageActions.dc.html",
+  "HumanAsk.dc.html",
+  "Files.dc.html",
+  "FilePreview.dc.html",
+  "Terminal.dc.html",
+  "Members.dc.html",
+  "MemberConfig.dc.html",
+  "ChannelDetails.dc.html",
+  "NewChannel.dc.html",
+  "Schedule.dc.html",
+  "Starred.dc.html",
+  "SpaceAdmin.dc.html",
+  "Settings.dc.html",
+  "Login.dc.html",
+  "Register.dc.html",
+  "Connection.dc.html",
+  "Empty.dc.html",
+  "Upgrade.dc.html",
+  "Navigation.dc.html",
+  "Foundations.dc.html",
+  "Components.dc.html",
+  "ConversationModel.dc.html",
+  "ChatStates.dc.html",
+  "AvatarColors.dc.html",
+  "CollabSheet.dc.html",
+  "Filters.dc.html"
+ ],
+ "notes": {
+  "row0": {
+   "x": 0,
+   "y": -2600,
+   "text": "对话页：消息模型盘点、复杂情况全集、头像配色、协作、筛选",
+   "kind": "title1",
+   "maxW": 4150
+  },
+  "row1": {
+   "x": 0,
+   "y": -260,
+   "text": "核心流程：频道 → 动态 → 过程 → 任务 → 活动",
+   "kind": "title1",
+   "maxW": 2270
+  },
+  "row2": {
+   "x": 0,
+   "y": 964,
+   "text": "对话交互：输入、Agent、等待区、消息操作、审批",
+   "kind": "title1",
+   "maxW": 2740
+  },
+  "row3": {
+   "x": 0,
+   "y": 2188,
+   "text": "工作区工具：文件、终端、成员",
+   "kind": "title1",
+   "maxW": 2270
+  },
+  "row4": {
+   "x": 0,
+   "y": 3412,
+   "text": "频道与空间管理",
+   "kind": "title1",
+   "maxW": 2740
+  },
+  "row5": {
+   "x": 0,
+   "y": 4636,
+   "text": "入口与系统状态",
+   "kind": "title1",
+   "maxW": 2270
+  },
+  "row6": {
+   "x": 0,
+   "y": 5860,
+   "text": "系统：信息架构、设计基础、组件库",
+   "kind": "title1",
+   "maxW": 5560
+  }
+ },
+ "designSystems": []
 }
