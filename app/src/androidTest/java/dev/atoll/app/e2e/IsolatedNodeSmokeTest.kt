@@ -277,9 +277,10 @@ class IsolatedNodeSmokeTest {
     @After fun clearThisRunsFixture() { removeFixture() }
 
     @Test fun allSeventeenStepsOnOurNode() {
-        step("channel-list") { waitFor(hasText("OPEN")); waitFor(hasText("android-test", substring = true)) }
+        step("channel-list") { waitFor(hasText("已连接")); waitFor(hasText("android-test", substring = true)) }
         step("open-channel") {
-            waitFor(hasText("android-test", substring = true) and hasClickAction()).performClick()
+            val channelName = graph.state.value.navigation.channels.first { it.id == config.channel }.name
+            waitFor(hasText(channelName) and hasClickAction()).performClick()
             waitFor(editor)
             compose.waitUntil(40_000) { graph.state.value.route?.channel == config.channel && services().selfIds[config.channel] != null }
             compose.waitUntil(40_000) { graph.state.value.roster.any { it.id == config.codex } }
