@@ -327,7 +327,7 @@ class IsolatedNodeSmokeTest {
                 fixture = repo.upload(device, "", filename, emptyList(), { ByteArrayInputStream(bytes) }, bytes.size.toLong(), "text/plain")
                 fixtureRepository = repo
             } }
-            click("文件"); waitFor(hasContentDescription("关闭文件"))
+            click("文件"); waitFor(hasContentDescription("文件设备与操作"))
             // Scroll only the vertical lazy file list, not any horizontal toolbar.
             val list = hasScrollToIndexAction()
             waitFor(list)
@@ -339,7 +339,8 @@ class IsolatedNodeSmokeTest {
         }
         step("preview") {
             click(filename); waitFor(hasText("${marker}_PREVIEW")); click("‹ 返回")
-            waitFor(hasContentDescription("关闭文件") and hasClickAction()).performClick()
+            waitFor(hasContentDescription("文件设备与操作") and hasClickAction()).performClick()
+            click("关闭文件")
         }
         step("terminal-ls") {
             menu("打开终端"); waitFor(hasText("已连接"))

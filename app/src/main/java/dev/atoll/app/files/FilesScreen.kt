@@ -18,6 +18,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.atoll.app.ui.components.*
 import dev.atoll.app.ui.theme.AtollColors
 import dev.atoll.app.ui.theme.AtollMono
@@ -32,8 +35,9 @@ import dev.atoll.app.net.TransferProgress
 import java.text.DateFormat
 import java.util.Date
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClose: () -> Unit = {}, onAttach: ((FileReference) -> Unit)? = null) {
+fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClose: () -> Unit = {}, onAttach: ((FileReference) -> Unit)? = null, onResources: (() -> Unit)? = null) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val recent by viewModel.recent.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -53,25 +57,37 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
     CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 44.dp) {
     Surface(modifier.fillMaxSize(), color = AtollColors.Ground) {
         Column {
-            Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(start = 12.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 var devicesExpanded by remember { mutableStateOf(false) }
                 Box {
                     Row(Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(10.dp)).background(AtollColors.Surface).border(1.dp, AtollColors.ControlLine, RoundedCornerShape(10.dp))
-                        .clickable(enabled = state.devices.isNotEmpty()) { devicesExpanded = true }.padding(start = 8.dp, end = 6.dp),
+                        .semantics { contentDescription = "文件设备与操作" }.clickable { devicesExpanded = true }.padding(start = 8.dp, end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.Devices, null, Modifier.size(16.dp), tint = AtollColors.Muted)
+                        Icon(Icons.Default.DesktopWindows, null, Modifier.size(16.dp), tint = AtollColors.Muted)
                         Text(state.devices.firstOrNull { it.id == state.deviceId }?.name ?: "未挂载设备", fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1)
                         Icon(Icons.Default.KeyboardArrowDown, null, Modifier.size(16.dp), tint = AtollColors.Muted)
                     }
                     DropdownMenu(expanded = devicesExpanded, onDismissRequest = { devicesExpanded = false }) {
                         state.devices.forEach { device -> DropdownMenuItem(text = { Text(device.name + if (device.online == false) " · 离线" else "") }, onClick = { devicesExpanded = false; viewModel.navigate("", device.id) }) }
+                        HorizontalDivider(color = AtollColors.LineSoft)
+                        onResources?.let { open -> DropdownMenuItem(text = { Text("KV 资源") }, onClick = { devicesExpanded = false; open() }) }
+                        DropdownMenuItem(text = { Text("刷新") }, onClick = { devicesExpanded = false; if (state.devices.isEmpty()) viewModel.initialize() else viewModel.refresh() })
+                        DropdownMenuItem(text = { Text("关闭文件") }, onClick = { devicesExpanded = false; onClose() })
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                TextButton(onClick = { showRecent = true }) { Text("最近阅读", fontSize = 13.sp, color = AtollColors.Body) }
-                IconButton(onClick = { if (state.devices.isEmpty()) viewModel.initialize() else viewModel.refresh() }) { Icon(Icons.Default.Refresh, "刷新", tint = AtollColors.Muted) }
-                IconButton(onClick = onClose) { Icon(Icons.Default.Close, "关闭文件", tint = AtollColors.Muted) }
+                Row(Modifier.height(36.dp).clickable { showRecent = true }.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Icon(Icons.Default.Schedule, null, Modifier.size(15.dp), tint = AtollColors.Body)
+                    Text("最近阅读", fontSize = 13.sp, color = AtollColors.Body)
+                }
+                Row(Modifier.height(36.dp).semantics { contentDescription = if (state.descending) "名称排序：降序" else "名称排序：升序" }
+                    .clickable { viewModel.sort(FileSort.NAME) }.padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text("名称", fontSize = 13.sp, color = AtollColors.Body)
+                    Icon(if (state.descending) Icons.Default.ArrowDownward else Icons.Default.ArrowUpward, null, Modifier.size(13.dp), tint = AtollColors.Body)
+                }
             }
             if (state.upload != null) TransferLine("上传", state.upload!!)
             if (state.download != null) TransferLine("下载 ${state.downloadName}", state.download!!)
@@ -80,27 +96,17 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
             if (state.selected != null) {
                 FilePreviewPanel(state, viewModel::backPreview, viewModel::closePreview, download, viewModel::openLink, onAttach, Modifier.weight(1f))
             } else {
-                Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { viewModel.navigate(FilePaths.parent(state.directory)) }, enabled = state.directory.isNotEmpty()) { Icon(Icons.Default.ArrowBack, "返回上级目录", tint = AtollColors.Muted) }
+                Row(Modifier.fillMaxWidth().heightIn(min = 36.dp).horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     val parts = state.directory.trimEnd('/').split('/').filter { it.isNotEmpty() }
-                    TextButton(onClick = { viewModel.navigate("") }) { Text(state.channelName, fontSize = 14.sp, color = if (parts.isEmpty()) AtollColors.Ink else AtollColors.Muted,
-                        fontWeight = if (parts.isEmpty()) FontWeight.SemiBold else FontWeight.Normal) }
+                    Text("根目录", Modifier.clickable { viewModel.navigate("") }.padding(horizontal = 2.dp, vertical = 4.dp),
+                        fontSize = 14.sp, color = if (parts.isEmpty()) AtollColors.Ink else AtollColors.Muted,
+                        fontWeight = if (parts.isEmpty()) FontWeight.SemiBold else FontWeight.Normal)
                     parts.forEachIndexed { index, name ->
                         Text("/", color = AtollColors.Faint)
-                        TextButton(onClick = { viewModel.navigate(parts.take(index + 1).joinToString("/", postfix = "/")) }) {
-                            Text(name, fontSize = 14.sp, color = if (index == parts.lastIndex) AtollColors.Ink else AtollColors.Muted,
-                                fontWeight = if (index == parts.lastIndex) FontWeight.SemiBold else FontWeight.Normal)
-                        }
-                    }
-                }
-                val channelRecent = recent.filter { it.channelId == viewModel.channelId }.take(8)
-                if (channelRecent.isNotEmpty()) ChipRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
-                    Text("最近查看", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = AtollColors.Muted)
-                    channelRecent.forEach { reference -> TextChip(reference.name, onClick = { viewModel.open(reference) }) }
-                }
-                ChipRow(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    listOf(FileSort.NAME to "名称", FileSort.MODIFIED to "日期", FileSort.SIZE to "大小", FileSort.KIND to "种类").forEach { (key, label) ->
-                        TextChip(label + if (state.sort == key) if (state.descending) " ↓" else " ↑" else "", selected = state.sort == key, onClick = { viewModel.sort(key) })
+                        Text(name, Modifier.clickable { viewModel.navigate(parts.take(index + 1).joinToString("/", postfix = "/")) }
+                            .padding(horizontal = 2.dp, vertical = 4.dp), fontSize = 14.sp,
+                            color = if (index == parts.lastIndex) AtollColors.Ink else AtollColors.Muted,
+                            fontWeight = if (index == parts.lastIndex) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
                 Box(Modifier.weight(1f)) {
@@ -110,15 +116,16 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                     val scrollDevice = state.deviceId
                     val scrollDirectory = state.directory
                     DisposableEffect(list) { onDispose { viewModel.rememberScroll(scrollDevice, scrollDirectory, list.firstVisibleItemIndex, list.firstVisibleItemScrollOffset) } }
-                    LazyColumn(state = list, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 88.dp)) {
+                    LazyColumn(state = list, modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
+                        .clip(RoundedCornerShape(16.dp)).background(AtollColors.Surface)
+                        .border(1.dp, AtollColors.Line, RoundedCornerShape(16.dp)).testTag("files-list"), contentPadding = PaddingValues(bottom = 88.dp)) {
                         itemsIndexed(state.entries, key = { _, entry -> entry.reference.resourceId }) { index, entry ->
                             val ref = entry.reference
-                            val first = index == 0
                             val last = index == state.entries.lastIndex
-                            val shape = RoundedCornerShape(topStart = if (first) 16.dp else 0.dp, topEnd = if (first) 16.dp else 0.dp,
-                                bottomStart = if (last) 16.dp else 0.dp, bottomEnd = if (last) 16.dp else 0.dp)
-                            Column(Modifier.fillMaxWidth().clip(shape).background(AtollColors.Surface)) {
-                                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable { if (entry.directory != null) viewModel.navigate(entry.directory) else viewModel.open(ref) }
+                            Column(Modifier.fillMaxWidth()) {
+                                Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).combinedClickable(
+                                    onClick = { if (entry.directory != null) viewModel.navigate(entry.directory) else viewModel.open(ref) },
+                                    onLongClickLabel = "删除 ${ref.name}", onLongClick = { deleteTarget = ref })
                                     .padding(start = 14.dp, end = 4.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                     Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(if (entry.directory != null) AtollColors.Subtle else AtollColors.LagoonSurface),
                                         contentAlignment = Alignment.Center) {
@@ -127,7 +134,7 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                                             fontWeight = FontWeight.SemiBold, fontFamily = AtollMono, color = AtollColors.LagoonText)
                                     }
                                     Column(Modifier.weight(1f)) {
-                                        Text(ref.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                                        Text(ref.name, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp, fontWeight = FontWeight.Medium)
                                         Text((if (entry.directory != null) "文件夹" else fileSize(ref.size)) + if (entry.modifiedAt > 0) " · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(entry.modifiedAt))}" else "",
                                             fontSize = 12.sp, color = AtollColors.Muted)
                                     }
@@ -135,7 +142,7 @@ fun FilesScreen(viewModel: FilesViewModel, modifier: Modifier = Modifier, onClos
                                         if (onAttach != null) IconButton(onClick = { onAttach(ref) }) { Icon(Icons.Default.AttachFile, "选择 ${ref.name}", tint = AtollColors.Lagoon) }
                                         else IconButton(onClick = { download(ref) }, enabled = state.download == null) { Icon(Icons.Default.Download, "下载 ${ref.name}", tint = AtollColors.Muted) }
                                     }
-                                    IconButton(onClick = { deleteTarget = ref }) { Icon(Icons.Default.DeleteOutline, "删除 ${ref.name}", tint = AtollColors.Muted) }
+                                    if (entry.directory != null) Icon(Icons.Default.ChevronRight, null, Modifier.size(16.dp), tint = AtollColors.Faint)
                                 }
                                 if (!last) HorizontalDivider(Modifier.padding(start = 62.dp), color = AtollColors.LineSoft)
                             }
