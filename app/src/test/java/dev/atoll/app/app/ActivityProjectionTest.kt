@@ -11,6 +11,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ActivityProjectionTest {
+    @Test fun inboxApprovalActionsUseCurrentMembershipAndKeepOnlyMetadata() {
+        val fact = TaskFact("approval:c:r", "r", "c", "approval", "Approve?", state = "waiting", assigneeActorIds = listOf("self"),
+            diagnostic = buildJsonObject { put("requestType", "human.approve") })
+        val inputs = listOf(ChannelActivityInput("c", "channel", listOf(fact)))
+        val authorities = mapOf("c" to ApprovalAuthority("self", true))
+        val actionable = selectActivity(inputs, authorities = authorities).activities.single().approval!!
+        assertEquals(listOf(TaskAction.APPROVE, TaskAction.REJECT), actionable.actions)
+        assertNull(actionable.turn); assertNull(actionable.submission)
+        assertTrue(selectActivity(inputs, connected = false, authorities = authorities).activities.single().approval!!.actions.isEmpty())
+        assertTrue(selectActivity(inputs, authorities = mapOf("c" to ApprovalAuthority("self", false))).activities.single().approval!!.actions.isEmpty())
+        assertTrue(selectActivity(inputs, authorities = mapOf("c" to ApprovalAuthority("observer", true))).activities.single().approval!!.actions.isEmpty())
+    }
     @Test fun retainedWindowFactsKeepBackgroundApprovalsWithoutRetainingTheTurnTree() {
         val replica = ChannelReplica("c", "human:self")
         replica.apply(RowBatch("c", listOf(Row("c", 1, Envelope(buildJsonObject {

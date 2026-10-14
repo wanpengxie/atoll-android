@@ -250,7 +250,8 @@ fun TaskDetail(item: TaskFact,viewModel: TasksViewModel,modifier: Modifier=Modif
     }
 }
 @Composable
-fun ActivityCenterScreen(snapshot: ActivitySnapshot,modifier: Modifier=Modifier,onSource: (JsonObject)->Unit={}) {
+fun ActivityCenterScreen(snapshot: ActivitySnapshot,modifier: Modifier=Modifier,onSource: (JsonObject)->Unit={},
+    approvalCommands: Map<String,TaskCommandState> = emptyMap(), onResolve: ((ActivityItem,String)->Unit)? = null) {
     var operations by remember { mutableStateOf(false) }
     Column(modifier.fillMaxSize().background(AtollColors.Ground)) {
         SegmentedControl(listOf("活动 ${snapshot.activities.size}","操作 ${snapshot.operations.size}"),if (operations) 1 else 0,{ operations=it==1 },
@@ -259,19 +260,43 @@ fun ActivityCenterScreen(snapshot: ActivitySnapshot,modifier: Modifier=Modifier,
         LazyColumn(Modifier.weight(1f).fillMaxWidth(),contentPadding=PaddingValues(12.dp),verticalArrangement=Arrangement.spacedBy(10.dp)) {
             if (operations && snapshot.operationsUnavailable) item { NoticeBanner("当前没有可用的进行中操作快照",Tone.Neutral) }
             items(rows,key={ it.key }) { row ->
+                val approval = row.approval?.takeIf { it.diagnostic.text("requestType") == "human.approve" }
+                val command = approval?.let { approvalCommands[it.key] }
                 Column(Modifier.fillMaxWidth().clip(AtollShapes.Card).background(AtollColors.Surface).border(1.dp,AtollColors.Line,AtollShapes.Card)
                     .clickable { onSource(row.source) }.padding(14.dp),verticalArrangement=Arrangement.spacedBy(6.dp)) {
                     Row(verticalAlignment=Alignment.CenterVertically,horizontalArrangement=Arrangement.spacedBy(8.dp)) {
                         StatusPill(taskKinds[row.kind] ?: "操作",kindTone(row.kind),live=row.state in setOf("running","active") && row.kind=="agent_run")
                         Text("# ${row.channelName}",Modifier.weight(1f),fontSize=12.sp,color=AtollColors.Muted,maxLines=1,overflow=TextOverflow.Ellipsis)
-                        Text(taskStates[row.state] ?: row.state,fontSize=12.sp,color=AtollColors.Muted)
+                        if (command?.state != "disabled") Text(taskStates[row.state] ?: row.state,fontSize=12.sp,color=AtollColors.Muted)
                     }
                     WorkTitle(row.title)
                     if (row.detail.isNotEmpty()) Text(row.detail,fontSize=14.sp,color=AtollColors.Body,maxLines=2,overflow=TextOverflow.Ellipsis)
-                    Text("返回来源 ›",fontSize=13.sp,fontWeight=FontWeight.Medium,color=AtollColors.Lagoon)
+                    if (approval != null) ActivityApprovalActions(row, approval, command, onResolve) { onSource(row.source) }
+                    else Text("返回来源 ›",fontSize=13.sp,fontWeight=FontWeight.Medium,color=AtollColors.Lagoon)
                 }
             }
             if (rows.isEmpty() && !(operations && snapshot.operationsUnavailable)) item { EmptyNote("暂无活动") }
         }
     }
+}
+
+@Composable
+private fun ActivityApprovalActions(row: ActivityItem, item: TaskFact, command: TaskCommandState?,
+    onResolve: ((ActivityItem,String)->Unit)?, onDetails: ()->Unit) {
+    val handled = command?.state == "disabled" || item.state in setOf("completed", "failed", "cancelled", "uncertain")
+    val busy = command?.state == "submitting"
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (handled) Text("已处理", fontSize = 14.sp, color = AtollColors.Muted)
+        else if (item.state == "waiting") {
+            AtollButton("拒绝", { onResolve?.invoke(row, TaskAction.REJECT) }, kind = ButtonKind.Secondary, height = 40.dp,
+                enabled = onResolve != null && TaskAction.REJECT in item.actions && !busy)
+            AtollButton("批准", { onResolve?.invoke(row, TaskAction.APPROVE) }, height = 40.dp, busy = busy,
+                enabled = onResolve != null && TaskAction.APPROVE in item.actions)
+        } else Text(taskStates[item.state] ?: item.state, fontSize = 14.sp, color = AtollColors.Muted)
+        Spacer(Modifier.weight(1f))
+        TextButton(onDetails, Modifier.height(40.dp), contentPadding = PaddingValues(horizontal = 8.dp)) {
+            Text("详情", fontSize = 14.sp, color = AtollColors.Muted)
+        }
+    }
+    if (!handled && command?.error?.isNotEmpty() == true) Text(command.error, fontSize = 13.sp, color = AtollColors.Danger)
 }

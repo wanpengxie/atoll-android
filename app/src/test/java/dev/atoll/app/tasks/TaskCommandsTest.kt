@@ -16,6 +16,26 @@ import org.junit.Test
 class TaskCommandsTest {
     private fun obj(text: String)=Json.parseToJsonElement(text).jsonObject
     private fun services(wire: WireClient)=WorkspaceServices("http://localhost","owner",mapOf("c" to "me"),wire,ObsClient("http://localhost",OkHttpClient()),OkHttpClient())
+    @Test fun taskPageAndInboxShareTheSameApprovalClaim()=runBlocking<Unit> {
+        newSingleThreadContext("shared-approval-test").use { dispatcher -> withContext(dispatcher) {
+            val wire=TaskTestWire();val started=CompletableDeferred<Unit>();val release=CompletableDeferred<Unit>()
+            wire.handle={ _,_ -> started.complete(Unit);release.await();Envelope.EMPTY }
+            val resolver=ApprovalResolver(wire)
+            val vm=TasksViewModel(services(wire),"c",dispatcher=dispatcher,approvals=resolver)
+            try {
+                vm.update(ChannelReplica("c").snapshot(),selfId="me",writable=true)
+                val fact=TaskFact("approval:c:r","r","c","approval","Decide",state="waiting",assigneeActorIds=listOf("me"),
+                    actions=listOf(TaskAction.APPROVE,TaskAction.REJECT),diagnostic=buildJsonObject { put("requestType","human.approve") })
+                val taskAction=launch { vm.execute(fact,TaskAction.APPROVE) }
+                started.await()
+                resolver.resolve(fact,TaskAction.REJECT,ApprovalAuthority("me",true))
+                withTimeout(5000) { vm.state.first { it.commandStates["${fact.key}:${TaskAction.REJECT}"]?.state=="submitting" } }
+                assertEquals(1,wire.requests.size)
+                release.complete(Unit);taskAction.join()
+                withTimeout(5000) { vm.state.first { it.commandStates["${fact.key}:${TaskAction.APPROVE}"]?.state=="disabled" } }
+            } finally { vm.close() }
+        } }
+    }
     private fun event(id: String,type: String="agent.ask",sender: String="me",channel: String="c")=Envelope(buildJsonObject {
         put("id","timer:$id");put("correlation_id","timer:$id");put("audience",JsonArray(listOf(JsonPrimitive(sender))));put("channel_id",channel);put("kind","event");put("type",type);put("ts",10);put("sender",buildJsonObject { put("id",sender);put("kind",if (sender=="me") "human" else sender) });put("payload",buildJsonObject { put("body",buildJsonObject {}) })
     })

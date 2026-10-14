@@ -52,6 +52,7 @@ object AtollColors {
     // States
     val Running = Color(0xFF1D5FD1)
     val RunningText = Color(0xFF1D4FB0)
+    val RunningInk = Color(0xFF1D3F80)
     val RunningSurface = Color(0xFFE9F0FC)
     val RunningTrack = Color(0xFFC9D8F5)
     /** Historical name: links and running states. */
