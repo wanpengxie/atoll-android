@@ -58,14 +58,15 @@ class MessageContentUiTest {
         for (direction in listOf(true, false)) {
             compose.runOnIdle { self.value = direction }
             compose.onNodeWithText("审批回执").assertIsDisplayed()
-            compose.onNodeWithText("1 条过程记录").assertIsDisplayed().performClick()
+            compose.onNodeWithText("过程 1 ›").assertIsDisplayed()
             compose.onNodeWithText("处理完成").assertIsDisplayed()
-            compose.onNodeWithText("核对文件").assertIsDisplayed()
+            compose.onNodeWithText("子 Agent 1").performClick()
+            compose.onNodeWithText("worker · 核对文件").assertIsDisplayed()
             compose.onNodeWithText("报告.pdf").assertIsDisplayed()
             compose.onNodeWithText("PDF · 2.0 KB").assertIsDisplayed()
             screenshot(if (direction) "message-self" else "message-other")
-            // Restore the collapsed trail before switching bubble direction.
-            compose.onNodeWithText("1 条过程记录").performClick()
+            // Fold previews before switching direction; closed rich details stay out of composition.
+            compose.onNodeWithText("收起").performClick()
         }
     }
 
@@ -221,7 +222,7 @@ class MessageContentUiTest {
         } }
         compose.onNodeWithText("面板操作").assertIsDisplayed()
         assertTrue(compose.onNodeWithText("面板操作").fetchSemanticsNode().boundsInRoot.top >=
-            compose.onNodeWithText("过程 · 请求").fetchSemanticsNode().boundsInRoot.bottom)
+            compose.onNodeWithText("请求 · 过程").fetchSemanticsNode().boundsInRoot.bottom)
         screenshot("process-actions")
         compose.runOnIdle { visible.value = false }
         compose.onNodeWithText("面板操作").assertDoesNotExist()
@@ -239,8 +240,7 @@ class MessageContentUiTest {
             RelatedCallViewState("nested", "子调用", "files", listOf("device"), "12:02", MessageStatus.Failed, depth = 2,
                 result = ResultViewState(errorCode = "permission_denied", detail = "调用拒绝原因")))
         val opened = mutableListOf<String>()
-        compose.setContent { TestContent { MessageFrame(MessageViewState("answer", "root", "", "12:00", self = true,
-            relatedCalls = calls), onRelatedCall = { opened += it }) } }
+        compose.setContent { TestContent { RelatedCalls("answer", calls, onProcess = { opened += it }) } }
         compose.onNodeWithContentDescription("Agent 协作消息").assertExists()
         compose.onNodeWithText("折叠协作标题").assertIsDisplayed()
         compose.onNodeWithText("2 次关联调用").assertIsDisplayed()

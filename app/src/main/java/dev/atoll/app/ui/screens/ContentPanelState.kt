@@ -9,7 +9,11 @@ enum class ProcessKind { Stage, Tool }
     val output: JsonElement? = null, val outputText: String = "", val body: String = "", val identifiers: List<Pair<String, String>> = emptyList())
 @Immutable data class ProcessPanelViewState(val title: String, val requestId: String, val type: String,
     val status: String, val records: List<ProcessRecordViewState>, val requestSeq: Long? = null,
-    val terminalId: String? = null, val detail: String = "", val selectedRecordId: String? = null)
+    val terminalId: String? = null, val detail: String = "", val selectedRecordId: String? = null,
+    val request: MessageViewState? = null, val agent: AgentViewState? = null,
+    val relatedCalls: List<RelatedCallViewState> = emptyList(), val subTasks: List<SubTaskViewState> = emptyList(),
+    val collaboration: CollaborationViewState? = null, val startedAtMillis: Long = 0,
+    val startTime: String = "", val executionTurnId: String = "")
 @Immutable data class ProgressTrailViewState(val title: String, val records: List<ProcessRecordViewState>,
     val running: Boolean, val startedAtMillis: Long = 0, val startTime: String = "")
 enum class SubTaskKind(val label: String) { Agent("子 Agent"), Shell("后台命令"), Other("后台任务") }

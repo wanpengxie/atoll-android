@@ -17,6 +17,7 @@ import dev.atoll.app.compose.AtollComposer
 import dev.atoll.app.compose.ComposerActor
 import dev.atoll.app.compose.TimelineMessageActions
 import dev.atoll.app.compose.TimelineSubmissionStatus
+import dev.atoll.app.waiting.WaitingRules
 import dev.atoll.app.waiting.WaitingDock
 import dev.atoll.app.waiting.editorBinding
 import dev.atoll.app.tasks.ApprovalCard
@@ -80,6 +81,7 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
     val waiting = waitingOwner?.takeIf { it.channelId == state.route?.channel }
     val observedWaitingState by (waiting?.state ?: emptyWaitingState).collectAsStateWithLifecycle()
     val waitingState = observedWaitingState.takeIf { waiting != null }
+    var processReturnRequest by remember(state.route?.channel) { mutableStateOf<String?>(null) }
     val localSubmissions by (features?.composer?.submissions ?: emptySubmissions).collectAsStateWithLifecycle()
     val localById = remember(localSubmissions) { localSubmissions.associateBy { it.messageId } }
     val emptyTasks = remember { MutableStateFlow<TasksViewModel?>(null) }
@@ -386,6 +388,16 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                             if (pickingFile && features != null) FilePicker(features.files(state.route!!.channel),
                                 onPick = { reference -> features.composer.addAttachments(listOf(reference)); pickingFile = false },
                                 onDismiss = { pickingFile = false })
+                            LaunchedEffect(processReturnRequest, conversation.entries, messageTargets) {
+                                val id = processReturnRequest ?: return@LaunchedEffect
+                                val index = timelineFocusIndex(conversation.entries, messageTargets, state.timelineSource, id)
+                                focusMissing = index < 0
+                                if (index >= 0) {
+                                    following = false; graph.follow(false)
+                                    scrollCentre(index + headerCount)
+                                    processReturnRequest = null
+                                }
+                            }
                             LaunchedEffect(state.route?.focus, state.route?.tab, messageTargets) {
                                 if (state.route?.tab != "conversation") return@LaunchedEffect
                                 if (focusApplied) return@LaunchedEffect
@@ -432,30 +444,32 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     if (target != null) {
                         val source = state.timelineSource
                         val detached = state.newerUnloaded
-                        val panel by produceState<ProcessPanelViewState?>(null, target, source, detached) {
-                            processPanelUpdates(target, source, detached)
+                        val self = services?.selfIds?.get(state.route!!.channel).orEmpty()
+                        val panel by produceState<ProcessPanelViewState?>(null, target, source, detached, self, state.roster) {
+                            processPanelUpdates(target, source, detached, selfId = self, roster = state.roster)
                                 .flowOn(kotlinx.coroutines.Dispatchers.Default).collect { value = it }
                         }
-                        panel?.let { presentation -> ProcessPanel(presentation, graph::closeFocus, actions = if (features == null) null else ({
-                            val control = remember(target) { processActionTarget(target) }
-                            val self = services?.selfIds?.get(state.route!!.channel).orEmpty()
-                            val message = remember(control, self, state.roster) { processActionMessage(control, self, state.roster) }
-                            val lost = remember(target, source, presentation.status) { processLostReason(target, source) }
-                            val taskSource = remember(control, state.route?.channel) { timelineTaskSource(state.route!!.channel, control) }
-                            TimelineMessageActions(message, control.envelope, control.turn, self, actionRoster,
-                                writable = state.conversation?.channel?.access?.let { composerWritable(it, self) } == true,
-                                online = state.navigation.connection == ConnectionPhase.OPEN, newerUnloaded = detached,
-                                safeEditActors = waitingState?.safeEditActors.orEmpty().takeIf { lost.isEmpty() }.orEmpty(),
-                                editingTargetId = waitingState?.edit?.session?.targetId.orEmpty(),
-                                onReply = { graph.closeFocus(); features.composer.setReply(it) },
-                                onEdit = { graph.closeFocus(); waiting?.requestEdit(it) },
-                                onCreateTask = if (taskState?.creationReady == true && tasks != null && taskSource != null)
-                                    ({ _, _ -> graph.closeFocus(); tasks.beginCreation(taskSource) }) else null,
-                                onStop = waiting?.takeIf { lost.isEmpty() }?.let { owner -> { id -> owner.stop(id) } },
-                                busyActors = waitingState?.busyActors.orEmpty(),
-                                starred = starredState.isStarred(state.route!!.channel, control.envelope.id),
-                                onToggleStar = stars?.let { it::toggle }, content = {})
-                        })) }
+                        panel?.let { presentation ->
+                            val writable = state.conversation?.channel?.access?.let { composerWritable(it, self) } == true
+                            val enabled = waiting != null && writable && state.navigation.connection == ConnectionPhase.OPEN && !detached &&
+                                presentation.status in setOf("processing", "queued", "pending") && waitingState?.edit?.session == null
+                            val row = waitingState?.groups?.firstNotNullOfOrNull { group -> group.rows.firstOrNull { it.turn.requestId == presentation.requestId } }
+                            val stop = target.turn?.let { WaitingRules.interrupt(it, writable) }
+                            ProcessPanel(presentation, graph::closeFocus,
+                                onLink = { link -> if (AppRoute.parse(link) != null) graph.route(link)
+                                    else if (FilePaths.fromLink(state.route!!.channel, link) != null && features != null) {
+                                        features.files(state.route!!.channel).openLink(link); graph.files(true)
+                                    } else runCatching { uriHandler.openUri(link) } },
+                                onAttachment = attachmentHandler.takeIf { features != null },
+                                onProcess = { id -> graph.route(focusedChannelLink(state.route!!.channel, FocusKind.Turn, id)) },
+                                onOpenRequest = { id -> processReturnRequest = id; graph.closeFocus() },
+                                onStop = if (enabled && stop != null) ({ waiting?.stop(presentation.requestId) }) else null,
+                                onCancel = if (enabled && row?.actions?.canCancel == true) ({ waiting?.cancel(presentation.requestId) }) else null,
+                                onGuide = if (enabled && row?.actions?.insert != null && presentation.executionTurnId.isNotEmpty())
+                                    ({ text -> waiting?.clearError(); waiting?.guide(presentation.requestId, text) }) else null,
+                                controlsBusy = presentation.agent?.id in waitingState?.busyActors.orEmpty(),
+                                guideError = waitingState?.error.orEmpty())
+                        }
                     } else ContentPanel("过程", graph::closeFocus) {
                         Text("目标消息尚未加载，请加载更早历史后重试。", Modifier.padding(16.dp))
                         TextButton(graph::older, enabled = state.conversation?.hasOlder == true && state.conversation?.loadingOlder != true) { Text("加载更早") }

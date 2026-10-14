@@ -90,7 +90,7 @@ fun SubTaskTree(tasks: List<SubTaskViewState>, depth: Int = 0, onOpen: (String) 
         }
     }
 }
-@Composable private fun SubTaskLeaf(task: SubTaskViewState, depth: Int, onOpen: (String) -> Unit) {
+@Composable internal fun SubTaskLeaf(task: SubTaskViewState, depth: Int, onOpen: (String) -> Unit) {
     var expanded by remember(task.id) { mutableStateOf(false) }
     val now by produceState(System.currentTimeMillis(), task.phase) {
         if (task.phase == SubTaskPhase.Running) while (true) { value = System.currentTimeMillis(); delay(1000) }

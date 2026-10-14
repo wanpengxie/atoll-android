@@ -63,7 +63,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
             .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             CardHeader(message, null, onMore)
             MessageBody(message, onLink, onAttachment)
-            WorkStrip(message, onLink, onAttachment, onRelatedCall, onMore, inset = false)
+            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = false)
         }
         MessagePart.Answer -> Column(Modifier.fillMaxWidth().padding(bottom = 7.dp).clip(cardBottom).background(AtollColors.Surface)) {
             HorizontalDivider(color = AtollColors.LineSoft)
@@ -72,7 +72,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                 CardHeader(message, message.status, onMore)
                 MessageBody(message, onLink, onAttachment)
             }
-            WorkStrip(message, onLink, onAttachment, onRelatedCall, onMore, inset = true)
+            WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true)
         }
         MessagePart.Single -> Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp,
             top = if (message.continuation) 2.dp else 9.dp, bottom = if (message.continuation) 5.dp else 9.dp),
@@ -91,7 +91,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                 }
                 MessageBody(message, onLink, onAttachment)
                 if (hasWork(message)) Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(AtollColors.Surface)) {
-                    WorkStrip(message, onLink, onAttachment, onRelatedCall, onMore, inset = true)
+                    WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = true)
                 }
             }
         }
@@ -131,33 +131,5 @@ private fun MessageBody(message: MessageViewState, onLink: ((String) -> Unit)?, 
     if (message.attachments.isNotEmpty()) MessageAttachments(message.attachments, onLink, onAttachment)
 }
 
-private fun hasWork(message: MessageViewState) = message.trail != null || message.subTasks.isNotEmpty() ||
+internal fun hasWork(message: MessageViewState) = message.trail != null || message.subTasks.isNotEmpty() ||
     message.relatedCalls.isNotEmpty() || message.status != null || message.progress != null
-
-/**
- * Everything the turn did besides answering: the latest step, process records, sub-agents,
- * collaboration with other members and plain calls. Each part keeps its own disclosure; the
- * process panel holds the full detail.
- */
-@Composable
-private fun WorkStrip(message: MessageViewState, onLink: ((String) -> Unit)?, onAttachment: MessageAttachmentHandler?,
-    onRelatedCall: ((String) -> Unit)?, onMore: () -> Unit, inset: Boolean) {
-    if (!hasWork(message)) return
-    Column(Modifier.fillMaxWidth().then(if (inset) Modifier.background(AtollColors.Raised) else Modifier)
-        .padding(horizontal = if (inset) 12.dp else 0.dp, vertical = if (inset) 8.dp else 0.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        if (inset) HorizontalDivider(Modifier.padding(bottom = 4.dp), color = AtollColors.LineSoft)
-        message.progress?.let { progress -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (message.status == MessageStatus.Processing) Spinner() else PulseDot(AtollColors.Warning, pulsing = false)
-            Text(progress, Modifier.weight(1f), fontSize = 13.sp, color = AtollColors.Body, maxLines = 2, overflow = TextOverflow.Ellipsis)
-        } }
-        message.trail?.let { ProgressTrail(it) { onMore() } }
-        if (message.subTasks.isNotEmpty()) SubTaskTree(message.subTasks, onOpen = { onMore() })
-        if (message.relatedCalls.isNotEmpty()) RelatedCalls(message.id, message.relatedCalls, onLink, onAttachment,
-            onProcess = { id -> onRelatedCall?.invoke(id) ?: onMore() })
-        if (message.status != null) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            Text("查看过程 ›", Modifier.heightIn(min = 36.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onMore)
-                .padding(horizontal = 6.dp, vertical = 9.dp), fontSize = 13.sp, fontWeight = FontWeight.Medium, color = AtollColors.Lagoon)
-        }
-    }
-}
