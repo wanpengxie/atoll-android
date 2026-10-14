@@ -46,7 +46,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
     contentOverride: (@Composable () -> Unit)? = null, composerVisible: Boolean = true,
     onAttachment: MessageAttachmentHandler? = null,
     messageContent: (@Composable (MessageViewState, @Composable () -> Unit) -> Unit)? = null,
-    newerUnloaded: Boolean = false) {
+    newerUnloaded: Boolean = false, connectionPhase: ConnectionPhase = ConnectionPhase.OPEN, onReconnect: () -> Unit = {}) {
     val section = when {
         tab == ChannelTab.Tasks -> ChannelSection.Tasks
         state.filesOpen || state.terminalOpen -> ChannelSection.Files
@@ -63,7 +63,13 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
         ChannelSection.Members -> onMenu(Item.Members)
     } }
     Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding().imePadding()) {
-        ChannelHeader(state, onBack, onMenu)
+        ChannelHeader(state.copy(connection = when (connectionPhase) {
+            ConnectionPhase.CONNECTING -> "连接中"
+            ConnectionPhase.RECONNECTING -> "重连中"
+            ConnectionPhase.CLOSED -> "已断开"
+            ConnectionPhase.OPEN -> state.connection
+        }), onBack, onMenu, connecting = connectionPhase == ConnectionPhase.CONNECTING || connectionPhase == ConnectionPhase.RECONNECTING)
+        if (connectionPhase != ConnectionPhase.OPEN) ReconnectNotice(onReconnect)
         ChannelTabs(section, state) { select(it) }
         if (contentOverride != null) {
             Box(Modifier.weight(1f).fillMaxWidth()) { contentOverride() }
@@ -123,7 +129,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
 }
 
 @Composable
-private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMenu: (ChannelMenuAction) -> Unit) {
+private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMenu: (ChannelMenuAction) -> Unit, connecting: Boolean = false) {
     var menuOpen by remember(state.channel.id) { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().background(AtollColors.Surface).heightIn(min = 56.dp).padding(horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
@@ -137,7 +143,8 @@ private fun ChannelHeader(state: ConversationViewState, onBack: () -> Unit, onMe
             val running = state.agents.count { it.active }
             val connected = state.connection == "已连接"
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                PulseDot(if (connected) AtollColors.Lagoon else AtollColors.Warning, pulsing = !connected)
+                if (connecting) Spinner(10.dp, AtollColors.Warning, AtollColors.WarningLine)
+                else PulseDot(if (connected) AtollColors.Lagoon else AtollColors.Warning, pulsing = !connected)
                 Text(when {
                     !connected -> state.connection
                     state.agents.isEmpty() -> "已连接"
