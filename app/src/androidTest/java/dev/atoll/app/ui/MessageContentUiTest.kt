@@ -175,6 +175,30 @@ class MessageContentUiTest {
         compose.onNodeWithText("加载更早消息").assertIsDisplayed()
     }
 
+    @Test fun allFourChannelTabsAreVisibleAndDispatchTheirDestinations() {
+        val destinations = mutableListOf<ChannelMenuAction>()
+        val tabs = mutableListOf<ChannelTab>()
+        compose.setContent {
+            AtollTheme { ChannelScreen(ConversationViewState(ChannelViewState("c", "channel")), ComposerViewState(), ChannelTab.Conversation,
+                onBack = {}, onTab = { tabs += it }, onScope = {}, onActor = {}, onText = {}, onSend = {}, onOlder = {},
+                onMenu = { destinations += it }, composerVisible = false) }
+        }
+        val labels = listOf("动态", "任务", "文件", "成员")
+        val bounds = labels.map { label ->
+            compose.onNode(hasText(label) and hasClickAction()).assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        }
+        bounds.forEach { assertTrue(it.width > 0f) }
+        bounds.zipWithNext().forEach { (left, right) -> assertTrue(left.right <= right.left) }
+        compose.onNode(hasText("任务") and hasClickAction()).performClick()
+        compose.onNode(hasText("文件") and hasClickAction()).performClick()
+        compose.onNode(hasText("成员") and hasClickAction()).performClick()
+        compose.runOnIdle {
+            assertEquals(listOf(ChannelTab.Tasks), tabs)
+            assertEquals(listOf(ChannelMenuAction.Item.OpenFiles, ChannelMenuAction.Item.Members), destinations)
+        }
+        screenshot("channel-tabs")
+    }
+
     @Test fun identityPendingHidesScopeActorsAndStaleFilters() {
         val state = mutableStateOf(ConversationViewState(ChannelViewState("test", "c0.android-test"),
             agents = listOf(AgentViewState("worker", "worker")), actorFilters = setOf("stale"),

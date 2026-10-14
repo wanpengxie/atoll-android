@@ -159,7 +159,7 @@ private fun ChannelTabs(section: ChannelSection, state: ConversationViewState, o
     Row(Modifier.fillMaxWidth().background(AtollColors.Surface).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(22.dp)) {
         ChannelSection.entries.forEach { choice ->
             val active = choice == section
-            Column(Modifier.heightIn(min = 44.dp).semantics { selected = active }.clickable(role = Role.Tab) { onSelect(choice) },
+            Column(Modifier.width(IntrinsicSize.Max).heightIn(min = 44.dp).semantics { selected = active }.clickable(role = Role.Tab) { onSelect(choice) },
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(Modifier.heightIn(min = 42.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
