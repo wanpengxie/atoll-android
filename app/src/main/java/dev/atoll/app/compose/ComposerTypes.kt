@@ -20,7 +20,7 @@ typealias ComposerAttachment = dev.atoll.app.files.FileReference
     val messageId: String, val channelId: String, val frame: JsonObject,
     val text: String, val targetLabel: String,
     val state: SendState = SendState.QUEUED, val createdAt: Long, val updatedAt: Long = createdAt,
-    val error: String = "", val cancelRequested: Boolean = false,
+    val error: String = "", val cancelRequested: Boolean = false, val resendOf: String = "",
 ) {
     val expiresAt: Long get() = frame.number("expires_at_ms")
 }

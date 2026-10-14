@@ -35,7 +35,7 @@ private const val PREVIEW_LIMIT = 3
 @Composable
 internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
     onChildProcess: (String) -> Unit, inset: Boolean, onExpanded: ((Boolean) -> Unit)? = null) {
-    if (!hasWork(message)) return
+    if (!showTurnWorkStrip(message)) return
     var expanded by rememberSaveable(message.id) { mutableIntStateOf(0) }
     val groups = remember(message.relatedCalls) { message.relatedCalls.partition { it.conversation } }
     val records = message.trail?.records.orEmpty()
@@ -95,7 +95,7 @@ internal fun WorkStrip(message: MessageViewState, onProcess: () -> Unit,
                 CallSummary(call, { onChildProcess(call.id) })
             } }
         }
-        if (expanded != 0 || records.isEmpty() && groups.first.isEmpty() && groups.second.isEmpty() && message.subTasks.isEmpty())
+        if (expanded != 0 || showTurnProcessLink(message) && records.isEmpty() && groups.first.isEmpty() && groups.second.isEmpty() && message.subTasks.isEmpty())
             TextButton(onProcess, Modifier.align(Alignment.CenterHorizontally).heightIn(min = 44.dp)) {
                 Text(if (expanded != 0) "在面板中查看全部 ›" else "查看过程 ›", fontSize = 13.sp, color = AtollColors.Lagoon)
             }

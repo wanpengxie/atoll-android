@@ -4,6 +4,7 @@ import dev.atoll.app.core.Envelope
 import dev.atoll.app.core.Row
 import dev.atoll.app.core.string
 import dev.atoll.app.model.*
+import dev.atoll.app.compose.TurnStatePolicy
 import dev.atoll.app.ui.screens.*
 import dev.atoll.app.ui.components.ResultViewState
 import dev.atoll.app.ui.components.MappedResult
@@ -73,8 +74,9 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
             val latest = item.entry.id == snapshot.currentEntryCandidate?.id
             var lifecycleKey = ""
             val value = try {
-                lifecycleKey = (listOf(item.entry) + item.entry.thread).mapNotNull { it.turn }.mapNotNull { turn ->
-                    RequestLifecycle.lostReason(turn,restarts,instant).takeIf(String::isNotEmpty)?.let { "${turn.requestId}:$it" }
+                lifecycleKey = (listOf(item.entry) + item.entry.thread).mapNotNull { it.turn }.map { turn ->
+                    val state = TurnStatePolicy.presentation(turn, RequestLifecycle.lostReason(turn,restarts,instant), newerUnloaded, source)
+                    "${turn.requestId}:${state.kind}:${state.lostReason}:${state.edited}"
                 }.joinToString("|")
                 val previous = cache[item.key]
                 if (previous?.revision == item.contentRevision && previous.continuation == item.continuation && previous.newerUnloaded == newerUnloaded && previous.latest == latest && previous.lifecycleKey == lifecycleKey) previous.value
@@ -108,10 +110,10 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
         val result = mutableListOf<UiEntry>()
         val tasks = subTaskViews(item.entry.subTasks,names)
         val tasksByRequest = tasks.groupBy { it.requestId.orEmpty() }
-        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList(), relatedStates: List<RelatedCallViewState> = emptyList()) {
+        fun message(envelope: Envelope, key: String, text: String = messageText(envelope), status: MessageStatus? = null, progress: String? = null, continuation: Boolean = false, resultState: ResultViewState? = null, trailState: ProgressTrailViewState? = null, taskStates: List<SubTaskViewState> = emptyList(), relatedStates: List<RelatedCallViewState> = emptyList(), turnState: TurnViewState? = null) {
             result += UiEntry.Message(MessageViewState(key, names[envelope.senderId] ?: envelope.senderId, text,
                 time(envelope.tsReceived.takeIf { it > 0 } ?: envelope.ts), envelope.senderKind == "agent", envelope.senderId == self,
-                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body), relatedCalls = relatedStates))
+                continuation, status, progress, envelope.audience.takeIf { envelope.kind == "request" }?.joinToString("、") { names[it] ?: it }, result = resultState, trail = trailState, subTasks = taskStates, attachments = messageAttachments(envelope.body), relatedCalls = relatedStates, turnState = turnState))
         }
         fun turn(entry: dev.atoll.app.model.TimelineEntry, key: String, continuation: Boolean) {
             val turn = entry.turn
@@ -141,6 +143,8 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                     ?.get("text").string().takeIf(String::isNotBlank)
             }
             val lostReason = RequestLifecycle.lostReason(turn,restarts,instant)
+            val turnState = TurnStatePolicy.presentation(turn, lostReason, newerUnloaded, source)
+                .copy(resendable = TurnStatePolicy.canResend(turn, self, lostReason, newerUnloaded))
             val trail = progressTrail(turn,emptyList(),terminal==null && lostReason.isEmpty() && !newerUnloaded,::time)
             val superseded = terminal?.body?.let { it["merged_into"].string().isNotEmpty() || it["preempted_by"].string().isNotEmpty() } == true
             // A request to this reader must retain the host's live ApprovalCard/resolve entry.
@@ -148,12 +152,17 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 it.type in setOf("human.ask","human.approve") && self in it.audience
             } == true }
             val interactiveIds = interactive.map { it.id }.toHashSet()
+            if (turnState.compact) {
+                message(turn.request, "$key:request", text = requestText, turnState = turnState)
+                interactive.forEach { turn(it,"$key:${it.id}",false) }
+                return
+            }
             val related = if (superseded && turn.provisional.isEmpty()) emptyList() else
                 relatedCallViews(turn,entry.thread.filterNot { it.id in interactiveIds },names,tasksByRequest,newerUnloaded,superseded,::time)
             val relatedOnRequest = superseded && streamed.isEmpty() && !turn.terminalClosureOnly
             val cardStart = result.size
             message(turn.request, "$key:request", text=requestText, continuation = continuation,
-                relatedStates=if(relatedOnRequest) related else emptyList())
+                relatedStates=if(relatedOnRequest) related else emptyList(), turnState=turnState)
             if (terminal != null) {
                 val interrupted = terminal.status=="failed" && (terminal.body["error_code"].string()=="interrupted" || terminal.body["reason"].string()=="interrupted")
                 val answer = when {
@@ -168,7 +177,7 @@ class TimelineMapper(private val now: () -> Long = System::currentTimeMillis) {
                 val receipt = if(approval) "已回执 · 处理者："+(names[terminal.senderId] ?: terminal.senderId)+terminal.body["decision"].string().takeIf(String::isNotEmpty)?.let { " · $it" }.orEmpty() else ""
                 val text = (listOf(receipt) + visible + answer.text).filter(String::isNotBlank).joinToString("\n\n")
                 if (!superseded || text.isNotEmpty() || turn.terminalClosureOnly)
-                    message(terminal, "$key:answer", text, if (interrupted) null else if (terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks,relatedStates=if(relatedOnRequest) emptyList() else related)
+                    message(terminal, "$key:answer", text, if (interrupted) null else if (terminal.status=="failed") MessageStatus.Failed else MessageStatus.Completed, resultState=answer.result,trailState=trail.takeUnless { superseded },taskStates=if(superseded) emptyList() else ownedTasks,relatedStates=if(relatedOnRequest) emptyList() else related, turnState=turnState)
             } else if (!newerUnloaded) {
                 val latest = turn.provisional.lastOrNull()?.envelope
                 val lost = lostReason

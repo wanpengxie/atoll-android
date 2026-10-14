@@ -82,8 +82,8 @@ class WorkspaceMappingContentTest {
         val progress=row(3,"p","response",json("""{"status":"processing"}"""),parent="q")
         val messages=mapped(request,child,progress,terminal)
         assertEquals(1,messages.size);assertNull(messages.single().status)
-        assertEquals("child",messages.single().relatedCalls.single().id)
-        assertFalse(messages.single().relatedCalls.single().conversation)
+        assertTrue(messages.single().relatedCalls.isEmpty())
+        assertEquals(dev.atoll.app.ui.screens.TurnKind.Merged,messages.single().turnState?.kind)
     }
     @Test fun humanRequestsForThisReaderRetainVisibleApprovalTargetsInsteadOfReadOnlyRelatedNodes() {
         for(type in listOf("human.ask","human.approve")) {
@@ -179,14 +179,15 @@ class WorkspaceMappingContentTest {
         assertEquals("First explanation\n\nFinal answer",result.text)
         assertEquals(dev.atoll.app.ui.screens.MessageStatus.Completed,result.status)
     }
-    @Test fun supersededEmptyAnswersDisappearButProducedStreamingTextSurvives() {
+    @Test fun supersededTurnsCollapseToOneRequestRowEvenWhenTheyHaveProducedText() {
         for (field in listOf("merged_into","preempted_by")) {
             val request=row(1,"q","request",json("""{"text":"question"}"""))
             val terminal=row(3,"a","response",buildJsonObject { put("status","completed");put(field,"successor") },parent="q")
             assertEquals(1,mapped(request,terminal).size)
             val stage=row(2,"p","response",json("""{"status":"processing","process":{"kind":"stage","stage":"text","text":"keep this"}}"""),parent="q")
-            val answer=mapped(request,stage,terminal).last()
-            assertEquals("keep this",answer.text);assertNull(answer.result);assertEquals(dev.atoll.app.ui.screens.MessageStatus.Completed,answer.status)
+            val answer=mapped(request,stage,terminal).single()
+            assertEquals("question",answer.text);assertNull(answer.result);assertTrue(answer.turnState!!.compact)
+            assertEquals("successor",answer.turnState!!.targetId)
         }
     }
     @Test fun interruptedTurnKeepsAlreadyProducedTextWithoutAnErrorAckBubble() {
@@ -229,7 +230,7 @@ class WorkspaceMappingContentTest {
         val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self",now=now))
         fun project()=mapper.map(snapshot,"human:self",emptyList(),source=replica.snapshot()).filterIsInstance<UiEntry.Message>().map { it.value }
         assertNotNull(project().last().status);now=151
-        val expired=project().last();assertEquals("未完成 · 已过期",expired.text);assertNull(expired.status)
+        val expired=project().last();assertEquals("question",expired.text);assertEquals("expired",expired.turnState?.lostReason);assertNull(expired.status)
         assertSame(expired,project().last())
     }
     @Test fun restartIsReadFromCanonicalSourceEvenWhenTheRestartTurnIsFilteredOut() {
@@ -243,7 +244,7 @@ class WorkspaceMappingContentTest {
         val snapshot=replica.timeline(TimelineOptions(selfId="human:self"))
         assertFalse(snapshot.items.any { it.entry.id=="restart" })
         val answer=TimelineMapper().map(snapshot,"human:self",emptyList(),source=replica.snapshot()).filterIsInstance<UiEntry.Message>().last().value
-        assertEquals("未完成 · Agent 已重启",answer.text);assertNull(answer.status)
+        assertEquals("question",answer.text);assertEquals("restart",answer.turnState?.lostReason);assertNull(answer.status)
     }
     @Test fun narrationUsesDocumentedFactsAndWeakNoticesNeverExposeRawJsonOrWireTypes() {
         val replica=ChannelReplica("c","human:self")

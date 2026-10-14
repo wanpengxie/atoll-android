@@ -65,7 +65,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
             MessageBody(message, onLink, onAttachment)
             WorkStrip(message, onMore, { onRelatedCall?.invoke(it) ?: onMore() }, inset = false)
         }
-        MessagePart.Answer -> Column(Modifier.fillMaxWidth().padding(bottom = 7.dp).clip(cardBottom).background(AtollColors.Surface)) {
+        MessagePart.Answer -> Column(Modifier.fillMaxWidth().padding(bottom = turnBottomPadding(message)).clip(turnBottomShape(message, cardBottom)).background(AtollColors.Surface)) {
             HorizontalDivider(color = AtollColors.LineSoft)
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = if (hasWork(message)) 0.dp else 12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -83,6 +83,7 @@ fun MessageFrame(message: MessageViewState, onLink: ((String) -> Unit)? = null,
                 if (!message.continuation) Row(Modifier.fillMaxWidth().heightIn(min = 20.dp), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(if (message.self) "我" else message.sender, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (message.self && message.turnState?.edited == true) EditedTag()
                     if (message.agent) AgentTag()
                     message.recipient?.let { Text("→ $it", Modifier.weight(1f, fill = false), fontSize = 13.sp, color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     Text(message.time, fontSize = 12.sp, color = AtollColors.Muted)
@@ -109,6 +110,7 @@ private fun CardHeader(message: MessageViewState, status: MessageStatus?, onMore
     Row(Modifier.fillMaxWidth().heightIn(min = 24.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         ActorAvatar(message.sender, message.sender, agent = message.agent, size = 24.dp, self = message.self)
         Text(if (message.self) "我" else message.sender, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (message.self && message.turnState?.edited == true) EditedTag()
         message.recipient?.let { Text("→ $it", Modifier.weight(1f, fill = false), fontSize = 13.sp, color = AtollColors.Muted, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         Spacer(Modifier.weight(1f))
         if (status != null) StatusChip(status, onMore) else Text(message.time, fontSize = 12.sp, color = AtollColors.Muted)
@@ -127,9 +129,8 @@ private fun ContinuationTime(message: MessageViewState) {
 @Composable
 private fun MessageBody(message: MessageViewState, onLink: ((String) -> Unit)?, onAttachment: MessageAttachmentHandler?) {
     if (message.text.isNotEmpty()) FoldableMarkdown(message.id, message.text, message.latest, onLink)
-    message.result?.let { StructuredResult(it) }
+    message.result?.let { if (message.turnState?.kind == TurnKind.Failed && it.errorCode != null) TurnFailureSummary(it) else StructuredResult(it) }
     if (message.attachments.isNotEmpty()) MessageAttachments(message.attachments, onLink, onAttachment)
 }
 
-internal fun hasWork(message: MessageViewState) = message.trail != null || message.subTasks.isNotEmpty() ||
-    message.relatedCalls.isNotEmpty() || message.status != null || message.progress != null
+internal fun hasWork(message: MessageViewState) = showTurnWorkStrip(message)
