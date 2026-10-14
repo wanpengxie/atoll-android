@@ -51,8 +51,10 @@ class MessageCopyUiTest {
         if (longPress) {
             compose.onAllNodesWithText(message.text, useUnmergedTree = true).onLast().performTouchInput { longClick() }
             compose.onNodeWithText("复制").performClick()
-        } else compose.onNodeWithTag("atoll.message.${message.id}").performSemanticsAction(SemanticsActions.CustomActions) { actions ->
-            actions.first { it.label == "复制" }.action()
+        } else {
+            val actions = compose.onNodeWithTag("atoll.message.${message.id}").fetchSemanticsNode()
+                .config[SemanticsActions.CustomActions]
+            compose.runOnIdle { actions.first { it.label == "复制" }.action() }
         }
         compose.onNodeWithText("✓ 已复制").assertExists()
         compose.runOnIdle {
