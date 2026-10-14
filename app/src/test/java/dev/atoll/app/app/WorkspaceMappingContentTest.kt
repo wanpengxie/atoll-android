@@ -147,7 +147,7 @@ class WorkspaceMappingContentTest {
         assertSame(error,mapper.map(snapshot,"human:self",emptyList(),source=source).filterIsInstance<UiEntry.Notice>().single())
         val updated=snapshot.copy(items=snapshot.items.map { if(it.entry.kind=="narration") it.copy(contentRevision=it.contentRevision+":changed") else it })
         val recovered=mapper.map(updated,"human:self",emptyList(),source=source)
-        assertEquals("agent:a 已加入频道",recovered.filterIsInstance<UiEntry.Notice>().single().text)
+        assertEquals("agent:a 已加入频道",recovered.filterIsInstance<UiEntry.ChannelActivity>().single().items.single().text)
         assertSame(initial.filterIsInstance<UiEntry.Message>().first().value,recovered.filterIsInstance<UiEntry.Message>().first().value)
     }
     @Test fun structuredJsonAndBusinessResultsDoNotBecomeMarkdownCodeFences() {
@@ -260,7 +260,12 @@ class WorkspaceMappingContentTest {
             row(6,"notice","event",buildJsonObject { put("text","First line\nSecond line") },"provider.future")
         ),Origin.LIVE))
         val source=replica.snapshot();val snapshot=replica.timeline(TimelineOptions(scope=ConversationScope.ALL,selfId="human:self",showNarration=true))
-        val notices=TimelineMapper().map(snapshot,"human:self",listOf(ActorRecord("agent:a","Agent A","agent")),source=source).filterIsInstance<UiEntry.Notice>().map { it.text }
+        val mapped=TimelineMapper().map(snapshot,"human:self",listOf(ActorRecord("agent:a","Agent A","agent")),source=source)
+        val notices=mapped.flatMap { when(it) {
+            is UiEntry.Notice -> listOf(it.text)
+            is UiEntry.ChannelActivity -> it.items.map { item -> item.text }
+            else -> emptyList()
+        } }
         assertTrue("Agent A 已加入频道" in notices);assertTrue("成员 Agent A构建成功，已就绪" in notices)
         assertTrue(notices.any { it.contains("Agent A 已就绪") });assertTrue(notices.any { it.contains("First line") && !it.contains("Second line") })
         assertFalse(notices.any { it.contains("generated") || it.contains("password") || it.contains("do-not-print") || it.contains("future") })

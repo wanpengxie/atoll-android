@@ -33,11 +33,14 @@ data class MessageViewState(val id: String, val sender: String, val text: String
     val part: MessagePart = MessagePart.Single)
 /** Where a message sits in its turn card: a request and its answer render as one card. */
 enum class MessagePart { Single, Request, Answer }
+@Immutable
+data class ChannelActivityItem(val id: String, val seq: Long, val text: String, val time: String, val failed: Boolean = false)
 sealed interface TimelineEntry {
     val key: String
     data class Message(val value: MessageViewState) : TimelineEntry { override val key get() = value.id }
     data class Day(override val key: String, val text: String) : TimelineEntry
     data class Notice(override val key: String, val text: String) : TimelineEntry
+    data class ChannelActivity(override val key: String, val items: List<ChannelActivityItem>) : TimelineEntry
 }
 @Immutable
 data class TaskViewState(val id: String, val title: String, val kind: String, val assignee: String, val state: String)
@@ -47,7 +50,7 @@ data class ConversationViewState(val channel: ChannelViewState, val agents: List
     val mineOnly: Boolean = true, val actorFilters: Set<String> = emptySet(), val loadingOlder: Boolean = false,
     val hasOlder: Boolean = true, val connection: String = "已连接", val waitingCount: Int = 0, val filesOpen: Boolean = false, val terminalOpen: Boolean = false, val runningCount: Int = 0, val newMessages: Int = 0,
     val emptyKind: TimelineEmptyKind? = null, val emptySettled: Boolean = false, val historyStartLabel: String? = null,
-    val identityReady: Boolean = true)
+    val identityReady: Boolean = true, val showChannelActivity: Boolean = true)
 @Immutable
 data class ComposerViewState(val text: String = "", val agent: String = "", val model: String = "", val effort: String = "", val sending: Boolean = false)
 enum class ChannelTab { Conversation, Tasks }

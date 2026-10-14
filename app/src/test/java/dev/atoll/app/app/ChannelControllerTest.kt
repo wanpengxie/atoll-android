@@ -18,6 +18,36 @@ import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
 
 class ChannelControllerTest {
+    @Test fun activitySwitchPersistsAndOnlyAffectsAllWithIndependentBrowsePositions() = runBlocking {
+        val member = row(1).let { it.copy(envelope = Envelope(buildJsonObject {
+            put("id", "member"); put("kind", "event"); put("type", "system.member.created"); put("visibility", "system")
+            put("payload", buildJsonObject { put("body", buildJsonObject { put("member", "agent:a"); put("body", "codex") }) })
+        })) }
+        val fixture = Fixture(head = 2, rows = listOf(member, row(2)), options = ChannelViewOptions(mineOnly = false))
+        try {
+            fixture.controller.open(ChannelRecord("c", "channel", null, "c"))
+            val all = fixture.await { it.conversation?.mineOnly == false && it.conversation.entries.any { entry -> entry is TimelineEntry.ChannelActivity } }
+            val group = all.conversation!!.entries.filterIsInstance<TimelineEntry.ChannelActivity>().single()
+            fixture.controller.browse("all", group.key, 6, false)
+            fixture.await { it.browsePosition?.key == group.key }
+            fixture.controller.channelActivity(false)
+            val hidden = fixture.await { it.conversation?.let { view -> !view.mineOnly && !view.showChannelActivity } == true }
+            assertFalse(hidden.conversation!!.entries.any { it is TimelineEntry.ChannelActivity })
+            assertFalse(fixture.preferences.options("ns", "c").showChannelActivity)
+            assertTrue(fixture.preferences.options("another-account", "c").showChannelActivity)
+            assertEquals(1, hidden.timelineSource!!.narration.size)
+            fixture.controller.toggleScope()
+            val mine = fixture.await { it.conversation?.let { view -> view.mineOnly && view.entries.any { it is TimelineEntry.ChannelActivity } } == true }
+            assertFalse(mine.conversation!!.showChannelActivity)
+            fixture.controller.toggleScope()
+            fixture.await { it.conversation?.let { view -> !view.mineOnly && !view.showChannelActivity } == true }
+            fixture.controller.channelActivity(true)
+            val restored = fixture.await { it.conversation?.let { view -> !view.mineOnly && view.showChannelActivity } == true && it.browsePosition?.key == group.key }
+            assertEquals(6, restored.browsePosition!!.offset)
+            assertFalse(restored.browsePosition.following)
+        } finally { fixture.stop() }
+    }
+
     @Test fun scannedEmptyChannelPublishesExplicitEmptyState() = runBlocking {
         val fixture = Fixture(head = 0, rows = emptyList())
         try {
