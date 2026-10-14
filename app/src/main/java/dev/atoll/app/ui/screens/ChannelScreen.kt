@@ -20,6 +20,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -62,6 +63,31 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
         ChannelSection.Files -> if (!state.filesOpen) onMenu(Item.OpenFiles)
         ChannelSection.Members -> onMenu(Item.Members)
     } }
+    val expandedTurns = remember(state.channel.id) { mutableStateMapOf<String, Boolean>() }
+    LaunchedEffect(state.entries) {
+        if (expandedTurns.isNotEmpty()) {
+            val retained = state.entries.mapNotNull { (it as? TimelineEntry.Message)?.value?.id }.toSet()
+            expandedTurns.keys.retainAll(retained)
+        }
+    }
+    val markerCount = when {
+        state.hasOlder -> 1
+        !state.loadingOlder && state.entries.isNotEmpty() && !state.historyStartLabel.isNullOrBlank() -> 1
+        else -> 0
+    }
+    val headerPixels = with(LocalDensity.current) { 44.dp.roundToPx() }
+    val sticky by remember(state.channel.id, listState, state.entries, markerCount, headerPixels) {
+        derivedStateOf {
+            // No layout/scroll dependency at all while every strip is closed.
+            if (expandedTurns.isEmpty()) null else {
+                val layout = listState.layoutInfo
+                val top = layout.visibleItemsInfo.firstOrNull()
+                val index = (top?.index ?: -1) - markerCount
+                if (top == null) null else stickyTurnHeader(state.entries.getOrNull(index), state.entries.getOrNull(index - 1),
+                    expandedTurns.keys, top.offset, top.size, layout.viewportStartOffset, layout.viewportEndOffset, headerPixels)
+            }
+        }
+    }
     Column(Modifier.fillMaxSize().background(AtollColors.Ground).safeDrawingPadding().imePadding()) {
         ChannelHeader(state.copy(connection = when (connectionPhase) {
             ConnectionPhase.CONNECTING -> "连接中"
@@ -96,7 +122,9 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                         is TimelineEntry.ChannelActivity -> ChannelActivity(entry)
                         is TimelineEntry.Message -> {
                             val default: @Composable () -> Unit = { MessageFrame(entry.value, onLink, onAttachment,
-                                onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) }) { onMenu(ChannelMenuAction.Process(entry.value.id)) } }
+                                onRelatedCall = { onMenu(ChannelMenuAction.Process(it)) },
+                                onWorkExpanded = { open -> if (open) expandedTurns[entry.value.id] = true else expandedTurns.remove(entry.value.id) }) {
+                                onMenu(ChannelMenuAction.Process(entry.value.id)) } }
                             if (messageContent != null) messageContent(entry.value, default) else default()
                         }
                     } }
@@ -106,6 +134,7 @@ fun ChannelScreen(state: ConversationViewState, composer: ComposerViewState, tab
                         }
                     }
                 }
+                sticky?.let { pin -> StickyTurnHeader(pin, { onMenu(ChannelMenuAction.Process(pin.message.id)) }, Modifier.align(Alignment.TopCenter)) }
                 if (state.newMessages > 0 || listState.canScrollForward) {
                     Row(Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp).shadow(6.dp, CircleShape).clip(CircleShape)
                         .background(AtollColors.Ink).clickable(onClick = onJumpToBottom).heightIn(min = 40.dp).padding(horizontal = 16.dp),
