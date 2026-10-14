@@ -15,15 +15,12 @@ internal fun FilesResourcesSurface(services: WorkspaceServices, channel: String,
     resourceTab: Boolean, writable: Boolean, onFiles: () -> Unit, onResources: () -> Unit, onClose: () -> Unit,
     onAttach: ((FileReference) -> Unit)?) {
     Column(Modifier.fillMaxSize()) {
-        TabRow(if (resourceTab) 1 else 0) {
-            Tab(!resourceTab, onFiles, text = { Text("Files") })
-            Tab(resourceTab, onResources, text = { Text("KV") })
-        }
         if (resourceTab) {
             val vm = remember(services.wire, services.boot, channel) { ResourcesViewModel(services, channel) }
             SideEffect { vm.context(writable) }
             DisposableEffect(vm) { onDispose(vm::close) }
+            TextButton(onClick = onFiles) { Text("‹ 返回文件") }
             ResourcesScreen(vm, Modifier.weight(1f), onClose)
-        } else if (files != null) FilesScreen(files, Modifier.weight(1f), onClose, onAttach)
+        } else if (files != null) FilesScreen(files, Modifier.weight(1f), onClose, onAttach, onResources)
     }
 }
