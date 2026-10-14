@@ -60,6 +60,7 @@ object AtollColors {
     val Warning = Color(0xFF8A4B00)
     val WarningInk = Color(0xFF5A3A05)
     val WarningActionInk = Color(0xFF6B3A00)
+    val Star = Color(0xFFC98A1A)
     val WarningSurface = Color(0xFFFBF1DF)
     val WarningLine = Color(0xFFE7C98F)
     val Danger = Color(0xFFB42318)

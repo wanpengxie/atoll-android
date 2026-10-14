@@ -502,18 +502,31 @@ fun WorkspaceRoot(viewModel: WorkspaceViewModel, startedAt: Long) {
                     when (routeFocus.key) {
                         WorkspacePanel.Members.key -> Unit // Rendered by the roster owner above.
                         WorkspacePanel.Running.key -> RunningDrawer(remember(state.timeline, state.roster) { runningPanel(state.timeline?.runningTasks.orEmpty(), state.roster) }, ::jumpLoaded, ::closeOrJump)
-                        WorkspacePanel.Stars.key -> StarredDrawer(remember(starredState, state.route?.channel, state.roster) {
-                            starredState.drawerItems(state.route?.channel.orEmpty(), state.roster.associate { it.id to it.name }, ::panelTime)
-                        }, ::jumpLoaded, { id -> stars?.remove(state.route?.channel.orEmpty(), id) }, ::closeOrJump)
-                        WorkspacePanel.Timers.key -> if (tasks != null) TimedActionsDialog(tasks, graph::closeFocus)
-                        WorkspacePanel.Recent.key -> if (features != null) key(features) {
-                            val recent by features.fileHistory.recent.collectAsStateWithLifecycle()
-                            RecentReadsPanel(recent, { reference ->
-                                features.files(reference.channelId).open(reference)
-                                val id = reference.resourceId + if (reference.line > 0) ":${reference.line}" else ""
-                                graph.route(focusedChannelLink(reference.channelId, FocusKind.Artifact, id))
-                            }, graph::closeFocus)
+                        WorkspacePanel.Stars.key, WorkspacePanel.Recent.key -> key(features) {
+                            val emptyRecent = remember { MutableStateFlow<List<dev.atoll.app.files.FileReference>>(emptyList()) }
+                            val recent by (features?.fileHistory?.recent ?: emptyRecent).collectAsStateWithLifecycle()
+                            val channel = state.route?.channel.orEmpty()
+                            val names = state.roster.associate { it.id to it.name }
+                            val self = services?.selfIds?.get(channel).orEmpty()
+                            val source = state.timelineSource?.takeIf { it.channelId == channel }
+                            val saved by produceState(favoriteStars(starredState.starsFor(channel), channel, names, self, emptyList(), ::panelTime), starredState, channel, names, self, source) {
+                                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                                    favoriteStars(starredState.starsFor(channel), channel, names, self, source?.rows.orEmpty(), ::panelTime)
+                                }
+                            }
+                            FavoritesPanel(state.navigation.channels.firstOrNull { it.id == channel }?.name ?: channel,
+                                if (routeFocus.key == WorkspacePanel.Stars.key) FavoritesTab.Starred else FavoritesTab.Recent,
+                                saved, recent, onTab = { graph.panel(if (it == FavoritesTab.Starred) WorkspacePanel.Stars else WorkspacePanel.Recent) },
+                                onJump = ::jumpLoaded, onRemove = { id -> stars?.remove(channel, id) }, onClose = ::closeOrJump,
+                                channelNames = state.navigation.channels.associate { it.id to it.name }, onOpenFile = { reference ->
+                                    if (features != null) {
+                                        features.files(reference.channelId).open(reference)
+                                        val id = reference.resourceId + if (reference.line > 0) ":${reference.line}" else ""
+                                        graph.route(focusedChannelLink(reference.channelId, FocusKind.Artifact, id))
+                                    }
+                                })
                         }
+                        WorkspacePanel.Timers.key -> if (tasks != null) TimedActionsDialog(tasks, graph::closeFocus)
                         else -> ContentPanel("未找到面板", graph::closeFocus) { Text("此面板不可用", Modifier.padding(16.dp)) }
                     }
                 }
